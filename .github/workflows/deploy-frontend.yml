@@ -16,6 +16,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      id-token: write # Required for requesting the JWT
+      contents: read  # Required for actions/checkout
+
     steps:
       - uses: actions/checkout@v4
 
@@ -26,8 +30,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-south-1
 
       - run: npm ci
