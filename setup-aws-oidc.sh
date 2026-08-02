@@ -4,35 +4,34 @@ set -e
 # Configuration
 REPO="pushpsood/OneHookClient"
 ROLE_NAME="GitHubActionsDeployRole"
-GITHUB_THUMBPRINT="1c58a3a8518e8759bf075b76b750d4f2df264fcd"
 
 echo "Creating OIDC Provider for GitHub Actions..."
 aws iam create-open-id-connect-provider \
   --url "https://token.actions.githubusercontent.com" \
   --client-id-list "sts.amazonaws.com" \
-  --thumbprint-list "$GITHUB_THUMBPRINT" || echo "Provider may already exist, continuing..."
+  --thumbprint-list 1c58a3a8518e8759bf075b76b750d4f2df264fcd 6938fd4d98bab03faadb97b34396831e3780aea1 1b511abead59c6ce207077c0bf0e0043b1382612 || echo "Provider may already exist, continuing..."
 
 echo "Fetching AWS Account ID..."
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 PROVIDER_ARN="arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
 
 echo "Creating Trust Policy..."
-cat > trust-policy.json <<EOF
+cat <<EOF > trust-policy.json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "$PROVIDER_ARN"
+        "Federated": "arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:${REPO}*"
+        },
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-        },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:${REPO}:*"
         }
       }
     }

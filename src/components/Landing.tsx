@@ -27,6 +27,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { BrandWordmark } from './common/BrandWordmark';
 import { AppleIcon, AndroidIcon } from './common/BrandIcons';
 import { SiteFooter } from './common/SiteFooter';
+import { AlienScanner } from './mascot';
 
 const focusIntentionImage = '/media/aerial-view-of-the-city-in-the-fog-5ZBZNUT-1600.jpg';
 const discoverProfilesImage =
@@ -1016,8 +1017,24 @@ export function Landing() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-10% 0px' }}
             transition={{ duration: 0.7 }}
-            className="relative mt-20 lg:mt-28 rounded-[2rem] bg-accent text-white overflow-hidden isolate"
+            className="relative mt-20 lg:mt-28 bg-accent text-white overflow-visible isolate w-screen -ml-[50vw] left-[50%]"
           >
+            {/* Parabolic curve top */}
+            <div
+              className="absolute top-0 left-0 right-0 h-12 sm:h-16 lg:h-20 bg-white -translate-y-full"
+              style={{
+                clipPath: 'ellipse(100% 100% at 50% 100%)',
+              }}
+            />
+
+            {/* Parabolic curve bottom */}
+            <div
+              className="absolute bottom-0 left-0 right-0 h-12 sm:h-16 lg:h-20 bg-white translate-y-full"
+              style={{
+                clipPath: 'ellipse(100% 100% at 50% 0%)',
+              }}
+            />
+
             {/* Soft radial glow accent */}
             <div
               aria-hidden="true"
@@ -1025,7 +1042,21 @@ export function Landing() {
               style={{ background: 'radial-gradient(circle, #fff 0%, transparent 70%)' }}
             />
 
-            <div className="relative px-6 py-14 sm:px-12 lg:px-16 lg:py-20">
+            {/* Alien Scanner Mascot - 3D movement with blinking */}
+            <AlienScanner
+              scrollBased={false}
+              size={140}
+              primaryColor="#ff69b4"
+              scanColor="#0052CC"
+              showBeam={true}
+              zIndex={5}
+              vertical={false}
+              speed={30}
+            />
+
+            {/* Content wrapper to maintain centered layout */}
+            <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
+              <div className="relative py-14 lg:py-20">
               <div className="max-w-3xl">
                 <p className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-5 inline-flex items-center gap-3">
                   <Sparkles className="w-3.5 h-3.5" /> Under the hood
@@ -1124,7 +1155,8 @@ export function Landing() {
                     </span>
                   </React.Fragment>
                 ))}
-                <span className="text-white/30">× freshness, stratified by intent</span>
+                <span className="text-white/30">&times; freshness, stratified by intent</span>
+              </div>
               </div>
             </div>
           </motion.div>
