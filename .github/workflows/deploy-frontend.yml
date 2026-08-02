@@ -21,14 +21,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: ap-south-1
 
       - run: npm ci
       - run: npm run build:prod
@@ -47,8 +47,4 @@ jobs:
             DEPLOY_ARGS+=(--context "domain=${{ secrets.FRONTEND_DOMAIN }}")
           fi
 
-          if [ -n "${{ secrets.FRONTEND_CERTIFICATE_ARN }}" ]; then
-            DEPLOY_ARGS+=(--context "certificateArn=${{ secrets.FRONTEND_CERTIFICATE_ARN }}")
-          fi
-
-          npx cdk deploy OneHook-Frontend-prod "${DEPLOY_ARGS[@]}"
+          npx cdk deploy --all "${DEPLOY_ARGS[@]}"
