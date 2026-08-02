@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { rm } from 'fs/promises';
+import Sitemap from 'vite-plugin-sitemap';
 import { mockApiPlugin } from './vite-mock-plugin';
 
 const distDir = resolve(__dirname, 'dist');
@@ -35,7 +36,25 @@ export default defineConfig(({ mode }) => {
   return {
     root: resolve(__dirname),
     publicDir: 'public',
-    plugins: [react(), tailwindcss(), leanMediaPrunePlugin(), mockApiPlugin()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      leanMediaPrunePlugin(),
+      mockApiPlugin(),
+      Sitemap({
+        hostname: 'https://onehook.club',
+        dynamicRoutes: [
+          '/',
+          '/privacy',
+          '/terms',
+          '/contact',
+          '/careers',
+          '/login',
+          '/redeem',
+        ],
+        outDir: 'dist',
+      }),
+    ],
     server: {
       fs: {
         // The @onehook/api-client SDK is symlinked to the backend repo; allow Vite

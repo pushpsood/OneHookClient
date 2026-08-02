@@ -59,7 +59,8 @@
     "prettier": "^3.2.5",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
-    "typescript": "~5.8.2"
+    "typescript": "~5.8.2",
+    "vite-plugin-sitemap": "^0.8.2"
   },
   "engines": {
     "node": ">=20.0.0",
