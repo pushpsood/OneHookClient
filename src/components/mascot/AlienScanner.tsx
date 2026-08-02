@@ -47,55 +47,151 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
   vertical = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [position3D, setPosition3D] = useState({ x: 20, y: 30, z: 0 }); // x%, y%, z (scale)
+  const [position3D, setPosition3D] = useState({ x: 12, y: 15, z: 0 }); // Start in top-left corner, away from text
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [eyeOffset, setEyeOffset] = useState({ x: 0, y: 0 });
   const [laserAngle, setLaserAngle] = useState(0);
   const [isBlinking, setIsBlinking] = useState(false);
+  const [scrollTrigger, setScrollTrigger] = useState(0); // Force re-render on scroll
 
-  // 3D movement - smooth floating in X, Y, and Z (depth via scale)
+  // 3D movement - smooth floating with cursor avoidance and text avoidance
   useEffect(() => {
     const moveInterval = setInterval(() => {
-      setPosition3D(prev => ({
-        x: prev.x + (Math.random() - 0.5) * 0.3, // Reduced to ±0.15% - more stable
-        y: prev.y + (Math.random() - 0.5) * 0.3, // Reduced to ±0.15% - more stable
-        z: prev.z + (Math.random() - 0.5) * 0.02, // Reduced depth change - more stable
-      }));
+      setPosition3D(prev => {
+        // Get mascot's current viewport position for avoidance calculations
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const mascotCenterX = rect.left + rect.width / 2;
+          const mascotCenterY = rect.top + rect.height / 2;
+          
+          // Calculate distance to cursor for cursor avoidance
+          const distanceToCursor = Math.sqrt(
+            Math.pow(mousePosition.x - mascotCenterX, 2) + 
+            Math.pow(mousePosition.y - mascotCenterY, 2)
+          );
+          
+          // Cursor avoidance - stay away from cursor
+          const cursorAvoidanceThreshold = 200;
+          let avoidanceX = 0;
+          let avoidanceY = 0;
+          
+          if (distanceToCursor < cursorAvoidanceThreshold && distanceToCursor > 0) {
+            const deltaX = mascotCenterX - mousePosition.x;
+            const deltaY = mascotCenterY - mousePosition.y;
+            const strength = (cursorAvoidanceThreshold - distanceToCursor) / cursorAvoidanceThreshold;
+            
+            avoidanceX = (deltaX / window.innerWidth) * 100 * strength * 0.5;
+            avoidanceY = (deltaY / window.innerHeight) * 100 * strength * 0.5;
+          }
+          
+          // Text area avoidance - stay in empty zones
+          // Get parent section bounds
+          const section = containerRef.current.closest('section') || containerRef.current.parentElement;
+          if (section) {
+            const sectionRect = section.getBoundingClientRect();
+            
+            // Calculate position as percentage within section
+            const relativeX = ((mascotCenterX - sectionRect.left) / sectionRect.width) * 100;
+            const relativeY = ((mascotCenterY - sectionRect.top) / sectionRect.height) * 100;
+            
+            // Define safe zones (areas without text content)
+            // Top-left corner and edges are safer
+            const textZones = [
+              // Center area has most text
+              { x: 30, y: 15, width: 40, height: 70, strength: 0.8 },
+              // Bottom center has formula
+              { x: 25, y: 75, width: 50, height: 15, strength: 0.6 },
+            ];
+            
+            // Push away from text zones
+            textZones.forEach(zone => {
+              if (
+                relativeX > zone.x &&
+                relativeX < zone.x + zone.width &&
+                relativeY > zone.y &&
+                relativeY < zone.y + zone.height
+              ) {
+                // Calculate direction to nearest edge of text zone
+                const distToLeft = relativeX - zone.x;
+                const distToRight = (zone.x + zone.width) - relativeX;
+                const distToTop = relativeY - zone.y;
+                const distToBottom = (zone.y + zone.height) - relativeY;
+                
+                const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+                
+                // Push in direction of nearest edge
+                if (minDist === distToLeft) avoidanceX -= zone.strength;
+                else if (minDist === distToRight) avoidanceX += zone.strength;
+                else if (minDist === distToTop) avoidanceY -= zone.strength;
+                else avoidanceY += zone.strength;
+              }
+            });
+          }
+          
+          return {
+            x: prev.x + (Math.random() - 0.5) * 0.2 + avoidanceX,
+            y: prev.y + (Math.random() - 0.5) * 0.2 + avoidanceY,
+            z: prev.z + (Math.random() - 0.5) * 0.01,
+          };
+        }
+        
+        // Fallback if no container ref
+        return {
+          x: prev.x + (Math.random() - 0.5) * 0.2,
+          y: prev.y + (Math.random() - 0.5) * 0.2,
+          z: prev.z + (Math.random() - 0.5) * 0.01,
+        };
+      });
 
-      // Keep within bounds
+      // Keep within bounds - prefer edges and corners
       setPosition3D(prev => ({
-        x: Math.max(10, Math.min(80, prev.x)),
-        y: Math.max(20, Math.min(70, prev.y)),
+        x: Math.max(8, Math.min(85, prev.x)), // Allow closer to left edge
+        y: Math.max(10, Math.min(75, prev.y)), // Avoid bottom text
         z: Math.max(-0.15, Math.min(0.15, prev.z)),
       }));
-    }, 200); // Increased interval from 100ms to 200ms for smoother movement
+    }, 300);
 
     return () => clearInterval(moveInterval);
-  }, []);
+  }, [mousePosition]);
 
-  // Random blinking with position teleport
+  // Random blinking with position teleport - less frequent and avoids text
   useEffect(() => {
-    const blinkInterval = setInterval(() => {
-      // Random blink every 3-8 seconds
-      const nextBlinkDelay = 3000 + Math.random() * 5000;
+    const scheduleBlink = () => {
+      // Random blink every 15-30 seconds (much less frequent)
+      const nextBlinkDelay = 15000 + Math.random() * 15000;
       
-      setTimeout(() => {
+      const blinkTimeout = setTimeout(() => {
         setIsBlinking(true);
         
-        // During blink, teleport to new position
+        // During blink, teleport to new position - prefer corners and edges (away from text)
         setTimeout(() => {
+          const safePositions = [
+            { x: 12, y: 15 }, // Top-left
+            { x: 82, y: 15 }, // Top-right
+            { x: 10, y: 45 }, // Mid-left
+            { x: 85, y: 45 }, // Mid-right
+            { x: 15, y: 12 }, // Top-left-center
+            { x: 75, y: 12 }, // Top-right-center
+          ];
+          
+          const randomPos = safePositions[Math.floor(Math.random() * safePositions.length)];
+          
           setPosition3D({
-            x: 10 + Math.random() * 70, // Random X: 10-80%
-            y: 15 + Math.random() * 65, // Random Y: 15-80%
-            z: (Math.random() - 0.5) * 0.4, // Random depth: -0.2 to 0.2
+            x: randomPos.x + (Math.random() - 0.5) * 5, // Small random offset
+            y: randomPos.y + (Math.random() - 0.5) * 5,
+            z: (Math.random() - 0.5) * 0.2,
           });
           
           setIsBlinking(false);
+          scheduleBlink(); // Schedule next blink
         }, 150); // Blink duration
       }, nextBlinkDelay);
-    }, 100);
 
-    return () => clearInterval(blinkInterval);
+      return blinkTimeout;
+    };
+
+    const timeout = scheduleBlink();
+    return () => clearTimeout(timeout);
   }, []);
 
   // Track mouse position
@@ -112,26 +208,66 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const rect = containerRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
+    // Use requestAnimationFrame for smooth updates during scroll
+    const updateTracking = () => {
+      if (!containerRef.current) return;
 
-    const deltaX = mousePosition.x - centerX;
-    const deltaY = mousePosition.y - centerY;
-    
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    const maxOffset = 3; // Maximum eye movement in pixels
-    
-    if (distance > 0) {
-      const offsetX = (deltaX / distance) * Math.min(distance / 100, maxOffset);
-      const offsetY = (deltaY / distance) * Math.min(distance / 100, maxOffset);
-      setEyeOffset({ x: offsetX, y: offsetY });
+      const rect = containerRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      const deltaX = mousePosition.x - centerX;
+      const deltaY = mousePosition.y - centerY;
       
-      // Calculate angle for laser beam
-      const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-      setLaserAngle(angle);
-    }
-  }, [mousePosition, containerRef]);
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const maxOffset = 3; // Maximum eye movement in pixels
+      
+      if (distance > 0) {
+        const offsetX = (deltaX / distance) * Math.min(distance / 100, maxOffset);
+        const offsetY = (deltaY / distance) * Math.min(distance / 100, maxOffset);
+        setEyeOffset({ x: offsetX, y: offsetY });
+        
+        // Calculate angle for laser beam
+        const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+        setLaserAngle(angle);
+      }
+    };
+
+    updateTracking();
+  }, [mousePosition]);
+
+  // Add scroll listener to update tracking during scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      // Force recalculation on scroll by updating trigger
+      setScrollTrigger(prev => prev + 1);
+      
+      // Immediate recalculation
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        const deltaX = mousePosition.x - centerX;
+        const deltaY = mousePosition.y - centerY;
+        
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        if (distance > 0) {
+          const maxOffset = 3;
+          const offsetX = (deltaX / distance) * Math.min(distance / 100, maxOffset);
+          const offsetY = (deltaY / distance) * Math.min(distance / 100, maxOffset);
+          setEyeOffset({ x: offsetX, y: offsetY });
+          
+          const angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+          setLaserAngle(angle);
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [mousePosition]);
 
   // Scroll-based animation (legacy, not used in 3D mode)
   const { scrollYProgress } = useScroll({
@@ -152,12 +288,12 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
         left: `${position3D.x}%`,
         top: `${position3D.y}%`,
         scale: depthScale,
-        opacity: isBlinking ? 0 : 1,
+        opacity: isBlinking ? 0 : 0.6, // Fade to 0 when blinking, 0.6 when visible
       }}
       transition={{
-        left: { type: 'spring', stiffness: 30, damping: 25 },
-        top: { type: 'spring', stiffness: 30, damping: 25 },
-        scale: { type: 'spring', stiffness: 50, damping: 30 },
+        left: { type: 'spring', stiffness: 20, damping: 30 },
+        top: { type: 'spring', stiffness: 20, damping: 30 },
+        scale: { type: 'spring', stiffness: 40, damping: 35 },
         opacity: { duration: 0.15 },
       }}
       style={{
@@ -167,6 +303,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
         height: size,
         pointerEvents: 'none',
         transform: 'translate(-50%, -50%)',
+        opacity: isBlinking ? 0 : 0.6, // 60% opacity when visible, allows text to show through
       }}
     >
       {/* Dual laser beams from eyes that converge - can extend outside section */}
@@ -205,11 +342,11 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
                     background: `linear-gradient(90deg, ${scanColor} 0%, ${scanColor}aa 50%, transparent 100%)`,
                     transformOrigin: 'left center',
                     transform: `rotate(${laserAngle}deg)`,
-                    opacity: 0.8,
+                    opacity: 0.5, // Reduced from 0.8 for text readability
                     filter: 'blur(0.5px)',
                     pointerEvents: 'none',
                   }}
-                  animate={{ opacity: [0.6, 0.9, 0.6] }}
+                  animate={{ opacity: [0.4, 0.6, 0.4] }}
                   transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                 />
                 
@@ -225,11 +362,11 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
                     background: `linear-gradient(90deg, ${scanColor} 0%, ${scanColor}aa 50%, transparent 100%)`,
                     transformOrigin: 'left center',
                     transform: `rotate(${laserAngle}deg)`,
-                    opacity: 0.8,
+                    opacity: 0.5, // Reduced from 0.8 for text readability
                     filter: 'blur(0.5px)',
                     pointerEvents: 'none',
                   }}
-                  animate={{ opacity: [0.6, 0.9, 0.6] }}
+                  animate={{ opacity: [0.4, 0.6, 0.4] }}
                   transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 0.1 }}
                 />
               </>
