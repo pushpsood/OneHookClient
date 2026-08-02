@@ -46,7 +46,6 @@ export class FrontendStack extends Stack {
 
     // S3 bucket for static website
     this.bucket = new Bucket(this, 'WebsiteBucket', {
-      bucketName: `onehook-frontend-${env}-${this.account}`,
       websiteIndexDocument: 'index.html',
       websiteErrorDocument: 'index.html',
       publicReadAccess: false,
@@ -75,7 +74,6 @@ export class FrontendStack extends Stack {
 
     // Cache policy for static assets
     const cachePolicy = new CachePolicy(this, 'CachePolicy', {
-      cachePolicyName: `onehook-${env}-cache-policy`,
       defaultTtl: Duration.days(1),
       maxTtl: Duration.days(365),
       minTtl: Duration.seconds(0),
@@ -88,7 +86,6 @@ export class FrontendStack extends Stack {
 
     // Response headers policy for security
     const responseHeadersPolicy = new ResponseHeadersPolicy(this, 'SecurityHeaders', {
-      responseHeadersPolicyName: `onehook-${env}-security-headers`,
       securityHeadersBehavior: {
         contentTypeOptions: { override: true },
         frameOptions: { frameOption: HeadersFrameOption.DENY, override: true },
@@ -147,7 +144,6 @@ export class FrontendStack extends Stack {
           : PriceClass.PRICE_CLASS_100,
       enableLogging: true,
       logBucket: new Bucket(this, 'LogBucket', {
-        bucketName: `onehook-logs-${env}-${this.account}`,
         removalPolicy: RemovalPolicy.DESTROY,
         autoDeleteObjects: true,
         encryption: BucketEncryption.S3_MANAGED,
