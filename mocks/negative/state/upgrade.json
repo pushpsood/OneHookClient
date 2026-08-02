@@ -1,0 +1,5 @@
+{
+  "_status": 400,
+  "message": "Payment method failed.",
+  "code": "PAYMENT_FAILED"
+}

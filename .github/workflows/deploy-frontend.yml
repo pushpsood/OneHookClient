@@ -1,0 +1,54 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'infra/**'
+      - 'index.html'
+      - 'vite.config.ts'
+      - 'package.json'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - run: npm ci
+      - run: npm run build:prod
+
+      - name: Deploy frontend stack
+        run: |
+          set -euo pipefail
+
+          DEPLOY_ARGS=(
+            --context env=prod
+            --app 'npx tsx infra/stacks/frontend-app.ts'
+            --require-approval never
+          )
+
+          if [ -n "${{ secrets.FRONTEND_DOMAIN }}" ]; then
+            DEPLOY_ARGS+=(--context "domain=${{ secrets.FRONTEND_DOMAIN }}")
+          fi
+
+          if [ -n "${{ secrets.FRONTEND_CERTIFICATE_ARN }}" ]; then
+            DEPLOY_ARGS+=(--context "certificateArn=${{ secrets.FRONTEND_CERTIFICATE_ARN }}")
+          fi
+
+          npx cdk deploy OneHook-Frontend-prod "${DEPLOY_ARGS[@]}"

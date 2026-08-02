@@ -1,0 +1,5 @@
+{
+  "_status": 500,
+  "message": "Failed to process swipe",
+  "code": "SWIPE_ERROR"
+}

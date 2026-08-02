@@ -1,0 +1,11 @@
+{
+  "candidates": [
+    {
+      "userId": "user_001",
+      "score": 0.86,
+      "distanceKm": 3.2
+    }
+  ],
+  "count": 1,
+  "algorithm": "gale-shapley+cf"
+}
