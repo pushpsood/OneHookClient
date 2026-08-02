@@ -75,8 +75,9 @@ export function Privacy() {
               <li>Email address</li>
               <li>Name and date of birth</li>
               <li>Location (geographic area only)</li>
-              <li>Profile photos (encrypted storage)</li>
-              <li>Bio and interests</li>
+              <li>Profile photos, videos, and audio (encrypted storage)</li>
+              <li>Profile details, bio, and interests</li>
+              <li>Preferences</li>
               <li>Sexual orientation (optional, for matching)</li>
             </ul>
 
@@ -222,8 +223,8 @@ export function Privacy() {
           <div>
             <h2 className="text-3xl font-serif italic mb-4">6. Data International Transfers</h2>
             <p className="opacity-70 leading-relaxed">
-              OneHook operates primarily in the United States. If you are outside the US, your data
-              may be transferred to and processed in the United States. By using OneHook, you
+              OneHook operates primarily in India. If you are outside India, your data
+              will be transferred to and stored inside India. By using OneHook, you
               consent to this transfer. Where required by law (e.g., GDPR), we implement appropriate
               safeguards including:
             </p>
@@ -369,14 +370,13 @@ export function Privacy() {
                 certified
               </li>
               <li>
-                <strong>Email Service:</strong> Sendgrid - for transactional emails only, no
-                marketing
+                <strong>Email Service:</strong> SNS
               </li>
               <li>
-                <strong>Analytics:</strong> Self-hosted and anonymous only
+                <strong>Analytics:</strong> Hosted in AWS (India region)
               </li>
               <li>
-                <strong>Payment Processing:</strong> Stripe - PCI DSS Level 1 compliant
+                <strong>Payment Processing:</strong> Not yet accepting any payments
               </li>
             </ul>
           </div>
