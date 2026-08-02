@@ -1053,20 +1053,6 @@ export function Landing() {
               style={{ background: 'radial-gradient(circle, #fff 0%, transparent 70%)' }}
             />
 
-            {/* Alien Scanner Mascot - 3D movement with blinking */}
-            <div className="hidden md:block">
-              <AlienScanner
-                scrollBased={false}
-                size={140}
-                primaryColor="#ff69b4"
-                scanColor="#0052CC"
-                showBeam={true}
-                zIndex={5}
-                vertical={false}
-                speed={30}
-              />
-            </div>
-
             {/* Content wrapper to maintain centered layout */}
             <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
               <div className="relative py-14 lg:py-20">
@@ -1082,6 +1068,20 @@ export function Landing() {
                   meaning, not keywords, and optimizes for a two-way spark &mdash; not just whether
                   you&rsquo;d swipe right.
                 </p>
+                
+                {/* Alien Scanner Mascot - positioned on the right side of intro text */}
+                <div className="hidden lg:block absolute top-0 right-0 w-48 h-48">
+                  <AlienScanner
+                    scrollBased={false}
+                    size={140}
+                    primaryColor="#ff69b4"
+                    scanColor="#0052CC"
+                    showBeam={true}
+                    zIndex={5}
+                    vertical={false}
+                    speed={30}
+                  />
+                </div>
               </div>
 
               {/* Pipeline strip: Signals → Scoring → Stable match */}
