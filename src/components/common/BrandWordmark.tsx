@@ -19,7 +19,7 @@ export function BrandWordmark({
         src="/media/onehook-512.png"
         alt=""
         aria-hidden="true"
-        className={`h-[1em] w-auto shrink-0 object-contain ${imageClassName}`.trim()}
+        className={`w-auto shrink-0 object-contain ${imageClassName || 'h-[1em]'}`.trim()}
       />
       <span className={textClassName}>{text}</span>
     </div>

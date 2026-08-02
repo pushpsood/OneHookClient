@@ -96,6 +96,15 @@ export function Landing() {
   useEffect(() => {
     const el = getAppRef.current;
     if (!el) return;
+    
+    // Disable animation on mobile devices
+    const isMobile = window.innerWidth < 768; // md breakpoint
+    if (isMobile) {
+      appLeftX.set(0);
+      appRightX.set(0);
+      return;
+    }
+    
     let raf = 0;
     const update = () => {
       const rect = el.getBoundingClientRect();
@@ -348,8 +357,9 @@ export function Landing() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <BrandWordmark
-            className="text-xl sm:text-2xl font-bold tracking-tighter uppercase"
-            textClassName={isMobileNavOpen ? 'hidden md:inline' : ''}
+            className="font-bold tracking-tighter uppercase"
+            imageClassName="h-10 w-auto sm:h-10"
+            textClassName="hidden sm:inline text-2xl"
           />
           <div className="flex items-center gap-3 sm:gap-6">
             <div className="relative md:hidden">
@@ -366,7 +376,7 @@ export function Landing() {
               </button>
 
               {isMobileNavOpen && (
-                <div className="absolute right-0 mt-2 w-48 border border-border bg-white shadow-lg">
+                <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-48 border border-border bg-white shadow-lg">
                   <button
                     onClick={() => scrollToSection('philosophy')}
                     className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity"
@@ -427,7 +437,8 @@ export function Landing() {
               onClick={goRedeemInvite}
               className="px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity"
             >
-              Redeem Invite
+              <span className="sm:hidden">Sign up</span>
+              <span className="hidden sm:inline">Redeem Invite</span>
             </button>
           </div>
         </div>
@@ -1043,16 +1054,18 @@ export function Landing() {
             />
 
             {/* Alien Scanner Mascot - 3D movement with blinking */}
-            <AlienScanner
-              scrollBased={false}
-              size={140}
-              primaryColor="#ff69b4"
-              scanColor="#0052CC"
-              showBeam={true}
-              zIndex={5}
-              vertical={false}
-              speed={30}
-            />
+            <div className="hidden md:block">
+              <AlienScanner
+                scrollBased={false}
+                size={140}
+                primaryColor="#ff69b4"
+                scanColor="#0052CC"
+                showBeam={true}
+                zIndex={5}
+                vertical={false}
+                speed={30}
+              />
+            </div>
 
             {/* Content wrapper to maintain centered layout */}
             <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
@@ -1211,6 +1224,7 @@ export function Landing() {
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
             style={{ x: appLeftXSpring }}
+            className="text-center md:text-left"
           >
             <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 border border-white/25 rounded-full">
               <Smartphone className="w-3.5 h-3.5" />
@@ -1225,12 +1239,12 @@ export function Landing() {
               in your pocket.
             </h2>
 
-            <p className="text-lg text-white/70 leading-relaxed mb-8 max-w-md">
+            <p className="text-lg text-white/70 leading-relaxed mb-8 max-w-md mx-auto md:mx-0">
               Fewer notifications, more meaning. Matches, private end-to-end encrypted chat, and
               focus mode — wherever you are.
             </p>
 
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap gap-4 justify-center md:justify-start">
               <a
                 href={APP_DOWNLOAD_URL}
                 target="_blank"
@@ -1400,13 +1414,13 @@ export function Landing() {
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
               onClick={goRedeemInvite}
-              className="px-10 py-5 bg-accent text-white text-sm font-black uppercase tracking-[0.3em] hover:opacity-90 transition-opacity inline-flex items-center gap-3"
+              className="w-full sm:w-auto px-10 py-5 bg-accent text-white text-sm font-black uppercase tracking-[0.3em] hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3"
             >
               Redeem your invite <ArrowRight className="w-5 h-5" />
             </motion.button>
             <button
               onClick={() => navigate('/login')}
-              className="px-10 py-5 border border-accent text-accent text-sm font-black uppercase tracking-[0.3em] hover:bg-accent hover:text-white transition-colors"
+              className="w-full sm:w-auto px-10 py-5 border border-accent text-accent text-sm font-black uppercase tracking-[0.3em] hover:bg-accent hover:text-white transition-colors"
             >
               I already have an account
             </button>
@@ -1432,7 +1446,7 @@ export function Landing() {
             className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] sm:w-auto"
           >
             <div className="flex items-center gap-3 sm:gap-5 bg-accent text-white pl-5 pr-2 py-2 rounded-full shadow-2xl border border-white/10">
-              <span className="hidden sm:block text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
+              <span className="hidden sm:block portrait:hidden text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
                 One connection. Zero distractions.
               </span>
               <button
@@ -1445,7 +1459,9 @@ export function Landing() {
                 onClick={goRedeemInvite}
                 className="flex-1 sm:flex-none px-5 py-3 bg-white text-accent text-[11px] font-black uppercase tracking-[0.24em] rounded-full hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2"
               >
-                Redeem invite <ArrowRight className="w-4 h-4" />
+                <span className="hidden sm:inline">Redeem invite</span>
+                <span className="sm:hidden">Redeem</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </motion.div>

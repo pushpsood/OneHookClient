@@ -64,7 +64,7 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
   return (
     <footer className="py-12 px-6 bg-white border-t border-border">
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8 text-sm opacity-60">
-        <div>
+        <div className="text-center md:text-left">
           <BrandWordmark className="font-bold uppercase tracking-widest mb-2 text-sm" />
           <p>One connection. Zero distractions.</p>
         </div>
@@ -90,17 +90,19 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
           </button>
 
           {/* Socials (4) + highlighted app-flow CTA + socials (4) */}
-          <div className="flex flex-wrap items-center justify-center gap-4 md:gap-5">
-            {SOCIALS.slice(0, 4).map(renderSocial)}
+          <div className="w-full md:w-auto flex flex-col md:flex-row items-center justify-center gap-4 md:gap-5">
+            {/* All 8 social icons in one row on mobile */}
+            <div className="flex flex-wrap items-center justify-center gap-4 md:gap-5">
+              {SOCIALS.map(renderSocial)}
+            </div>
 
+            {/* Get the app button - separate line on mobile, inline on desktop */}
             <button
               onClick={() => goToSection('get-app')}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent text-white rounded-full text-[11px] font-black uppercase tracking-[0.2em] opacity-100 hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent text-white rounded-full text-[11px] font-black uppercase tracking-[0.2em] opacity-100 hover:opacity-90 transition-opacity md:order-first"
             >
               <Smartphone className="w-3.5 h-3.5" /> Get the app
             </button>
-
-            {SOCIALS.slice(4).map(renderSocial)}
           </div>
         </div>
 
