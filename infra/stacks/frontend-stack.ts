@@ -1,5 +1,5 @@
 import { Stack, StackProps, RemovalPolicy, Duration, CfnOutput } from 'aws-cdk-lib';
-import { Bucket, BucketEncryption, BlockPublicAccess } from 'aws-cdk-lib/aws-s3';
+import { Bucket, BucketEncryption, BlockPublicAccess, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
 import { 
   Distribution, 
@@ -152,6 +152,7 @@ export class FrontendStack extends Stack {
         autoDeleteObjects: true,
         encryption: BucketEncryption.S3_MANAGED,
         enforceSSL: true,
+        objectOwnership: ObjectOwnership.OBJECT_WRITER,
       }),
       logFilePrefix: 'cloudfront/',
       minimumProtocolVersion: SecurityPolicyProtocol.TLS_V1_2_2021,

@@ -57,18 +57,18 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
   useEffect(() => {
     const moveInterval = setInterval(() => {
       setPosition3D(prev => ({
-        x: prev.x + (Math.random() - 0.5) * 2, // Move ±1% horizontally
-        y: prev.y + (Math.random() - 0.5) * 2, // Move ±1% vertically
-        z: prev.z + (Math.random() - 0.5) * 0.1, // Subtle depth change
+        x: prev.x + (Math.random() - 0.5) * 0.3, // Reduced to ±0.15% - more stable
+        y: prev.y + (Math.random() - 0.5) * 0.3, // Reduced to ±0.15% - more stable
+        z: prev.z + (Math.random() - 0.5) * 0.02, // Reduced depth change - more stable
       }));
 
       // Keep within bounds
       setPosition3D(prev => ({
-        x: Math.max(5, Math.min(85, prev.x)),
-        y: Math.max(10, Math.min(80, prev.y)),
-        z: Math.max(-0.3, Math.min(0.3, prev.z)),
+        x: Math.max(10, Math.min(80, prev.x)),
+        y: Math.max(20, Math.min(70, prev.y)),
+        z: Math.max(-0.15, Math.min(0.15, prev.z)),
       }));
-    }, 100);
+    }, 200); // Increased interval from 100ms to 200ms for smoother movement
 
     return () => clearInterval(moveInterval);
   }, []);
@@ -155,9 +155,9 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
         opacity: isBlinking ? 0 : 1,
       }}
       transition={{
-        left: { type: 'spring', stiffness: 50, damping: 15 },
-        top: { type: 'spring', stiffness: 50, damping: 15 },
-        scale: { type: 'spring', stiffness: 80, damping: 20 },
+        left: { type: 'spring', stiffness: 30, damping: 25 },
+        top: { type: 'spring', stiffness: 30, damping: 25 },
+        scale: { type: 'spring', stiffness: 50, damping: 30 },
         opacity: { duration: 0.15 },
       }}
       style={{
