@@ -154,7 +154,9 @@ export class FrontendStack extends Stack {
       minimumProtocolVersion: SecurityPolicyProtocol.TLS_V1_2_2021,
       ...(props?.domainName && props?.certificateArn
         ? {
-            domainNames: [props.domainName],
+            domainNames: props.domainName === props.rootDomain 
+              ? [props.domainName, `www.${props.domainName}`]
+              : [props.domainName],
             certificate: Certificate.fromCertificateArn(
               this,
               'Certificate',
@@ -187,6 +189,14 @@ export class FrontendStack extends Stack {
         recordName: props.domainName,
         target: RecordTarget.fromAlias(new CloudFrontTarget(this.distribution)),
       });
+
+      if (props.domainName === props.rootDomain) {
+        new ARecord(this, 'WwwAliasRecord', {
+          zone: hostedZone,
+          recordName: `www.${props.domainName}`,
+          target: RecordTarget.fromAlias(new CloudFrontTarget(this.distribution)),
+        });
+      }
     }
 
     // Outputs
