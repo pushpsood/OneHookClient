@@ -75,3 +75,4 @@ export const IdentityApi = {
     return sdkClient.getUserByEmail({ email });
   },
 };
+if (typeof window !== 'undefined') { (window as any).IdentityApi = IdentityApi; }

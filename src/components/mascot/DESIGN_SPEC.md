@@ -1,163 +1,112 @@
-# OneHook Alien Scanner — Design Specification
+# OneHook Mascot — Design Specification
 
 ## 🎨 Visual Identity
 
 ### Character Design
+
 ```
-     ○ ○  ← Antennae with glowing tips (signal detection)
-      \ /
-   ╭───────╮
-   │ ◉═◉ │  ← Binocular scanner eyes (dual analysis)
-   │   ═   │  ← Bridge (connected perspective)
-   │   ⌣   │  ← Subtle smile (friendly AI)
-   ╰───────╯
-      ╲ ╱
+        ╭───────╮
+       (  ◕   ◕  )   ← big friendly eyes (blue iris, dark pupil, white catch-light)
+       (    ‿    )   ← happy open mouth
+   \  (           )     ← waving right arm
+    \_(  pink egg  )
+       (           )
+        ╰─┳──────┳─╯
+          ┃      ┃      ← little legs + feet
 ```
+
+A rounded, egg‑shaped body with a glossy highlight, two large eyes, a cheerful
+mouth, two arms (one waving) and two short legs.
 
 ### Color Palette
 
 **Primary (Default)**
-- Body: `#ff69b4` (Hot Pink) — Represents warmth, connection, romance
-- Scan: `#0052CC` (OneHook Brand Blue) — Represents intelligence, trust, precision
 
-**Variants**
-- Dark Mode: `#ff1493` / `#003d99` (Deep pink / Dark blue)
-- Light Mode: `#ffb6c1` / `#4d88ff` (Light pink / Light blue)
-- Accent: `#ff0088` / `#0066ff` (Magenta / Bright blue)
+- Body: `#ff69b4` (hot pink) — warmth, connection, romance
+- Eyes (iris): `#0052CC` (brand blue) in the web component / `#87ceeb` (sky blue)
+  in the static artwork
+- Pupil: `#0d1b3e` (near‑navy)
+- Mouth: `#7d1f3d` with a `#ff6f9c` tongue highlight
+- Gloss: white at low opacity for the 3D sheen
 
-### Animation States
+**Variants** (`MASCOT_COLOR_VARIANTS`)
 
-1. **Scanning (Active) — Mouse Interactive**
-   - Eyes track cursor position in real-time
-   - Dual laser beams emit from each eye
-   - Laser beams converge at cursor position with pulsing glow
-   - Moves vertically through features from top to bottom
-   - Eyes pulsate with scanning rings expanding outward
-   - Antennae oscillate gently
-   - Body subtly breathes (scale)
-   - Loops continuously, resetting at bottom
+- Dark: `#ff1493` / `#4682b4`
+- Light: `#ffb6c1` / `#b0e0e6`
+- Accent: `#ff0088` / `#00bfff`
 
-2. **Idle**
-   - Slow eye blink animation
-   - Gentle antenna sway
-   - Minimal scanning ring pulse
-   - Eyes still track mouse but with reduced intensity
+### Animation States (web)
 
-3. **Success** (future)
-   - Rapid eye blink
-   - Antennae point upward
-   - Green glow intensifies
+1. **Idle / engaging (default)**
+   - Right arm **waves** on a gentle loop (rotates around the shoulder, with a
+     short pause between waves).
+   - Eyes **softly track the cursor** (springy iris offset).
+   - Body **breathes** (subtle vertical scale).
+   - Mouth gently animates.
 
-4. **Thinking** (future)
-   - Eyes narrow slightly
-   - Antennae lean inward
-   - Scanning beam accelerates
+2. **Reduced motion**
+   - Respect `prefers-reduced-motion`; keep the mascot calm/static.
+
+There is intentionally **no** roaming/teleporting movement and **no** laser or
+scanning effects — the mascot sits beside content as a friendly companion.
 
 ## 🎭 Character Personality
 
-**Name**: Scanner (internal codename)
-
-**Role**: OneHook's quality assurance mascot — validates profiles for authenticity, scans for compatibility signals, ensures match robustness.
-
-**Personality Traits**:
-- Diligent and thorough
-- Friendly but focused
-- Tech-savvy and precise
-- Trustworthy guardian
-
-**Voice** (if adding text/sound):
-- Short, technical confirmations ("Verified", "Match found", "Scanning...")
-- Friendly but professional tone
-- Minimal but helpful
+- Warm, upbeat, welcoming.
+- A friendly greeter that waves hello — not a technical/AI "scanner".
+- Playful but not distracting.
 
 ## 📐 Technical Specifications
 
 ### Dimensions
-- Base canvas: 120×120px
-- Alien body: 70×84px (centered)
-- Eye spacing: 30px apart
-- Eye diameter: 20px (outer), 16px (inner lens)
-- Antenna height: ~45px from top of head
+
+- Base canvas: `120×120` (viewBox `0 0 120 120`)
+- Body (egg): centered, roughly `68×84`
+- Eyes: white ellipse `rx 11 / ry 13`, iris `r 7.5`, pupil `r 4`
+- Feet at the bottom; a soft ground shadow anchors the character
 
 ### Animation Timing
-- Eye pulse: 1.5s cycle
-- Scanning rings: 2s expansion + fade
-- Antenna sway: 2.5s cycle
-- Body breathing: 3s cycle
-- Horizontal scan: 20s (scroll-based varies)
 
-### Performance
-- SVG-based (scalable, lightweight)
-- CSS/Motion animations (GPU-accelerated)
-- No external dependencies beyond Motion/React
-- ~8KB unminified
+- Hand wave: ~1.8s with a ~1.1s pause between waves
+- Eye tracking: spring (stiffness 200, damping 20)
+- Body breathing: ~3.5s cycle
+- Mouth: ~3s cycle
+
+### Rendering
+
+- Pure SVG (scalable, lightweight)
+- Motion/React for animation (GPU‑accelerated transforms)
+- `preserveAspectRatio="xMidYMax meet"` so feet stay bottom‑aligned when the
+  container aspect differs
 
 ## 🎯 Usage Context
 
-### Web
-- Landing page "science" section (validates algorithm features)
-- Loading screens
-- Error states (gentle, non-intrusive)
-- Success confirmations
-
-### Mobile
-- Splash screen
-- Profile verification indicator
-- Match success celebration
-- Settings/about section
-
-### Marketing
-- Social media avatar
-- Email headers
-- Presentation slides
-- Promotional materials
-- Stickers/swag
+- **Web**: beside the "science of one good match" copy on the landing page;
+  small inline accents.
+- **Mobile / marketing**: static SVG export (see `README.md`).
 
 ## 🚫 Don'ts
 
-- Don't make eyes red (suggests error/danger)
-- Don't add aggressive expressions (keep friendly)
-- Don't over-animate (should be subtle background element)
-- Don't obscure main content (z-index ≤ 10)
-- Don't make larger than 200px on web (distracting)
+- Don't add lasers, antennae, or scanning rings (retired concept).
+- Don't let it roam/float over text.
+- Don't recolour the eyes to red (reads as error).
+- Don't exceed ~200px on the web.
 
 ## ✅ Do's
 
-- Keep animation smooth and non-jarring
-- Use as subtle quality indicator
-- Match animation to user context (faster during loading, slower when idle)
-- Keep colors consistent with brand
-- Scale appropriately for device (smaller on mobile)
-
-## 📊 A/B Testing Ideas
-
-Future experiments:
-- With vs. without scanning beam
-- Different scanning speeds
-- Eye color variations
-- Size impact on engagement
-- Static vs. animated versions
+- Keep the wave subtle and friendly.
+- Bottom‑align the feet to the surrounding content.
+- Keep colours on‑brand (pink body, blue eyes).
+- Scale down gracefully on smaller screens.
 
 ## 🔄 Version History
 
-- **v1.0** (2026-08-02): Initial release
-  - Binocular eyes with scanning rings
-  - Horizontal scanning beam
-  - Animated antennae
-  - Breathing body
-  - Scroll-based movement
-
-## 📝 Notes
-
-The alien design deliberately avoids being too cute or cartoonish — it should feel like a sophisticated AI companion rather than a playful mascot. The binocular eyes reinforce the core OneHook concept of "two-way compatibility" rather than one-sided swiping.
-
-The scanning animation serves both aesthetic and functional purposes:
-1. **Visual interest**: Adds movement to static sections
-2. **Brand reinforcement**: Represents continuous quality assurance
-3. **Trust signal**: Shows the algorithm actively working
-4. **Delighter**: Subtle discovery for engaged users
+- **v2.0** (2026-08-04): Pink egg mascot — waving hand, cursor eye‑tracking,
+  breathing; static placement. Retired the "alien scanner" (binocular eyes,
+  lasers, antennae, roaming movement).
+- **v1.0** (2026-08-02): Initial "alien scanner" concept.
 
 ---
 
-**Design Lead**: OneHook Team  
-**Last Updated**: 2026-08-02
+**Design Lead**: OneHook Team
+**Last Updated**: 2026-08-04

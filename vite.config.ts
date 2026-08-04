@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { rm } from 'fs/promises';
+import { execSync } from 'child_process';
 import Sitemap from 'vite-plugin-sitemap';
 import { mockApiPlugin } from './vite-mock-plugin';
 
@@ -33,6 +34,20 @@ const leanMediaPrunePlugin = (): Plugin => ({
 });
 
 export default defineConfig(({ mode }) => {
+  let appsyncApiId = '';
+  if (mode === 'development') {
+    try {
+      const output = execSync('AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test aws --endpoint-url=http://localhost:4566 --region us-east-1 appsync list-graphql-apis', { encoding: 'utf-8', stdio: 'pipe' });
+      const apis = JSON.parse(output);
+      const chatApi = apis.graphqlApis?.find((api: any) => api.name === 'OneHook-Chat-local-ChatApi');
+      if (chatApi) {
+        appsyncApiId = chatApi.apiId;
+      }
+    } catch (e) {
+      console.warn('Could not fetch AppSync API ID from LocalStack', e);
+    }
+  }
+
   return {
     root: resolve(__dirname),
     publicDir: 'public',
@@ -62,10 +77,44 @@ export default defineConfig(({ mode }) => {
         allow: [resolve(__dirname), resolve(__dirname, '..', 'OneHookBackend')],
       },
       proxy: {
+        '/api/localstack/chat': {
+          target: 'https://hmlzbhd52r.execute-api.localhost.localstack.cloud:4566',
+          changeOrigin: true,
+          rewrite: (path) => `/prod${path.replace(/^\/api\/localstack/, '')}`,
+          configure: (proxy) => proxy.on('proxyReq', (req) => req.setHeader('origin', 'http://localhost:4566')),
+        },
+        '/api/localstack/matching': {
+          target: 'https://czulfcrdg5.execute-api.localhost.localstack.cloud:4566',
+          changeOrigin: true,
+          rewrite: (path) => `/local${path.replace(/^\/api\/localstack/, '')}`,
+          configure: (proxy) => proxy.on('proxyReq', (req) => req.setHeader('origin', 'http://localhost:4566')),
+        },
+        '/api/localstack/profile': {
+          target: 'https://6nba2c6zzn.execute-api.localhost.localstack.cloud:4566',
+          changeOrigin: true,
+          rewrite: (path) => `/prod${path.replace(/^\/api\/localstack/, '')}`,
+          configure: (proxy) => proxy.on('proxyReq', (req) => req.setHeader('origin', 'http://localhost:4566')),
+        },
+        '/api/localstack/identity': {
+          target: 'https://rmd3ijnj8t.execute-api.localhost.localstack.cloud:4566',
+          changeOrigin: true,
+          rewrite: (path) => `/prod${path.replace(/^\/api\/localstack/, '')}`,
+          configure: (proxy) => proxy.on('proxyReq', (req) => req.setHeader('origin', 'http://localhost:4566')),
+        },
+        ...(appsyncApiId ? {
+          '/graphql': {
+            target: `http://localhost.localstack.cloud:4566/graphql/${appsyncApiId}`,
+            changeOrigin: true,
+            ws: true,
+            rewrite: () => '',
+            configure: (proxy) => proxy.on('proxyReq', (req) => req.setHeader('origin', 'http://localhost:4566')),
+          }
+        } : {}),
         '/api/localstack': {
           target: 'http://localhost:4566',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/localstack/, ''),
+          configure: (proxy) => proxy.on('proxyReq', (req) => req.setHeader('origin', 'http://localhost:4566')),
         },
       },
     },
@@ -87,7 +136,10 @@ export default defineConfig(({ mode }) => {
       },
     },
     resolve: {
-      alias: { '@': resolve(__dirname, 'src') },
+      alias: [
+        { find: '@', replacement: resolve(__dirname, 'src') },
+        { find: /@onehook\/api-client\/dist-es\/runtimeConfig$/, replacement: '@onehook/api-client/dist-es/runtimeConfig.browser' }
+      ],
     },
     define: {
       'process.env.NODE_ENV': JSON.stringify(mode),

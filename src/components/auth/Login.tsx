@@ -8,6 +8,7 @@ import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { SOCIALS } from '../common/socials';
+import { useAppStore } from '../../store/app-store';
 
 /**
  * Sign in with a phone number OR an email — both support a one-time-code (OTP)
@@ -18,6 +19,7 @@ import { SOCIALS } from '../common/socials';
 export function Login() {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const setAuthenticated = useAppStore((state) => state.setAuthenticated);
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -56,12 +58,14 @@ export function Login() {
         }
         const response = await cognitoAuth.loginWithPassword(identifier.trim(), password);
         if (isSignedInStep(response)) {
+          setAuthenticated(true);
           navigate('/auth/setup', { replace: true });
         } else if (needsCodeStep(response)) {
           // e.g. an additional MFA/OTP challenge.
           setStep('OTP');
           showToast('Enter the verification code to continue.', 'info');
         } else {
+          setAuthenticated(true);
           navigate('/auth/setup', { replace: true });
         }
         return;
@@ -70,13 +74,21 @@ export function Login() {
       // One-time-code flow (phone or email).
       const response = await cognitoAuth.requestOtp(identifier.trim());
       if (isSignedInStep(response)) {
+        setAuthenticated(true);
         navigate('/auth/setup', { replace: true });
       } else {
         setStep('OTP');
         showToast(`Verification code sent to your ${identifierLabel}!`, 'info');
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Sign in failed. Please try again.';
+    } catch (err: any) {
+      console.error('Login error details:', err, JSON.stringify(err));
+      // Map Cognito errors to user-friendly messages
+      let message = err instanceof Error ? err.message : 'Sign in failed. Please try again.';
+      
+      // Specifically handle UserNotFoundException if needed
+      if (err.name === 'UserNotFoundException' || (err.message && err.message.includes('User does not exist'))) {
+        message = 'Account not found. Please check your details or sign up.';
+      }
       setError(message);
       showToast(message, 'error');
     } finally {
@@ -95,6 +107,7 @@ export function Login() {
       }
       const cognitoAuth = getCognitoAuth();
       await cognitoAuth.confirmLogin(code);
+      setAuthenticated(true);
       navigate('/auth/setup', { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Verification failed. Please try again.';
@@ -223,10 +236,10 @@ export function Login() {
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
-              className="p-4 bg-red-50 border border-red-200 rounded flex items-start gap-3"
+              className="p-4 bg-red-50 border border-red-200 rounded flex items-center justify-center gap-3"
             >
               <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-700">{error}</p>
+              <p className="text-sm text-red-700 text-center">{error}</p>
             </motion.div>
           )}
 

@@ -67,37 +67,30 @@ function mergeHeaders(...sources: Array<HeadersInit | undefined>): Record<string
 async function getAuthToken(): Promise<string | null> {
   if (!isBrowser()) return null;
 
-  return (
-    getStorageValue(window.localStorage, 'id_token') ||
-    getStorageValue(window.localStorage, 'accessToken') ||
-    getStorageValue(window.sessionStorage, 'id_token') ||
-    null
-  );
+  try {
+    const { fetchAuthSession } = await import('aws-amplify/auth');
+    const session = await fetchAuthSession();
+    console.log('[api-client] fetchAuthSession result:', session);
+    const token = session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
+    console.log('[api-client] resolved token:', token ? 'exists' : 'null');
+    return token;
+  } catch (error) {
+    console.error('[api-client] Failed to fetch auth session:', error);
+    return null;
+  }
 }
 
 async function refreshToken(): Promise<string | null> {
   if (!isBrowser()) return null;
 
-  const refreshToken = getStorageValue(window.localStorage, 'refresh_token');
-  if (!refreshToken) return null;
-
   try {
-    const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      window.localStorage.setItem('id_token', data.idToken);
-      return data.idToken;
-    }
+    const { fetchAuthSession } = await import('aws-amplify/auth');
+    const session = await fetchAuthSession({ forceRefresh: true });
+    return session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
   } catch (error) {
     console.error('Token refresh failed:', error);
+    return null;
   }
-
-  return null;
 }
 
 export async function apiRequest<T>(endpoint: string, options: RequestConfig = {}): Promise<T> {

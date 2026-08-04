@@ -1,54 +1,48 @@
 <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <radialGradient id="headGlow" cx="50%" cy="30%">
-      <stop offset="0%" stop-color="#87ceeb" stop-opacity="0.6" />
-      <stop offset="100%" stop-color="#87ceeb" stop-opacity="0" />
-    </radialGradient>
-    
-    <radialGradient id="eyeGlow" cx="50%" cy="50%">
-      <stop offset="0%" stop-color="#87ceeb" stop-opacity="1" />
-      <stop offset="100%" stop-color="#87ceeb" stop-opacity="0.6" />
+    <radialGradient id="bodyGloss" cx="38%" cy="26%" r="75%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35" />
+      <stop offset="45%" stop-color="#ffffff" stop-opacity="0" />
+      <stop offset="100%" stop-color="#c21f6f" stop-opacity="0.25" />
     </radialGradient>
   </defs>
 
-  <!-- Alien head (oval) -->
-  <ellipse cx="60" cy="55" rx="35" ry="42" fill="#ff69b4" opacity="0.9"/>
-  
-  <!-- Head glow -->
-  <ellipse cx="60" cy="55" rx="35" ry="42" fill="url(#headGlow)" opacity="0.4"/>
+  <!-- Ground shadow -->
+  <ellipse cx="60" cy="114" rx="26" ry="4" fill="#000000" opacity="0.12"/>
 
-  <!-- Left binocular eye -->
-  <g class="left-eye">
-    <circle cx="45" cy="50" r="12" fill="#1a1a2e" opacity="0.8"/>
-    <circle cx="45" cy="50" r="10" fill="url(#eyeGlow)"/>
-    <circle cx="47" cy="48" r="3" fill="white" opacity="0.9"/>
-    <!-- Scanning ring -->
-    <circle cx="45" cy="50" r="13" stroke="#87ceeb" stroke-width="1" fill="none" opacity="0.5"/>
+  <!-- Arms + legs -->
+  <g stroke="#ff69b4" stroke-linecap="round" fill="none">
+    <path d="M31 64 Q20 70 12 74" stroke-width="9"/>
+    <path d="M90 52 Q101 42 106 31" stroke-width="9"/>
+    <path d="M50 92 L49 108" stroke-width="9"/>
+    <path d="M70 92 L71 108" stroke-width="9"/>
   </g>
 
-  <!-- Right binocular eye -->
-  <g class="right-eye">
-    <circle cx="75" cy="50" r="12" fill="#1a1a2e" opacity="0.8"/>
-    <circle cx="75" cy="50" r="10" fill="url(#eyeGlow)"/>
-    <circle cx="77" cy="48" r="3" fill="white" opacity="0.9"/>
-    <!-- Scanning ring -->
-    <circle cx="75" cy="50" r="13" stroke="#87ceeb" stroke-width="1" fill="none" opacity="0.5"/>
+  <!-- Hands + feet -->
+  <g fill="#ff69b4">
+    <circle cx="12" cy="74" r="5.5"/>
+    <circle cx="106" cy="31" r="5.5"/>
+    <ellipse cx="45" cy="109" rx="7" ry="4.5"/>
+    <ellipse cx="75" cy="109" rx="7" ry="4.5"/>
   </g>
 
-  <!-- Binocular bridge -->
-  <rect x="53" y="48" width="14" height="4" rx="2" fill="#1a1a2e" opacity="0.6"/>
+  <!-- Body (egg) -->
+  <path d="M60 12 C40 12 26 34 26 57 C26 82 40 96 60 96 C80 96 94 82 94 57 C94 34 80 12 60 12 Z" fill="#ff69b4"/>
+  <path d="M60 12 C40 12 26 34 26 57 C26 82 40 96 60 96 C80 96 94 82 94 57 C94 34 80 12 60 12 Z" fill="url(#bodyGloss)"/>
 
-  <!-- Left antenna -->
-  <line x1="40" y1="20" x2="35" y2="8" stroke="#ff69b4" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="35" cy="8" r="3" fill="#87ceeb" opacity="0.9"/>
+  <!-- Eyes -->
+  <ellipse cx="48" cy="44" rx="11" ry="13" fill="#ffffff"/>
+  <ellipse cx="72" cy="44" rx="11" ry="13" fill="#ffffff"/>
+  <g>
+    <circle cx="48" cy="45" r="7.5" fill="#87ceeb"/>
+    <circle cx="48" cy="45" r="4" fill="#0d1b3e"/>
+    <circle cx="50" cy="42.5" r="1.8" fill="#ffffff"/>
+    <circle cx="72" cy="45" r="7.5" fill="#87ceeb"/>
+    <circle cx="72" cy="45" r="4" fill="#0d1b3e"/>
+    <circle cx="74" cy="42.5" r="1.8" fill="#ffffff"/>
+  </g>
 
-  <!-- Right antenna -->
-  <line x1="80" y1="20" x2="85" y2="8" stroke="#ff69b4" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="85" cy="8" r="3" fill="#87ceeb" opacity="0.9"/>
-
-  <!-- Subtle mouth -->
-  <path d="M 50 70 Q 60 75 70 70" stroke="#ff69b4" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.5"/>
-
-  <!-- Body hint -->
-  <path d="M 35 85 Q 60 95 85 85" stroke="#ff69b4" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.6"/>
+  <!-- Happy mouth -->
+  <path d="M53 58 Q60 56.5 67 58 Q65.5 67 60 67.5 Q54.5 67 53 58 Z" fill="#7d1f3d"/>
+  <ellipse cx="60" cy="65" rx="3.4" ry="2.2" fill="#ff6f9c"/>
 </svg>

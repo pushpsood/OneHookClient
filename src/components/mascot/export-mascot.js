@@ -14,15 +14,31 @@
  *   --all       Generate all platform assets
  */
 
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { generateCustomMascotSVG, MASCOT_COLOR_VARIANTS } from './AlienMascot.svg.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const EXPORT_DIR = join(__dirname, 'exports');
+
+// Single source of truth for the mascot artwork: the .svg file next to this script.
+const ALIEN_MASCOT_SVG = readFileSync(join(__dirname, 'onehook-alien-mascot.svg'), 'utf8');
+
+// Colour variants (body colour = #ff69b4, eye colour = #87ceeb in the base art).
+const MASCOT_COLOR_VARIANTS = {
+  default: { primaryColor: '#ff69b4', scanColor: '#87ceeb' },
+  dark: { primaryColor: '#ff1493', scanColor: '#4682b4' },
+  light: { primaryColor: '#ffb6c1', scanColor: '#b0e0e6' },
+  accent: { primaryColor: '#ff0088', scanColor: '#00bfff' },
+};
+
+function generateCustomMascotSVG(primaryColor = '#ff69b4', scanColor = '#87ceeb') {
+  return ALIEN_MASCOT_SVG
+    .replace(/#ff69b4/g, primaryColor)
+    .replace(/#87ceeb/g, scanColor);
+}
 
 // iOS sizes (for @1x, @2x, @3x)
 const IOS_SIZES = [

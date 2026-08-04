@@ -45,6 +45,7 @@ class CognitoAuthService {
     const cognito: Record<string, unknown> = {
       userPoolId: config.userPoolId,
       userPoolClientId: config.clientId,
+      userPoolEndpoint: config.endpoint,
       loginWith: {
         phone: true,
         email: true,
@@ -111,8 +112,10 @@ class CognitoAuthService {
     return signIn({
       username: identifier,
       options: {
-        authFlowType: 'USER_AUTH',
-        preferredChallenge: this.isEmail(identifier) ? 'EMAIL_OTP' : 'SMS_OTP',
+        authFlowType: 'CUSTOM_WITHOUT_SRP',
+        clientMetadata: {
+          authStrategy: this.isEmail(identifier) ? 'email' : 'phone',
+        },
       },
     });
   }
@@ -205,6 +208,12 @@ class CognitoAuthService {
 
   async getStoredTokens(): Promise<CognitoTokens | null> {
     try {
+      if (useMockApi) {
+        return {
+          idToken: 'mock-id-token',
+          accessToken: 'mock-access-token',
+        };
+      }
       const session = await fetchAuthSession();
       if (!session.tokens) return null;
       return {
@@ -231,7 +240,8 @@ class CognitoAuthService {
         email: attributes.email || '',
         sub: attributes.sub || '',
       };
-    } catch {
+    } catch (err) {
+      console.error('getCurrentUser error:', err);
       return null;
     }
   }

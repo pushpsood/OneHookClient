@@ -32,6 +32,88 @@ import { AlienScanner } from './mascot';
 const focusIntentionImage = '/media/aerial-view-of-the-city-in-the-fog-5ZBZNUT-1600.jpg';
 const discoverProfilesImage =
   '/media/man-with-backpack-walking-on-snow-covered-forest-b-JAJ77DS-1600.jpg';
+
+/**
+ * Lays out a sequence of chips/separators horizontally, but automatically
+ * switches to a centered vertical stack when the horizontal layout would wrap
+ * onto more than two lines. Separators flagged with `rotateWhenStacked` (e.g.
+ * arrows) are rotated 90° to point downward in the vertical layout.
+ *
+ * Wrapping is measured on an invisible horizontal "mirror" that always reflects
+ * the horizontal layout at the current width, so the decision is two‑way
+ * (re‑expands to a row when there's room again).
+ */
+type FlowPart = { key: string; content: React.ReactNode; rotateWhenStacked?: boolean };
+
+function AdaptiveFlow({
+  parts,
+  className,
+  rowClass,
+  colClass,
+  centerHorizontal = false,
+  maxLines = 2,
+  overflowBehavior = 'stack',
+}: {
+  parts: FlowPart[];
+  className?: string;
+  rowClass: string;
+  colClass: string;
+  /** Center the horizontal (non-stacked) layout too. */
+  centerHorizontal?: boolean;
+  /** How many wrapped lines are allowed before the overflow behavior kicks in. */
+  maxLines?: number;
+  /** What to do when the horizontal layout exceeds `maxLines`. */
+  overflowBehavior?: 'stack' | 'hide';
+}) {
+  const [overflow, setOverflow] = useState(false);
+  const mirrorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = mirrorRef.current;
+    if (!el) return;
+    const measure = () => {
+      const kids = Array.from(el.children) as HTMLElement[];
+      const rows = new Set(kids.map((k) => Math.round(k.offsetTop)));
+      setOverflow(rows.size > maxLines);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [parts, maxLines]);
+
+  const renderParts = (isStacked: boolean) =>
+    parts.map((p) => (
+      <span
+        key={p.key}
+        className={`inline-flex items-center${isStacked && p.rotateWhenStacked ? ' rotate-90' : ''}`}
+      >
+        {p.content}
+      </span>
+    ));
+
+  const stacked = overflow && overflowBehavior === 'stack';
+  const hidden = overflow && overflowBehavior === 'hide';
+
+  return (
+    <div className={`relative ${className ?? ''}`}>
+      {/* Invisible horizontal mirror used only to count wrapped rows. */}
+      <div
+        ref={mirrorRef}
+        aria-hidden="true"
+        className={`${rowClass} invisible absolute -z-10 h-0 w-full overflow-hidden`}
+      >
+        {renderParts(false)}
+      </div>
+
+      {!hidden && (
+        <div className={stacked ? colClass : `${rowClass}${centerHorizontal ? ' justify-center' : ''}`}>
+          {renderParts(stacked)}
+        </div>
+      )}
+    </div>
+  );
+}
 const connectWithPurposeImage = '/media/man-playing-guitar-close-up-1600.jpg';
 const getHookedImage =
   '/media/photodune-33277756-pleased-redhead-woman-student-watches-training-webinar-1600.jpg';
@@ -165,6 +247,30 @@ export function Landing() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [openerIndex, setOpenerIndex] = useState(0);
   const [showStickyCta, setShowStickyCta] = useState(false);
+
+  // Sticky CTA: hide the redeem button when the "Get the app" label wraps to
+  // more than one line. Measured on an invisible mirror that always renders
+  // BOTH buttons, so the decision doesn't oscillate once the redeem is removed.
+  const [hideStickyRedeem, setHideStickyRedeem] = useState(false);
+  const ctaAppTextRef = useRef<HTMLSpanElement>(null);
+  const ctaMirrorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showStickyCta) return;
+    const measure = () => {
+      const el = ctaAppTextRef.current;
+      if (!el) return;
+      setHideStickyRedeem(el.getClientRects().length > 1);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (ctaMirrorRef.current) ro.observe(ctaMirrorRef.current);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [showStickyCta]);
 
   type RelationshipMode = 'single' | 'taken';
   const [relationshipMode, setRelationshipMode] = useState<RelationshipMode>('single');
@@ -1056,7 +1162,7 @@ export function Landing() {
             {/* Content wrapper to maintain centered layout */}
             <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
               <div className="relative py-14 lg:py-20">
-              <div className="max-w-3xl">
+              <div className="max-w-3xl relative">
                 <p className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-5 inline-flex items-center gap-3">
                   <Sparkles className="w-3.5 h-3.5" /> Under the hood
                 </p>
@@ -1069,32 +1175,50 @@ export function Landing() {
                   you&rsquo;d swipe right.
                 </p>
                 
-                {/* Alien Scanner Mascot - positioned on the right side of intro text */}
-                <div className="hidden lg:block absolute top-0 right-0 w-48 h-48">
+                {/* Mascot - waves next to the copy, matched to the text block height */}
+                <div className="hidden lg:block absolute right-0 top-0 bottom-0 translate-x-full pl-10">
                   <AlienScanner
-                    scrollBased={false}
-                    size={140}
+                    className="h-full aspect-square"
                     primaryColor="#ff69b4"
                     scanColor="#0052CC"
-                    showBeam={true}
-                    zIndex={5}
-                    vertical={false}
-                    speed={30}
                   />
                 </div>
               </div>
 
-              {/* Pipeline strip: Signals → Scoring → Stable match */}
-              <div className="mt-12 flex flex-wrap items-center gap-3 text-[10px] font-black uppercase tracking-[0.24em]">
-                {['Signals', 'Reciprocal scoring', 'Stable match'].map((node, i) => (
-                  <React.Fragment key={node}>
-                    <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
-                      {node}
-                    </span>
-                    {i < 2 && <ArrowRight className="w-4 h-4 text-white/40" />}
-                  </React.Fragment>
-                ))}
-              </div>
+              {/* Pipeline strip: Signals → Scoring → Stable match (stacks vertically when > 2 lines) */}
+              <AdaptiveFlow
+                className="mt-12 text-[10px] font-black uppercase tracking-[0.24em]"
+                rowClass="flex flex-wrap items-center gap-3"
+                colClass="flex flex-col items-center gap-3"
+                parts={[
+                  {
+                    key: 'signals',
+                    content: (
+                      <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
+                        Signals
+                      </span>
+                    ),
+                  },
+                  { key: 'a1', rotateWhenStacked: true, content: <ArrowRight className="w-4 h-4 text-white/40" /> },
+                  {
+                    key: 'scoring',
+                    content: (
+                      <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
+                        Reciprocal scoring
+                      </span>
+                    ),
+                  },
+                  { key: 'a2', rotateWhenStacked: true, content: <ArrowRight className="w-4 h-4 text-white/40" /> },
+                  {
+                    key: 'stable',
+                    content: (
+                      <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
+                        Stable match
+                      </span>
+                    ),
+                  },
+                ]}
+              />
 
               {/* Capability grid */}
               <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/10 rounded-2xl overflow-hidden">
@@ -1157,19 +1281,48 @@ export function Landing() {
                 ))}
               </div>
 
-              {/* Weighted blend — the honest formula, as chips */}
-              <div className="mt-10 flex flex-wrap items-center gap-x-2 gap-y-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/50">
-                <span className="text-white/40">Final rank =</span>
-                {['Reciprocity', 'Proximity', 'Desirability'].map((term, i) => (
-                  <React.Fragment key={term}>
-                    {i > 0 && <span className="text-white/30">+</span>}
-                    <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
-                      {term}
-                    </span>
-                  </React.Fragment>
-                ))}
-                <span className="text-white/30">&times; freshness, stratified by intent</span>
-              </div>
+              {/* Weighted blend — the honest formula, centered; hidden entirely when it wraps to multiple lines */}
+              <AdaptiveFlow
+                className="mt-10 text-[10px] font-bold uppercase tracking-[0.2em] text-white/50"
+                rowClass="flex flex-wrap items-center gap-x-2 gap-y-3"
+                colClass="flex flex-col items-center gap-y-3"
+                centerHorizontal
+                maxLines={1}
+                overflowBehavior="hide"
+                parts={[
+                  { key: 'lead', content: <span className="text-white/40">Final rank =</span> },
+                  {
+                    key: 'reciprocity',
+                    content: (
+                      <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
+                        Reciprocity
+                      </span>
+                    ),
+                  },
+                  { key: 'p1', content: <span className="text-white/30">+</span> },
+                  {
+                    key: 'proximity',
+                    content: (
+                      <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
+                        Proximity
+                      </span>
+                    ),
+                  },
+                  { key: 'p2', content: <span className="text-white/30">+</span> },
+                  {
+                    key: 'desirability',
+                    content: (
+                      <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
+                        Desirability
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'trail',
+                    content: <span className="text-white/30">&times; freshness, stratified by intent</span>,
+                  },
+                ]}
+              />
               </div>
             </div>
           </motion.div>
@@ -1445,8 +1598,29 @@ export function Landing() {
             transition={{ duration: 0.3 }}
             className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] sm:w-auto"
           >
-            <div className="flex items-center gap-3 sm:gap-5 bg-accent text-white pl-5 pr-2 py-2 rounded-full shadow-2xl border border-white/10">
-              <span className="hidden sm:block portrait:hidden text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
+            {/* Invisible mirror (always both buttons) — measures whether the
+                "Get the app" label wraps to > 1 line at the current width. */}
+            <div
+              ref={ctaMirrorRef}
+              aria-hidden="true"
+              className="pointer-events-none invisible absolute inset-0 flex items-center gap-3 sm:gap-5 p-2 rounded-full border border-white/10"
+            >
+              <span className="hidden sm:block portrait:hidden pl-3 text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
+                One connection. Zero distractions.
+              </span>
+              <span className="flex-1 sm:flex-none block text-center px-5 py-3 border border-white/40 text-[11px] font-black uppercase tracking-[0.24em] rounded-full">
+                <Smartphone className="inline w-4 h-4 mr-2 align-middle" />
+                <span ref={ctaAppTextRef} className="align-middle">Get the app</span>
+              </span>
+              <span className="flex-1 sm:flex-none px-5 py-3 text-[11px] font-black uppercase tracking-[0.24em] rounded-full inline-flex items-center justify-center gap-2">
+                <span className="hidden sm:inline">Redeem invite</span>
+                <span className="sm:hidden">Redeem</span>
+                <ArrowRight className="w-4 h-4" />
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 sm:gap-5 bg-accent text-white p-2 rounded-full shadow-2xl border border-white/10">
+              <span className="hidden sm:block portrait:hidden pl-3 text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
                 One connection. Zero distractions.
               </span>
               <button
@@ -1455,14 +1629,16 @@ export function Landing() {
               >
                 <Smartphone className="w-4 h-4" /> Get the app
               </button>
-              <button
-                onClick={goRedeemInvite}
-                className="flex-1 sm:flex-none px-5 py-3 bg-white text-accent text-[11px] font-black uppercase tracking-[0.24em] rounded-full hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2"
-              >
-                <span className="hidden sm:inline">Redeem invite</span>
-                <span className="sm:hidden">Redeem</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              {!hideStickyRedeem && (
+                <button
+                  onClick={goRedeemInvite}
+                  className="flex-1 sm:flex-none px-5 py-3 bg-white text-accent text-[11px] font-black uppercase tracking-[0.24em] rounded-full hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2"
+                >
+                  <span className="hidden sm:inline">Redeem invite</span>
+                  <span className="sm:hidden">Redeem</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </motion.div>
         )}

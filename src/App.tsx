@@ -84,8 +84,6 @@ function getOptimizedProfileImageSrc(src?: string | null) {
   }
 }
 
-// TEMPORARY: Cognito init disabled for static site launch (no backend)
-/*
 // Initialize Cognito Auth on app load
 if (config.cognitoUserPoolId && config.cognitoClientId) {
   initializeCognitoAuth({
@@ -100,7 +98,6 @@ if (config.cognitoUserPoolId && config.cognitoClientId) {
     graphqlEndpoint: config.graphqlUrl,
   });
 }
-*/
 
 import { upgradeSubscription } from './lib/api-client';
 import { getCognitoAuth } from './lib/cognito-auth';
@@ -381,6 +378,30 @@ function ScrollToTop() {
 }
 
 export default function App() {
+  const setAuthenticated = useAppStore((state) => state.setAuthenticated);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        if (config.cognitoUserPoolId) {
+          const auth = getCognitoAuth();
+          const user = await auth.getCurrentUser();
+          setAuthenticated(!!user);
+        }
+      } catch (err) {
+        setAuthenticated(false);
+      } finally {
+        setIsInitializing(false);
+      }
+    }
+    checkAuth();
+  }, [setAuthenticated]);
+
+  if (isInitializing) {
+    return <LoadingSpinner fullScreen />;
+  }
+
   return (
     <ErrorBoundary>
       <ToastProvider>

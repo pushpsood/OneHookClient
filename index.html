@@ -3,16 +3,88 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="OneHook is a focused connection app designed for intentional matching and private conversation." />
+    <meta name="description" content="OneHook, a premium, high-intent dating and connection platform designed to solve the modern dating fatigue caused by endless swiping, ghosting, and superficial engagement allowing one match at a time until they either build a real connection or decide to unmatch." />
     <meta name="theme-color" content="#FDFDFD" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OneHook" />
+    <meta property="og:title" content="OneHook — One connection. Zero distractions." />
+    <meta property="og:description" content="OneHook, a premium, high-intent dating and connection platform designed to solve the modern dating fatigue caused by endless swiping, ghosting, and superficial engagement allowing one match at a time until they either build a real connection or decide to unmatch." />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="OneHook — One connection. Zero distractions." />
+    <meta name="twitter:description" content="OneHook, a premium, high-intent dating and connection platform designed to solve the modern dating fatigue caused by endless swiping, ghosting, and superficial engagement allowing one match at a time until they either build a real connection or decide to unmatch." />
     <link rel="icon" type="image/png" sizes="180x180" href="/media/onehook_white_inside-180.png" />
     <link rel="shortcut icon" type="image/png" sizes="180x180" href="/media/onehook_white_inside-180.png" />
     <link rel="apple-touch-icon" href="/media/onehook_white_inside-180.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="image" href="/media/LogoHeart.png" />
+    <link rel="preload" as="image" href="/media/LogoOne.png" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:ital,wght@0,900;1,900&family=JetBrains+Mono&display=swap"
+    />
     <title>OneHook — One connection. Zero distractions.</title>
+
+    <!-- Instant, self-contained splash to avoid any flash of unstyled content
+         before the app bundle + stylesheet are applied. Removed by main.tsx once
+         the app has painted. -->
+    <style>
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #fdfdfd;
+        transition: opacity 0.4s ease;
+      }
+      #app-splash.app-splash--hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* OneHook heart loader: the silver heart flips around the Y axis in 3D
+         while the navy "1" stays fixed on top (matches the iOS HeartLoaderView). */
+      #app-splash .oh-loader {
+        position: relative;
+        width: 124px;
+        height: 124px;
+        perspective: 600px;
+      }
+      #app-splash .oh-loader img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      #app-splash .oh-heart {
+        transform-origin: 50% 50%;
+        animation: oh-flip 1.8s ease-in-out infinite;
+      }
+      #app-splash .oh-one {
+        z-index: 2;
+      }
+      @keyframes oh-flip {
+        from { transform: rotateY(0deg); }
+        to { transform: rotateY(360deg); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #app-splash .oh-heart { animation: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="app-splash" aria-hidden="true">
+      <div class="oh-loader">
+        <img class="oh-heart" src="/media/LogoHeart.png" alt="" />
+        <img class="oh-one" src="/media/LogoOne.png" alt="" />
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

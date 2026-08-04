@@ -60,9 +60,9 @@ const defaults: Record<
 > = {
   development: {
     env: 'development',
-    apiBaseUrl: '',
+    apiBaseUrl: '/api/localstack',
     wsUrl: 'ws://localhost:4566',
-    graphqlUrl: '',
+    graphqlUrl: '/graphql',
     cognitoRegion: 'us-east-1',
     cognitoUserPoolId: 'us-east-1_local_dev',
     cognitoClientId: 'local_client_id',

@@ -1,234 +1,131 @@
-# OneHook Alien Scanner Mascot
+# OneHook Mascot
 
-The official OneHook mascot — a futuristic binocular-eyed alien that scans for quality matches.
+The official OneHook mascot — a friendly pink, egg‑shaped character with big
+expressive eyes and a cheerful wave. It adds warmth and personality next to
+product copy without distracting from it.
+
+> Note: the source files are still named `AlienScanner.tsx` /
+> `AlienMascot.svg.ts` / `onehook-alien-mascot.svg` for import stability. The
+> current artwork is the pink egg mascot described below (the older
+> "alien scanner" concept has been retired).
 
 ## 🎨 Design Concept
 
-The alien represents OneHook's intelligent matching algorithm:
-- **Binocular eyes**: Dual perspective analysis (reciprocal compatibility) — eyes track the user's pointer
-- **Converging laser beams**: Two beams from each eye that converge at cursor position
-- **Antennae**: Signal detection and intent awareness
-- **Smooth movement**: Continuous vertical scanning through features
-- **Interactive tracking**: Eyes and lasers follow mouse movement in real-time
+- **Pink egg body** with a soft top‑left gloss highlight.
+- **Big friendly eyes** — white sclera, blue iris, dark pupil and a white
+  catch‑light. On the web the eyes softly track the cursor.
+- **Happy open mouth** that gently animates (breathing).
+- **Waving hand** — the raised right arm waves on a loop for engagement.
+- **Little arms & legs** with rounded hands and feet.
+- **Gentle breathing** — the body subtly scales for life.
+
+There is **no** floating/teleporting movement, no lasers, and no antennae — the
+mascot is placed statically beside content.
 
 ---
 
 ## 🌐 Web Usage (React)
 
-### Basic Implementation
-
 ```tsx
 import { AlienScanner } from '@/components/mascot';
 
-function MyComponent() {
-  return (
-    <div style={{ position: 'relative', height: '400px' }}>
-      <AlienScanner 
-        scrollBased={true}
-        size={120}
-        showBeam={true}
-      />
-    </div>
-  );
-}
+// Fixed size
+<AlienScanner size={150} />
+
+// Or fill a container (e.g. match a text block's height)
+<div className="relative">
+  {/* ...text... */}
+  <div className="absolute right-0 top-0 bottom-0 translate-x-full pl-10">
+    <AlienScanner className="h-full aspect-square" />
+  </div>
+</div>
 ```
 
 ### Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `scrollBased` | `boolean` | `true` | Enable scroll-based movement |
-| `scrollContainer` | `RefObject` | `window` | Container for scroll tracking |
-| `speed` | `number` | `20` | Animation speed (auto mode) |
-| `size` | `number` | `120` | Size in pixels |
-| `primaryColor` | `string` | `#00ff88` | Alien body color |
-| `scanColor` | `string` | `#00ffff` | Eye/antenna color |
-| `showBeam` | `boolean` | `true` | Enable scanning beam |
-| `zIndex` | `number` | `10` | Layer z-index |
+| Prop           | Type                  | Default     | Description                                                        |
+| -------------- | --------------------- | ----------- | ------------------------------------------------------------------ |
+| `size`         | `number`              | `undefined` | Fixed square size in px. Omit to let the container size it (`h-full`). |
+| `primaryColor` | `string`              | `#ff69b4`   | Body / arms / legs colour.                                         |
+| `scanColor`    | `string`              | `#0052CC`   | Eye iris colour.                                                   |
+| `className`    | `string`              | –           | Class applied to the wrapper `div`.                                |
+| `style`        | `React.CSSProperties` | –           | Inline style for the wrapper `div`.                                |
+
+The SVG uses `preserveAspectRatio="xMidYMax meet"`, so when the container is
+taller/shorter than it is wide, the mascot stays bottom‑aligned (feet on the
+floor).
 
 ---
 
-## 📱 iOS Usage
+## 📱 iOS / 🤖 Android / 🎨 Marketing (static SVG)
 
-### Export SVG for Xcode
+The static, non‑animated artwork lives in a single source‑of‑truth file:
+`onehook-alien-mascot.svg`. `AlienMascot.svg.ts` re‑exports its contents (via a
+Vite `?raw` import) so the markup is never duplicated.
 
-1. Generate the SVG:
-```typescript
-import { ALIEN_MASCOT_SVG } from './components/mascot';
-// Save ALIEN_MASCOT_SVG to file
+```ts
+import { ALIEN_MASCOT_SVG, generateCustomMascotSVG } from '@/components/mascot';
+
+// Base artwork (string of SVG markup)
+const svg = ALIEN_MASCOT_SVG;
+
+// Recolour for a specific context (body colour, eye colour)
+const custom = generateCustomMascotSVG('#ff0088', '#00bfff');
 ```
 
-2. Save as `onehook-alien-mascot.svg`
+Batch exports for native platforms are produced by `export-mascot.js`:
 
-3. Import into Xcode:
-   - Drag SVG into Assets.xcassets
-   - Set as "Preserve Vector Data"
-   - Use in SwiftUI:
-
-```swift
-Image("onehook-alien-mascot")
-    .resizable()
-    .frame(width: 120, height: 120)
+```bash
+node src/components/mascot/export-mascot.js --ios       # iOS sizes
+node src/components/mascot/export-mascot.js --android   # Android densities
+node src/components/mascot/export-mascot.js --all       # everything
 ```
 
-### Custom Colors
+### Color Variants
 
-```typescript
-import { generateCustomMascotSVG } from './components/mascot';
+```ts
+import { MASCOT_COLOR_VARIANTS } from '@/components/mascot';
 
-const customSVG = generateCustomMascotSVG(
-  '#ff0088', // primaryColor
-  '#ffff00'  // scanColor
-);
+MASCOT_COLOR_VARIANTS.default; // { primaryColor: '#ff69b4', scanColor: '#87ceeb' }
+MASCOT_COLOR_VARIANTS.dark;
+MASCOT_COLOR_VARIANTS.light;
+MASCOT_COLOR_VARIANTS.accent;
 ```
 
----
-
-## 🤖 Android Usage
-
-### Export for Android Studio
-
-1. Generate the SVG (same as iOS)
-
-2. Convert to Vector Drawable:
-   - Right-click `res/drawable` → New → Vector Asset
-   - Choose "Local file" and select the SVG
-   - Or use: File → New → Vector Asset → Local SVG file
-
-3. Use in XML:
-
-```xml
-<ImageView
-    android:layout_width="120dp"
-    android:layout_height="120dp"
-    android:src="@drawable/onehook_alien_mascot"
-    android:contentDescription="OneHook Mascot" />
-```
-
-4. Use in Compose:
-
-```kotlin
-Image(
-    painter = painterResource(id = R.drawable.onehook_alien_mascot),
-    contentDescription = "OneHook Mascot",
-    modifier = Modifier.size(120.dp)
-)
-```
-
----
-
-## 🎨 Marketing & Design Tools
-
-### Adobe Illustrator / Photoshop
-1. Copy SVG code from `AlienMascot.svg.ts`
-2. File → Place → Paste SVG code
-3. Fully editable vector
-
-### Figma
-1. Copy SVG code
-2. Figma → File → Place → Paste as SVG
-3. Or use Figma plugin "SVG Import"
-
-### Sketch
-1. Create new artboard
-2. Insert → SVG → Paste code
-
----
-
-## 🎭 Animation Guidelines
-
-### Web Animation Features
-- Smooth left-to-right scanning
-- Pulsating binocular eyes with scanning rings
-- Oscillating antennae
-- Breathing body motion
-- Optional horizontal scanning beam
-
-### Mobile Animation Recommendations
-For iOS/Android, consider using:
-- **iOS**: Core Animation or Lottie
-- **Android**: Vector Drawable Animations or Lottie
-
-Export Lottie JSON from After Effects for frame-perfect animation sync across all platforms.
-
----
-
-## 🎨 Color Variants
-
-```typescript
-import { MASCOT_COLOR_VARIANTS } from './components/mascot';
-
-// Default (OneHook brand)
-MASCOT_COLOR_VARIANTS.default // green/cyan
-
-// Dark mode
-MASCOT_COLOR_VARIANTS.dark
-
-// Light mode
-MASCOT_COLOR_VARIANTS.light
-
-// Accent (special events)
-MASCOT_COLOR_VARIANTS.accent // pink/yellow
-```
+> In the static artwork the body is `#ff69b4` and the eyes are `#87ceeb`;
+> `generateCustomMascotSVG(primaryColor, scanColor)` swaps exactly those two.
 
 ---
 
 ## 📐 Size Recommendations
 
-| Context | Size | Notes |
-|---------|------|-------|
-| App icon | 1024×1024 | Full mascot |
-| Navigation | 32×32 | Head only |
-| Loading screen | 200×200 | Full mascot with animation |
-| Marketing hero | 512×512 | High detail |
-| Social media | 400×400 | Profile picture |
+| Context        | Size      | Notes                                  |
+| -------------- | --------- | -------------------------------------- |
+| Inline / badge | 32–48 px  | Small accent                           |
+| Beside copy    | 120–160 px | Waving companion next to a text block |
+| Marketing hero | 512 px    | High detail                            |
+| App export     | 1024 px   | Full artwork                           |
+
+Keep it ≤ ~200 px on the web so it complements rather than competes with content.
 
 ---
 
-## 📦 Export Files
-
-### For Cross-Platform Use
-
-The mascot is organized in separate files for easy distribution:
+## 📦 Files
 
 ```
 src/components/mascot/
-├── AlienScanner.tsx        # React animated component (web)
-├── AlienMascot.svg.ts      # Pure SVG export (mobile/marketing)
-├── index.ts                # Barrel exports
-└── README.md               # This file
+├── AlienScanner.tsx          # Animated React component (web) — waving + eye tracking
+├── AlienMascot.svg.ts        # Static SVG accessor (re-exports the .svg via ?raw) + colour helpers
+├── onehook-alien-mascot.svg  # Single source of truth for the static artwork
+├── export-mascot.js          # Node script: exports platform assets from the .svg
+├── index.ts                  # Barrel exports
+├── README.md                 # This file
+└── DESIGN_SPEC.md            # Visual/animation spec
 ```
-
-### Distribution Checklist
-
-When sharing mascot assets with iOS/Android teams:
-
-- [ ] Export static SVG from `AlienMascot.svg.ts`
-- [ ] Provide color variants
-- [ ] Share this README for implementation guidance
-- [ ] Consider exporting Lottie animation for native apps
-
----
-
-## 🚀 Future Enhancements
-
-Potential additions:
-- [ ] Lottie animation export
-- [ ] Additional expressions (happy, thinking, success)
-- [ ] Interactive hover states
-- [ ] Sound effects integration
-- [ ] Seasonal variants (holiday themes)
-
----
-
-## 📄 License
-
-This mascot is proprietary to OneHook and should only be used for official OneHook products, marketing, and branding.
 
 ---
 
 ## 🛠️ Maintenance
 
-**Created**: 2026-08-02  
-**Last Updated**: 2026-08-02  
+**Last Updated**: 2026-08-04
 **Maintainer**: OneHook Design Team
