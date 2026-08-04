@@ -3,11 +3,47 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { rm } from 'fs/promises';
+import { existsSync, mkdirSync } from 'fs';
+import { createRequire } from 'module';
 import { execSync } from 'child_process';
 import Sitemap from 'vite-plugin-sitemap';
 import { mockApiPlugin } from './vite-mock-plugin';
 
 const distDir = resolve(__dirname, 'dist');
+
+/**
+ * `vite-plugin-sitemap` writes sitemap.xml / robots.txt straight into `dist`
+ * from its `closeBundle` hook. Rollup runs `closeBundle` even when the build
+ * FAILED — and on a failed build Vite never created `dist`, so the plugin threw
+ *
+ *   [vite-plugin-sitemap] ENOENT: ... open 'dist/robots.txt'
+ *
+ * which replaced the real build error and made CI failures impossible to
+ * diagnose. Creating the directory up front keeps the genuine error visible.
+ */
+const ensureOutDirPlugin = (): Plugin => ({
+  name: 'ensure-out-dir',
+  apply: 'build',
+  buildStart() {
+    mkdirSync(distDir, { recursive: true });
+  },
+});
+
+/**
+ * `@onehook/api-client` is a `file:` link into the sibling OneHookBackend repo's
+ * generated Smithy output, so it is absent in CI and in fresh clones. Detect it
+ * and fall back to a local stub (see src/api/sdk-client.stub.ts) so the static
+ * site still builds; when the real SDK is present nothing changes.
+ */
+function resolveApiClientAlias(): string | null {
+  try {
+    createRequire(import.meta.url).resolve('@onehook/api-client');
+    return null; // real SDK available — use it
+  } catch {
+    const stub = resolve(__dirname, 'src/api/sdk-client.stub.ts');
+    return existsSync(stub) ? stub : null;
+  }
+}
 
 const leanMediaPrunePlugin = (): Plugin => ({
   name: 'lean-media-prune',
@@ -34,6 +70,14 @@ const leanMediaPrunePlugin = (): Plugin => ({
 });
 
 export default defineConfig(({ mode }) => {
+  const apiClientAlias = resolveApiClientAlias();
+  if (apiClientAlias) {
+    console.warn(
+      '[onehook] @onehook/api-client not found — falling back to src/api/sdk-client.stub.ts. ' +
+        'Backend operations are disabled in this build.'
+    );
+  }
+
   let appsyncApiId = '';
   if (mode === 'development') {
     try {
@@ -54,6 +98,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      ensureOutDirPlugin(),
       leanMediaPrunePlugin(),
       mockApiPlugin(),
       Sitemap({
@@ -121,7 +166,8 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       // Pre-bundle the linked SDK (and its @smithy deps) so dev doesn't serve
       // dozens of unbundled ESM files over /@fs, which made first load very slow.
-      include: ['@onehook/api-client'],
+      // Skipped when the SDK is absent (stub build) — there is nothing to pre-bundle.
+      include: apiClientAlias ? [] : ['@onehook/api-client'],
     },
     build: {
       assetsInlineLimit: 4096,
@@ -138,7 +184,11 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: [
         { find: '@', replacement: resolve(__dirname, 'src') },
-        { find: /@onehook\/api-client\/dist-es\/runtimeConfig$/, replacement: '@onehook/api-client/dist-es/runtimeConfig.browser' }
+        { find: /@onehook\/api-client\/dist-es\/runtimeConfig$/, replacement: '@onehook/api-client/dist-es/runtimeConfig.browser' },
+        // Only present when the generated SDK is missing (CI / fresh clone).
+        ...(apiClientAlias
+          ? [{ find: /^@onehook\/api-client$/, replacement: apiClientAlias }]
+          : []),
       ],
     },
     define: {

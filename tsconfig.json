@@ -15,7 +15,15 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      // TypeScript tries these in order and uses the first that exists, mirroring
+      // the conditional alias in vite.config.ts: the generated Smithy SDK from the
+      // sibling OneHookBackend repo when available, otherwise the local stub so
+      // `tsc --noEmit` still works in CI / fresh clones.
+      "@onehook/api-client": [
+        "../OneHookBackend/packages/api-models/build/smithy/source/typescript-codegen",
+        "./src/api/sdk-client.stub.ts"
+      ]
     }
   },
   "include": ["src/**/*"],
