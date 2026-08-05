@@ -73,8 +73,19 @@ function AdaptiveFlow({
     if (!el) return;
     const measure = () => {
       const kids = Array.from(el.children) as HTMLElement[];
-      const rows = new Set(kids.map((k) => Math.round(k.offsetTop)));
-      setOverflow(rows.size > maxLines);
+      if (!kids.length) return;
+      // Count wrapped lines by clustering each child's VERTICAL CENTRE.
+      // Using offsetTop alone is wrong here: with `items-center`, short parts
+      // (the "+" and "Final rank =" text) sit at a different offsetTop than the
+      // taller pill chips, which made a single row look like several.
+      const centres = kids
+        .map((k) => k.offsetTop + k.offsetHeight / 2)
+        .sort((a, b) => a - b);
+      let lines = 1;
+      for (let i = 1; i < centres.length; i += 1) {
+        if (centres[i] - centres[i - 1] > 6) lines += 1;
+      }
+      setOverflow(lines > maxLines);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -101,7 +112,7 @@ function AdaptiveFlow({
       <div
         ref={mirrorRef}
         aria-hidden="true"
-        className={`${rowClass} invisible absolute -z-10 h-0 w-full overflow-hidden`}
+        className={`${rowClass} invisible pointer-events-none absolute left-0 top-0 -z-10 w-full overflow-hidden`}
       >
         {renderParts(false)}
       </div>
@@ -129,6 +140,14 @@ const brandMarkImage = '/media/onehook-512.png';
  * the apps are published — the QR code and store badges both read from here.
  */
 const APP_DOWNLOAD_URL = 'https://onehook.club/app';
+
+/**
+ * Mascot explainer video. Shown inside the "Under the hood" section when the
+ * visitor clicks the mascot. Uses youtube-nocookie (no tracking cookies until
+ * playback) which fits the product's privacy stance.
+ */
+const MASCOT_VIDEO_ID = 'Vphot1Wxvx8';
+const MASCOT_VIDEO_EMBED_URL = `https://www.youtube-nocookie.com/embed/${MASCOT_VIDEO_ID}?autoplay=1&rel=0&modestbranding=1`;
 
 /** Repeating text tile used as the conversation-starter background watermark.
  *  A tiled SVG guarantees full (corner-to-corner) coverage at any rotation. */
@@ -247,6 +266,42 @@ export function Landing() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [openerIndex, setOpenerIndex] = useState(0);
   const [showStickyCta, setShowStickyCta] = useState(false);
+
+  // Mascot explainer video shown inside the "Under the hood" section.
+  const [showMascotVideo, setShowMascotVideo] = useState(false);
+  const mascotVideoRef = useRef<HTMLDivElement>(null);
+  const mascotRef = useRef<HTMLDivElement>(null);
+
+  // Escape closes the video player and returns to the section content.
+  useEffect(() => {
+    if (!showMascotVideo) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowMascotVideo(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showMascotVideo]);
+
+  // Clicking anywhere outside the player (and outside the mascot itself) closes
+  // the video and brings the previous content back, returning the mascot to its
+  // default state. Clicks inside the YouTube iframe stay in the iframe document,
+  // so they never reach this listener.
+  useEffect(() => {
+    if (!showMascotVideo) return;
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (mascotVideoRef.current?.contains(target)) return;
+      if (mascotRef.current?.contains(target)) return;
+      setShowMascotVideo(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+    };
+  }, [showMascotVideo]);
 
   // Sticky CTA: hide the redeem button when the "Get the app" label wraps to
   // more than one line. Measured on an invisible mirror that always renders
@@ -1166,6 +1221,7 @@ export function Landing() {
                 <p className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-5 inline-flex items-center gap-3">
                   <Sparkles className="w-3.5 h-3.5" /> Under the hood
                 </p>
+
                 <h3 className="text-3xl md:text-5xl font-serif italic tracking-tight leading-[1.05]">
                   The science of one good match.
                 </h3>
@@ -1174,17 +1230,6 @@ export function Landing() {
                   meaning, not keywords, and optimizes for a two-way spark &mdash; not just whether
                   you&rsquo;d swipe right.
                 </p>
-                
-                {/* Mascot - waves next to the copy, matched to the text block height */}
-                <div className="hidden lg:block absolute right-0 top-0 bottom-0 translate-x-full pl-10">
-                  <AlienScanner
-                    className="h-full aspect-square"
-                    primaryColor="#ff69b4"
-                    scanColor="#0052CC"
-                  />
-                </div>
-              </div>
-
               {/* Pipeline strip: Signals → Scoring → Stable match (stacks vertically when > 2 lines) */}
               <AdaptiveFlow
                 className="mt-12 text-[10px] font-black uppercase tracking-[0.24em]"
@@ -1220,8 +1265,82 @@ export function Landing() {
                 ]}
               />
 
-              {/* Capability grid */}
-              <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/10 rounded-2xl overflow-hidden">
+              {/* Mascot — spans the copy + pipeline block, sitting just right of it.
+                  Hovering makes it excited; clicking plays the explainer video in
+                  the capability grid below. */}
+              <div
+                ref={mascotRef}
+                className="hidden lg:block absolute right-0 top-0 bottom-0 translate-x-full -translate-y-2 pl-10"
+              >
+                <AlienScanner
+                  className="h-full aspect-square max-w-[130px] xl:max-w-[260px]"
+                  primaryColor="#ff69b4"
+                  scanColor="#0052CC"
+                  onClick={() => setShowMascotVideo((open) => !open)}
+                  forceExcited={showMascotVideo}
+                  hoverLabel={
+                    showMascotVideo
+                      ? 'Click to know how onehook.club finds matches'
+                      : 'Click to watch me explain more about onehook.club'
+                  }
+                />
+              </div>
+              </div>
+
+              {/* Capability grid — swapped for the mascot's explainer video when clicked.
+                  Plain conditional render (no AnimatePresence): these are large
+                  subtrees and exit-coordination left both mounted, so the outgoing
+                  block is unmounted immediately and the incoming one fades in. */}
+              {showMascotVideo ? (
+                  <motion.div
+                    key="hood-video"
+                    ref={mascotVideoRef}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.28, ease: 'easeOut' }}
+                    className="mt-10"
+                  >
+                    <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black shadow-2xl">
+                      <div className="aspect-video w-full">
+                        <iframe
+                          src={MASCOT_VIDEO_EMBED_URL}
+                          title="OneHook explained"
+                          loading="lazy"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          className="h-full w-full border-0"
+                        />
+                      </div>
+
+                      {/* Close the player and return to the feature grid */}
+                      <button
+                        type="button"
+                        onClick={() => setShowMascotVideo(false)}
+                        aria-label="Close video"
+                        title="Close video (Esc)"
+                        className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-white hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowMascotVideo(false)}
+                      className="mt-5 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-white/60 transition-colors hover:text-white"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" /> Back to the features
+                    </button>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="hood-grid"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.28, ease: 'easeOut' }}
+                    className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/10 rounded-2xl overflow-hidden"
+                  >
                 {[
                   {
                     icon: MapPin,
@@ -1279,7 +1398,8 @@ export function Landing() {
                     <p className="mt-2 text-[13px] leading-relaxed text-white/55">{f.text}</p>
                   </motion.div>
                 ))}
-              </div>
+                  </motion.div>
+                )}
 
               {/* Weighted blend — the honest formula, centered; hidden entirely when it wraps to multiple lines */}
               <AdaptiveFlow

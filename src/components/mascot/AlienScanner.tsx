@@ -6,6 +6,12 @@
  * - Right hand waves on a gentle loop.
  * - Eyes softly track the cursor.
  * - Gentle breathing + subtly animated mouth for life.
+ *
+ * When an `onClick` handler is supplied the mascot becomes interactive: hovering
+ * (or focusing it via keyboard) makes it look excited — a faster, bigger wave,
+ * an eager bounce, wider eyes, a broader smile and sparkles — and shows a
+ * tooltip inviting the visitor to click. Pass `forceExcited` to hold that state
+ * (e.g. while the video the mascot opened is still on screen).
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -22,6 +28,16 @@ interface AlienScannerProps {
   className?: string;
   /** Optional wrapper style */
   style?: React.CSSProperties;
+  /** Makes the mascot interactive (excited on hover + clickable). */
+  onClick?: () => void;
+  /** Tooltip / accessible label shown when the mascot is hovered or focused. */
+  hoverLabel?: string;
+  /**
+   * Keeps the mascot in its excited state regardless of hover/focus — used while
+   * the video it opened is on screen, so it stays lively (and keeps showing its
+   * message) for as long as that view is in use.
+   */
+  forceExcited?: boolean;
 }
 
 export const AlienScanner: React.FC<AlienScannerProps> = ({
@@ -30,9 +46,18 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
   scanColor = '#0052CC',
   className,
   style,
+  onClick,
+  hoverLabel = 'Click to watch me explain more about onehook.club',
+  forceExcited = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const pointerFocusRef = useRef(false);
   const [eyeOffset, setEyeOffset] = useState({ x: 0, y: 0 });
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+
+  const interactive = typeof onClick === 'function';
+  const excited = interactive && (isHovered || isFocused || forceExcited);
 
   // Soft eye tracking toward the cursor (no body movement).
   useEffect(() => {
@@ -54,118 +79,243 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
   }, []);
 
   // Waving keyframes for the raised arm (rotate around the shoulder).
-  const wave = {
-    rotate: [0, -20, -4, -20, -4, 0],
-  };
-  const waveTransition = {
-    duration: 1.8,
-    repeat: Infinity,
-    repeatDelay: 1.1,
-    ease: 'easeInOut' as const,
-  };
+  // Excited: bigger sweep, faster, no pause between waves.
+  const waveAnimation = excited
+    ? { rotate: [0, -36, -6, -36, -6, -36, 0] }
+    : { rotate: [0, -20, -4, -20, -4, 0] };
+  const waveTransition = excited
+    ? { duration: 0.9, repeat: Infinity, ease: 'easeInOut' as const }
+    : { duration: 1.8, repeat: Infinity, repeatDelay: 1.1, ease: 'easeInOut' as const };
+
+  const mascotSvg = (
+    <svg
+      width="100%"
+      height="100%"
+      viewBox="0 0 120 120"
+      preserveAspectRatio="xMidYMax meet"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Soft ground shadow */}
+      <ellipse cx="60" cy="114" rx="26" ry="4" fill="#000000" opacity={0.12} />
+
+      {/* Static limbs (left arm + legs) */}
+      <g stroke={primaryColor} strokeLinecap="round" fill="none">
+        <motion.path
+          d="M31 64 Q20 70 12 74"
+          strokeWidth="9"
+          style={{ transformOrigin: '31px 64px' }}
+          animate={excited ? { rotate: [0, 14, 0] } : { rotate: 0 }}
+          transition={
+            excited ? { duration: 0.9, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }
+          }
+        />
+        <path d="M50 92 L49 108" strokeWidth="9" />
+        <path d="M70 92 L71 108" strokeWidth="9" />
+      </g>
+      <g fill={primaryColor}>
+        <motion.circle
+          cx="12"
+          cy="74"
+          r="5.5"
+          style={{ transformOrigin: '31px 64px' }}
+          animate={excited ? { rotate: [0, 14, 0] } : { rotate: 0 }}
+          transition={
+            excited ? { duration: 0.9, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }
+          }
+        />
+        <ellipse cx="45" cy="109" rx="7" ry="4.5" />
+        <ellipse cx="75" cy="109" rx="7" ry="4.5" />
+      </g>
+
+      {/* Waving right arm + hand (move together around the shoulder) */}
+      <motion.g
+        style={{ transformOrigin: '90px 52px' }}
+        animate={waveAnimation}
+        transition={waveTransition}
+      >
+        <path
+          d="M90 52 Q101 42 106 31"
+          stroke={primaryColor}
+          strokeWidth="9"
+          strokeLinecap="round"
+          fill="none"
+        />
+        <circle cx="106" cy="31" r="5.5" fill={primaryColor} />
+      </motion.g>
+
+      {/* Body (egg) — gentle breathing, quicker and deeper when excited */}
+      <motion.g
+        style={{ transformOrigin: '60px 58px' }}
+        animate={
+          excited
+            ? { scaleY: [1, 1.05, 1], scaleX: [1, 0.97, 1] }
+            : { scaleY: [1, 1.02, 1], scaleX: [1, 0.99, 1] }
+        }
+        transition={{
+          duration: excited ? 0.7 : 3.5,
+          repeat: Infinity,
+          ease: 'easeInOut',
+        }}
+      >
+        <path
+          d="M60 12 C40 12 26 34 26 57 C26 82 40 96 60 96 C80 96 94 82 94 57 C94 34 80 12 60 12 Z"
+          fill={primaryColor}
+        />
+        <path
+          d="M60 12 C40 12 26 34 26 57 C26 82 40 96 60 96 C80 96 94 82 94 57 C94 34 80 12 60 12 Z"
+          fill="url(#bodyGloss)"
+        />
+      </motion.g>
+
+      {/* Eyes — widen when excited */}
+      <motion.g
+        style={{ transformOrigin: '60px 44px' }}
+        animate={{ scale: excited ? 1.12 : 1 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+      >
+        <ellipse cx="48" cy="44" rx="11" ry="13" fill="#ffffff" />
+        <ellipse cx="72" cy="44" rx="11" ry="13" fill="#ffffff" />
+
+        <motion.g
+          animate={{ x: eyeOffset.x, y: eyeOffset.y }}
+          transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+        >
+          <circle cx="48" cy="45" r="7.5" fill={scanColor} />
+          <circle cx="48" cy="45" r="4" fill="#0d1b3e" />
+          <circle cx="50" cy="42.5" r="1.8" fill="#ffffff" />
+        </motion.g>
+        <motion.g
+          animate={{ x: eyeOffset.x, y: eyeOffset.y }}
+          transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+        >
+          <circle cx="72" cy="45" r="7.5" fill={scanColor} />
+          <circle cx="72" cy="45" r="4" fill="#0d1b3e" />
+          <circle cx="74" cy="42.5" r="1.8" fill="#ffffff" />
+        </motion.g>
+      </motion.g>
+
+      {/* Happy open mouth — grins wider when excited */}
+      <motion.g
+        style={{ transformOrigin: '60px 60px' }}
+        animate={
+          excited ? { scaleY: 1.5, scaleX: 1.12 } : { scaleY: [1, 1.18, 1], scaleX: 1 }
+        }
+        transition={
+          excited
+            ? { type: 'spring', stiffness: 300, damping: 18 }
+            : { duration: 3, repeat: Infinity, ease: 'easeInOut' }
+        }
+      >
+        <path d="M53 58 Q60 56.5 67 58 Q65.5 67 60 67.5 Q54.5 67 53 58 Z" fill="#7d1f3d" />
+        <ellipse cx="60" cy="65" rx="3.4" ry="2.2" fill="#ff6f9c" />
+      </motion.g>
+
+      {/* Excitement sparkles */}
+      {excited && (
+        <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} fill="#ffd76a">
+          {[
+            { cx: 22, cy: 26, r: 2.6, delay: 0 },
+            { cx: 99, cy: 74, r: 2.2, delay: 0.25 },
+            { cx: 30, cy: 88, r: 2, delay: 0.5 },
+          ].map((s) => (
+            <motion.circle
+              key={`${s.cx}-${s.cy}`}
+              cx={s.cx}
+              cy={s.cy}
+              r={s.r}
+              animate={{ scale: [0.6, 1.4, 0.6], opacity: [0.4, 1, 0.4] }}
+              transition={{
+                duration: 1.1,
+                repeat: Infinity,
+                ease: 'easeInOut',
+                delay: s.delay,
+              }}
+            />
+          ))}
+        </motion.g>
+      )}
+
+      <defs>
+        <radialGradient id="bodyGloss" cx="38%" cy="26%" r="75%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+          <stop offset="45%" stopColor="#ffffff" stopOpacity="0" />
+          <stop offset="100%" stopColor="#c21f6f" stopOpacity="0.25" />
+        </radialGradient>
+      </defs>
+    </svg>
+  );
 
   return (
     <div
       ref={containerRef}
-      className={className}
+      className={`relative ${className ?? ''}`}
       style={{ width: size, height: size, ...style }}
     >
-      <svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 120 120"
-        preserveAspectRatio="xMidYMax meet"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        {/* Soft ground shadow */}
-        <ellipse cx="60" cy="114" rx="26" ry="4" fill="#000000" opacity={0.12} />
-
-        {/* Static limbs (left arm + legs) */}
-        <g stroke={primaryColor} strokeLinecap="round" fill="none">
-          <path d="M31 64 Q20 70 12 74" strokeWidth="9" />
-          <path d="M50 92 L49 108" strokeWidth="9" />
-          <path d="M70 92 L71 108" strokeWidth="9" />
-        </g>
-        <g fill={primaryColor}>
-          <circle cx="12" cy="74" r="5.5" />
-          <ellipse cx="45" cy="109" rx="7" ry="4.5" />
-          <ellipse cx="75" cy="109" rx="7" ry="4.5" />
-        </g>
-
-        {/* Waving right arm + hand (move together around the shoulder) */}
-        <motion.g
-          style={{ transformOrigin: '90px 52px' }}
-          animate={wave}
-          transition={waveTransition}
+      {/* Excited hover tooltip (plain conditional: exit-coordination could leave
+          a stale tooltip mounted, so it simply fades in and unmounts at once) */}
+      {excited && (
+        <motion.div
+          initial={{ opacity: 0, y: 6, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-2xl border-2 border-accent bg-white px-4 py-3 text-center text-[11px] font-black uppercase leading-relaxed tracking-[0.14em] text-accent shadow-2xl"
         >
-          <path
-            d="M90 52 Q101 42 106 31"
-            stroke={primaryColor}
-            strokeWidth="9"
-            strokeLinecap="round"
-            fill="none"
+          {hoverLabel}
+          {/* little pointer — right/bottom borders continue the outline once rotated */}
+          <span
+            aria-hidden="true"
+            className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-r-2 border-b-2 border-accent bg-white"
           />
-          <circle cx="106" cy="31" r="5.5" fill={primaryColor} />
-        </motion.g>
+        </motion.div>
+      )}
 
-        {/* Body (egg) with gentle breathing */}
-        <motion.g
-          style={{ transformOrigin: '60px 58px' }}
-          animate={{ scaleY: [1, 1.02, 1], scaleX: [1, 0.99, 1] }}
-          transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+      {interactive ? (
+        <motion.button
+          type="button"
+          onClick={onClick}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onPointerDown={() => {
+            // Remember that the upcoming focus came from a pointer, not the keyboard.
+            pointerFocusRef.current = true;
+          }}
+          onFocus={(e) => {
+            // Only keyboard focus should excite the mascot. A mouse click also
+            // focuses the button, which previously left it stuck in the excited
+            // state after the pointer moved away.
+            if (pointerFocusRef.current) {
+              pointerFocusRef.current = false;
+              return;
+            }
+            let keyboard = true;
+            try {
+              keyboard = e.currentTarget.matches(':focus-visible');
+            } catch {
+              keyboard = false;
+            }
+            if (keyboard) setIsFocused(true);
+          }}
+          onBlur={() => {
+            pointerFocusRef.current = false;
+            setIsFocused(false);
+          }}
+          aria-label={hoverLabel}
+          className="block h-full w-full cursor-pointer rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          animate={excited ? { y: [0, -9, 0] } : { y: 0 }}
+          transition={
+            excited
+              ? { duration: 0.7, repeat: Infinity, ease: 'easeInOut' }
+              : { type: 'spring', stiffness: 260, damping: 20 }
+          }
+          whileTap={{ scale: 0.94 }}
         >
-          <path
-            d="M60 12 C40 12 26 34 26 57 C26 82 40 96 60 96 C80 96 94 82 94 57 C94 34 80 12 60 12 Z"
-            fill={primaryColor}
-          />
-          <path
-            d="M60 12 C40 12 26 34 26 57 C26 82 40 96 60 96 C80 96 94 82 94 57 C94 34 80 12 60 12 Z"
-            fill="url(#bodyGloss)"
-          />
-        </motion.g>
-
-        {/* Eyes */}
-        <g>
-          <ellipse cx="48" cy="44" rx="11" ry="13" fill="#ffffff" />
-          <ellipse cx="72" cy="44" rx="11" ry="13" fill="#ffffff" />
-
-          <motion.g
-            animate={{ x: eyeOffset.x, y: eyeOffset.y }}
-            transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-          >
-            <circle cx="48" cy="45" r="7.5" fill={scanColor} />
-            <circle cx="48" cy="45" r="4" fill="#0d1b3e" />
-            <circle cx="50" cy="42.5" r="1.8" fill="#ffffff" />
-          </motion.g>
-          <motion.g
-            animate={{ x: eyeOffset.x, y: eyeOffset.y }}
-            transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-          >
-            <circle cx="72" cy="45" r="7.5" fill={scanColor} />
-            <circle cx="72" cy="45" r="4" fill="#0d1b3e" />
-            <circle cx="74" cy="42.5" r="1.8" fill="#ffffff" />
-          </motion.g>
-        </g>
-
-        {/* Happy open mouth */}
-        <motion.g
-          style={{ transformOrigin: '60px 60px' }}
-          animate={{ scaleY: [1, 1.18, 1] }}
-          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-        >
-          <path d="M53 58 Q60 56.5 67 58 Q65.5 67 60 67.5 Q54.5 67 53 58 Z" fill="#7d1f3d" />
-          <ellipse cx="60" cy="65" rx="3.4" ry="2.2" fill="#ff6f9c" />
-        </motion.g>
-
-        <defs>
-          <radialGradient id="bodyGloss" cx="38%" cy="26%" r="75%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
-            <stop offset="45%" stopColor="#ffffff" stopOpacity="0" />
-            <stop offset="100%" stopColor="#c21f6f" stopOpacity="0.25" />
-          </radialGradient>
-        </defs>
-      </svg>
+          {mascotSvg}
+        </motion.button>
+      ) : (
+        mascotSvg
+      )}
     </div>
   );
 };
