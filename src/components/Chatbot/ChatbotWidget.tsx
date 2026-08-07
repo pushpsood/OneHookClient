@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mascot } from './Mascot';
+import { chatbotUrl } from '../../utils/env.config';
 import './ChatbotWidget.css'; // Add a little standard CSS or use tailwind
 
 type Mood = 'Happy' | 'Neutral' | 'Thinking' | 'Sad' | 'Excited';
@@ -112,7 +113,7 @@ export const ChatbotWidget: React.FC = () => {
 
     try {
       // Point this to the deployed backend URL in production
-      const response = await fetch('http://localhost:8080/api/chat', {
+      const response = await fetch(`${chatbotUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

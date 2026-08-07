@@ -25,11 +25,13 @@ interface RuntimeEnv extends ImportMetaEnv {
   readonly VITE_ENABLE_DEBUG?: string;
   readonly VITE_API_TIMEOUT_MS?: string;
   readonly VITE_LOG_LEVEL?: string;
+  readonly VITE_CHATBOT_URL?: string;
 }
 
 interface EnvConfig {
   env: Environment;
   apiBaseUrl: string;
+  chatbotUrl: string;
   wsUrl: string;
   graphqlUrl: string;
   cognitoRegion: string;
@@ -59,6 +61,7 @@ const defaults: Record<
   development: {
     env: 'development',
     apiBaseUrl: '/api/localstack',
+    chatbotUrl: 'http://localhost:8080',
     wsUrl: 'ws://localhost:4566',
     graphqlUrl: '/graphql',
     cognitoRegion: 'us-east-1',
@@ -76,6 +79,7 @@ const defaults: Record<
   staging: {
     env: 'staging',
     apiBaseUrl: 'https://api-staging.onehook.club/v1',
+    chatbotUrl: 'https://onehook-chatbot-api-staging.azurewebsites.net',
     wsUrl: 'wss://ws-staging.onehook.club',
     graphqlUrl: 'https://chat.graphql-staging.onehook.club/graphql',
     cognitoRegion: 'us-east-1',
@@ -93,6 +97,7 @@ const defaults: Record<
   production: {
     env: 'production',
     apiBaseUrl: 'https://api.onehook.club/v1',
+    chatbotUrl: 'https://onehook-chatbot-api.azurewebsites.net',
     wsUrl: 'wss://ws.onehook.club',
     graphqlUrl: 'https://chat.graphql.onehook.club/graphql',
     cognitoRegion: 'us-east-1',
@@ -178,6 +183,7 @@ export function createEnvConfig(envName: Environment = detectEnvironment()): Env
   const env = readRuntimeEnv();
   const baseConfig = defaults[envName];
   const apiBaseUrl = normalizeUrl(env.VITE_API_BASE_URL) || baseConfig.apiBaseUrl;
+  const chatbotUrl = normalizeUrl(env.VITE_CHATBOT_URL) || baseConfig.chatbotUrl;
   const wsUrl = normalizeUrl(env.VITE_WS_URL) || baseConfig.wsUrl;
   const graphqlUrl = normalizeUrl(env.VITE_GRAPHQL_URL) || baseConfig.graphqlUrl;
   const cognitoRegion = env.VITE_COGNITO_REGION?.trim() || baseConfig.cognitoRegion;
@@ -200,6 +206,7 @@ export function createEnvConfig(envName: Environment = detectEnvironment()): Env
   return {
     ...baseConfig,
     apiBaseUrl,
+    chatbotUrl,
     wsUrl,
     graphqlUrl,
     cognitoRegion,
@@ -224,6 +231,7 @@ export const config: EnvConfig = createEnvConfig();
 
 export const env = config.env;
 export const apiBaseUrl = config.apiBaseUrl;
+export const chatbotUrl = config.chatbotUrl;
 export const wsUrl = config.wsUrl;
 export const graphqlUrl = config.graphqlUrl;
 export const cognitoRegion = config.cognitoRegion;
