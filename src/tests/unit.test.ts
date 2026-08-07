@@ -13,7 +13,6 @@ describe('MatchingApi: Unit Tests', () => {
     photos: [],
     location: { lat: 0, lng: 0, geohash: '' },
     subscriptionTier: SubscriptionTier.FREE,
-    maxConnections: 1,
     activeConnections: 0,
     currentState: UserState.AVAILABLE,
     currentMatches: [],
@@ -27,8 +26,7 @@ describe('MatchingApi: Unit Tests', () => {
     expect(url).toContain('lon=0');
   });
 
-  it('free-tier user should have maxConnections of 1', () => {
-    expect(mockUser.maxConnections).toBe(1);
+  it('free-tier user should have FREE subscription tier', () => {
     expect(mockUser.subscriptionTier).toBe(SubscriptionTier.FREE);
   });
 });
