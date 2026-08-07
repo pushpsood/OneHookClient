@@ -24,19 +24,47 @@ jobs:
     name: Lint & Test (deployment gate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout OneHookClient
+        uses: actions/checkout@v4
+        with:
+          path: OneHookClient
 
-      - uses: actions/setup-node@v4
+      - name: Checkout OneHookBackend
+        uses: actions/checkout@v4
+        with:
+          repository: pushpsood/OneHookBackend
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: OneHookBackend
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
+          cache-dependency-path: OneHookClient/package-lock.json
 
-      - run: npm ci
+      - name: Setup Java (for Smithy SDK generation)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+
+      - name: Generate API SDK
+        working-directory: OneHookBackend
+        run: |
+          npm ci
+          npm run generate
+
+      - name: Install Frontend Dependencies
+        working-directory: OneHookClient
+        run: npm ci
 
       - name: Type-check
+        working-directory: OneHookClient
         run: npm run lint
 
       - name: Unit & integration tests
+        working-directory: OneHookClient
         run: npm test
 
   deploy:
@@ -48,22 +76,53 @@ jobs:
       contents: read  # Required for actions/checkout
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout OneHookClient
+        uses: actions/checkout@v4
+        with:
+          path: OneHookClient
 
-      - uses: actions/setup-node@v4
+      - name: Checkout OneHookBackend
+        uses: actions/checkout@v4
+        with:
+          repository: pushpsood/OneHookBackend
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: OneHookBackend
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
+          cache-dependency-path: OneHookClient/package-lock.json
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Setup Java (for Smithy SDK generation)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'corretto'
+
+      - name: Generate API SDK
+        working-directory: OneHookBackend
+        run: |
+          npm ci
+          npm run generate
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-south-1
 
-      - run: npm ci
-      - run: npm run build:prod
+      - name: Install Frontend Dependencies
+        working-directory: OneHookClient
+        run: npm ci
+
+      - name: Build Frontend
+        working-directory: OneHookClient
+        run: npm run build:prod
 
       - name: Deploy frontend stack
+        working-directory: OneHookClient
         run: |
           set -euo pipefail
 
