@@ -43,4 +43,5 @@ jobs:
             --container-name codecontext \
             --name onehookclient-context.txt \
             --file onehookclient-context.txt \
-            --auth-mode login
+            --auth-mode login \
+            --overwrite
