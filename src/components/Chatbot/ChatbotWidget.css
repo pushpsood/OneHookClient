@@ -1,0 +1,59 @@
+.chatbot-widget-container {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 30;
+  transition: all 0.3s ease-in-out;
+}
+
+.chatbot-widget-container.closed {
+  cursor: pointer;
+}
+
+.chatbot-widget-container.closed.hovered .interactive-text {
+  transform: scale(1.1);
+}
+
+.chatbot-widget-container.open {
+  height: 50vh;
+  /* Up to the belly button area */
+  max-height: 500px; 
+}
+
+.chatbot-window {
+  height: 100%;
+  display: flex;
+  opacity: 0.9;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.chatbot-widget-container.open.hovered .chatbot-window {
+  opacity: 1; /* Fully opaque on hover, but with tailwind bg-white/95 backdrop blur keeping content visible */
+}
+
+.chatbot-trigger {
+  position: relative;
+}
+
+@keyframes floatUpThought {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0px) scale(0.9);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -10px) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -20px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -30px) scale(0.9);
+  }
+}
+
+.animate-float-thought {
+  animation: floatUpThought 4s ease-in-out infinite;
+}

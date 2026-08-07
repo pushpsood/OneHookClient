@@ -239,3 +239,29 @@ Infrastructure is defined in `infra/stacks/frontend-app.ts` using AWS CDK.
 
 - **OneHookBackend** — Backend microservices (provides API + Cognito)
 - **OneHookPlatform** — iOS and Android mobile applications
+
+## Azure OIDC Setup (For Azure Deployments)
+
+If you are migrating this frontend to Azure (e.g., Azure Static Web Apps) or need to deploy resources to Azure via GitHub Actions, you can establish a secretless trust using Azure Managed Identities and OpenID Connect (OIDC).
+
+To set this up, a script has been provided: `setup-azure-oidc.sh` (specifically for Azure).
+
+### Prerequisites
+1. **Azure CLI**: `az login`
+2. **GitHub CLI**: `gh auth login`
+
+### Setup Instructions
+1. Make the setup script executable:
+   ```bash
+   chmod +x setup-azure-oidc.sh
+   ```
+2. Run the script:
+   ```bash
+   ./setup-azure-oidc.sh
+   ```
+
+### What does this script do?
+- Creates an **Azure AD Application (Service Principal)** named `OneHookClientGitHubActions`.
+- Grants it **Contributor** access to your Azure Subscription.
+- Creates a **Federated Identity Credential** for the `pushpsood/OneHookClient` repository on the `main` branch.
+- Automatically saves `AZURE_CLIENT_ID_CLIENT`, `AZURE_TENANT_ID_CLIENT`, and `AZURE_SUBSCRIPTION_ID_CLIENT` to your GitHub repository secrets (the `_CLIENT` suffix ensures they do not conflict with backend Azure credentials).

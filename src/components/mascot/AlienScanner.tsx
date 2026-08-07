@@ -16,6 +16,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
+import { Instagram, Youtube } from 'lucide-react';
 
 interface AlienScannerProps {
   /** Fixed size in pixels (square). Omit to let the container control size (e.g. h-full). */
@@ -101,15 +102,24 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
 
       {/* Static limbs (left arm + legs) */}
       <g stroke={primaryColor} strokeLinecap="round" fill="none">
-        <motion.path
-          d="M31 64 Q20 70 12 74"
-          strokeWidth="9"
+        <motion.g
           style={{ transformOrigin: '31px 64px' }}
           animate={excited ? { rotate: [0, 14, 0] } : { rotate: 0 }}
           transition={
             excited ? { duration: 0.9, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.3 }
           }
-        />
+        >
+          <path d="M31 64 Q20 70 12 74" strokeWidth="9" />
+          {/* Paint bucket */}
+          <g transform="translate(12, 74)">
+            {/* Handle */}
+            <path d="M -4 0 C -4 -6, 4 -6, 4 0" fill="none" strokeWidth="1.5" />
+            {/* Bucket Body */}
+            <path d="M -4 0 L 4 0 L 3 8 L -3 8 Z" fill="#ffffff" strokeWidth="1.5" strokeLinejoin="round" />
+            {/* Paint inside bucket */}
+            <path d="M -3.5 1 L 3.5 1 L 3 3 L -3 3 Z" fill={primaryColor} stroke="none" />
+          </g>
+        </motion.g>
         <path d="M50 92 L49 108" strokeWidth="9" />
         <path d="M70 92 L71 108" strokeWidth="9" />
       </g>
@@ -128,20 +138,31 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
         <ellipse cx="75" cy="109" rx="7" ry="4.5" />
       </g>
 
-      {/* Waving right arm + hand (move together around the shoulder) */}
+      {/* Right arm (holding paint brush) */}
       <motion.g
         style={{ transformOrigin: '90px 52px' }}
-        animate={waveAnimation}
-        transition={waveTransition}
+        animate={{ rotate: [0, -10, 0] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
       >
         <path
-          d="M90 52 Q101 42 106 31"
+          d="M90 52 Q106 38 106 31"
           stroke={primaryColor}
-          strokeWidth="9"
+          strokeWidth="7"
           strokeLinecap="round"
           fill="none"
         />
         <circle cx="106" cy="31" r="5.5" fill={primaryColor} />
+        {/* Paint Brush */}
+        <g transform="translate(106, 31) rotate(30)">
+          {/* Handle */}
+          <rect x="-1.5" y="-10" width="3" height="10" fill="#d4a373" rx="1" />
+          {/* Metal ferrule */}
+          <rect x="-2" y="-13" width="4" height="3" fill="#a1a1aa" />
+          {/* Bristles */}
+          <path d="M -2 -13 L 2 -13 L 2.5 -18 C 0 -20 -2.5 -20 -2.5 -18 Z" fill={primaryColor} />
+          {/* Paint drip */}
+          <circle cx="0" cy="-20" r="1.2" fill={primaryColor} />
+        </g>
       </motion.g>
 
       {/* Body (egg) — gentle breathing, quicker and deeper when excited */}
@@ -251,6 +272,8 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
       ref={containerRef}
       className={`relative ${className ?? ''}`}
       style={{ width: size, height: size, ...style }}
+      onMouseEnter={interactive ? () => setIsHovered(true) : undefined}
+      onMouseLeave={interactive ? () => setIsHovered(false) : undefined}
     >
       {/* Excited hover tooltip (plain conditional: exit-coordination could leave
           a stale tooltip mounted, so it simply fades in and unmounts at once) */}
@@ -271,12 +294,43 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
         </motion.div>
       )}
 
+      {isHovered && (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 z-30">
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex w-max items-center justify-center gap-2 rounded-xl border border-accent bg-white/90 backdrop-blur-sm px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-accent shadow-lg"
+          >
+            CLICK TO CONNECT:
+            <a
+              href="https://www.instagram.com/mr.onehook"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:opacity-60 transition-opacity"
+              onClick={(e) => e.stopPropagation()}
+              aria-label="Instagram"
+            >
+              <Instagram className="w-4 h-4" />
+            </a>
+            <a
+              href="https://www.youtube.com/@mr.onehook"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:opacity-60 transition-opacity flex items-center justify-center"
+              onClick={(e) => e.stopPropagation()}
+              aria-label="YouTube"
+            >
+              <Youtube className="w-5 h-5" />
+            </a>
+          </motion.div>
+        </div>
+      )}
+
       {interactive ? (
         <motion.button
           type="button"
           onClick={onClick}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
           onPointerDown={() => {
             // Remember that the upcoming focus came from a pointer, not the keyboard.
             pointerFocusRef.current = true;

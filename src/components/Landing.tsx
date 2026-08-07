@@ -28,6 +28,7 @@ import { BrandWordmark } from './common/BrandWordmark';
 import { AppleIcon, AndroidIcon } from './common/BrandIcons';
 import { SiteFooter } from './common/SiteFooter';
 import { AlienScanner } from './mascot';
+import { ChatbotWidget } from './Chatbot/ChatbotWidget';
 
 const focusIntentionImage = '/media/aerial-view-of-the-city-in-the-fog-5ZBZNUT-1600.jpg';
 const discoverProfilesImage =
@@ -147,7 +148,7 @@ const APP_DOWNLOAD_URL = 'https://onehook.club/app';
  * playback) which fits the product's privacy stance.
  */
 const MASCOT_VIDEO_ID = 'Vphot1Wxvx8';
-const MASCOT_VIDEO_EMBED_URL = `https://www.youtube-nocookie.com/embed/${MASCOT_VIDEO_ID}?autoplay=1&rel=0&modestbranding=1`;
+const MASCOT_VIDEO_EMBED_URL = `https://www.youtube-nocookie.com/embed/${MASCOT_VIDEO_ID}?autoplay=1&rel=0&modestbranding=1&cc_load_policy=0`;
 
 /** Repeating text tile used as the conversation-starter background watermark.
  *  A tiled SVG guarantees full (corner-to-corner) coverage at any rotation. */
@@ -184,8 +185,49 @@ export function Landing() {
   // section reaches the viewport center, and let them spread back out as it
   // scrolls away (toward the top or bottom). Driven by a scroll listener so it
   // works reliably regardless of scroll-container quirks.
+  const pageContainerRef = useRef<HTMLDivElement>(null);
   const convoRef = useRef<HTMLElement>(null);
   const [watermarkSize, setWatermarkSize] = useState(0);
+
+  const [strokeCoords, setStrokeCoords] = useState<{ startY: number; endY: number; endX: number; winW: number } | null>(null);
+
+  useEffect(() => {
+    const updateStroke = () => {
+      const convo = convoRef.current;
+      const mascot = document.getElementById('mascot-container'); // Need to add this ID to mascot wrapper
+      const container = pageContainerRef.current;
+      const features = document.getElementById('features');
+      if (!convo || !mascot || !container || !features) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const convoRect = convo.getBoundingClientRect();
+      const mascotRect = mascot.getBoundingClientRect();
+      const featuresRect = features.getBoundingClientRect();
+
+      // Ensure the mascot is actually visible (it's hidden on mobile)
+      if (mascotRect.width === 0) {
+        setStrokeCoords(null);
+        return;
+      }
+
+      setStrokeCoords({
+        startY: convoRect.top - containerRect.top + convoRect.height * 0.2, // Start 20% down the convo section
+        endY: mascotRect.top - containerRect.top + mascotRect.height * 0.5, // End at mascot center Y
+        endX: mascotRect.left - containerRect.left + 50, // End near mascot center X (adjusting for padding)
+        winW: containerRect.width,
+        midY: featuresRect.top - containerRect.top,
+      });
+    };
+
+    updateStroke();
+    // A small delay to ensure layout is done
+    const to = setTimeout(updateStroke, 500);
+    window.addEventListener('resize', updateStroke);
+    return () => {
+      clearTimeout(to);
+      window.removeEventListener('resize', updateStroke);
+    };
+  }, []);
 
   const getAppRef = useRef<HTMLElement>(null);
   const appLeftX = useMotionValue(0);
@@ -419,7 +461,9 @@ export function Landing() {
         ? footer.getBoundingClientRect().top < window.innerHeight
         : false;
 
-      if (footerVisible || !pastHero) {
+      const chatbotOpen = !!document.querySelector('.chatbot-window');
+
+      if (chatbotOpen || footerVisible || !pastHero) {
         setShowStickyCta(false);
       } else if (goingDown) {
         setShowStickyCta(true);
@@ -428,8 +472,22 @@ export function Landing() {
       }
     };
     onScroll();
+
+    const onChatbotToggle = (e: Event) => {
+      const isOpen = (e as CustomEvent).detail;
+      if (isOpen) {
+        setShowStickyCta(false);
+      } else {
+        onScroll();
+      }
+    };
+
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener('chatbotToggle', onChatbotToggle);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('chatbotToggle', onChatbotToggle);
+    };
   }, []);
 
   useEffect(() => {
@@ -513,7 +571,88 @@ export function Landing() {
   const goRedeemInvite = () => navigate('/redeem');
 
   return (
-    <div className="min-h-screen bg-white text-text overflow-hidden">
+    <div
+      className="min-h-screen bg-white text-text overflow-hidden relative"
+      ref={pageContainerRef}
+    >
+      {/* Background Paint Stroke spanning sections */}
+      {strokeCoords && (
+        <svg
+          className="hidden lg:block absolute left-0 w-full pointer-events-none"
+          style={{
+            top: strokeCoords.startY - 100,
+            height: strokeCoords.endY - strokeCoords.startY + 200,
+            zIndex: 5,
+          }}
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          {(() => {
+            const w = strokeCoords.winW;
+            const startY = strokeCoords.startY;
+            const endY = strokeCoords.endY;
+            const h = endY - startY;
+            const ex = strokeCoords.endX;
+            // Intersection Y relative to this SVG's coordinate space
+            const midLocalY = strokeCoords.midY
+              ? strokeCoords.midY - (startY - 100)
+              : 100 + h * 0.45;
+
+            // S-curve with twists and turns, pinned exactly at midLocalY when crossing the center
+            const path = `M -50,100 C ${w * 0.8},${100 + h * 0.15} ${w * 0.9},${midLocalY - 100} ${w * 0.5},${midLocalY} C ${w * 0.1},${midLocalY + 100} ${w * 0.2},${100 + h * 0.75} ${w * 0.6},${100 + h * 0.85} C ${w * 0.9},${100 + h * 0.92} ${ex + 50},${100 + h * 0.98} ${ex},${100 + h}`;
+
+            return (
+              <g opacity="0.85">
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#ff69b4"
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  opacity="0.6"
+                  transform="translate(-12, -8)"
+                />
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#ff69b4"
+                  strokeWidth="12"
+                  strokeLinecap="round"
+                  opacity="0.8"
+                  transform="translate(-6, 4)"
+                />
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#ff69b4"
+                  strokeWidth="16"
+                  strokeLinecap="round"
+                  opacity="1"
+                  transform="translate(0, 0)"
+                />
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#ff69b4"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  opacity="0.7"
+                  transform="translate(8, -5)"
+                />
+                <path
+                  d={path}
+                  fill="none"
+                  stroke="#ff69b4"
+                  strokeWidth="14"
+                  strokeLinecap="round"
+                  opacity="0.5"
+                  transform="translate(14, 6)"
+                />
+              </g>
+            );
+          })()}
+        </svg>
+      )}
+
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -606,7 +745,7 @@ export function Landing() {
       </nav>
 
       {/* Hero Section */}
-      <section className="min-h-screen flex flex-col items-center justify-center px-6 pt-20 relative bg-black overflow-hidden">
+      <section className="min-h-screen flex flex-col items-center justify-center px-6 pt-20 relative bg-black overflow-hidden z-40">
         <video
           ref={videoRef}
           autoPlay
@@ -685,7 +824,9 @@ export function Landing() {
           </div>
 
           <p className="mt-5 inline-flex items-center justify-center gap-2 text-[10px] sm:text-xs font-bold uppercase tracking-[0.28em] text-white/90">
-            <span aria-hidden="true" className="text-xs sm:text-sm leading-none">🇮🇳</span>
+            <span aria-hidden="true" className="text-xs sm:text-sm leading-none">
+              🇮🇳
+            </span>
             Made in India, for the world
           </p>
 
@@ -702,7 +843,7 @@ export function Landing() {
       {/* Conversation Starter — the pattern interrupt */}
       <section
         ref={convoRef}
-        className="py-24 pb-32 px-6 bg-accent text-white relative overflow-hidden z-10"
+        className="py-24 pb-32 px-6 bg-accent text-white relative overflow-hidden z-40"
         style={{
           // Convex "parabola" bottom edge instead of a flat line, with a soft
           // black shadow cast downward onto the section below for depth.
@@ -797,8 +938,8 @@ export function Landing() {
       </section>
 
       {/* Philosophy Section */}
-      <section id="philosophy" className="py-28 px-6 bg-white">
-        <div className="max-w-6xl mx-auto">
+      <section id="philosophy" className="py-28 px-6 bg-white relative">
+        <div className="max-w-6xl mx-auto relative z-10">
           {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -841,8 +982,8 @@ export function Landing() {
 
               <p className="text-2xl md:text-4xl font-serif leading-snug">
                 We&rsquo;re not here to{' '}
-                <span className="italic text-white/50">maximize your options.</span> We&rsquo;re here
-                to make{' '}
+                <span className="italic text-white/50">maximize your options.</span> We&rsquo;re
+                here to make{' '}
                 <span className="italic underline decoration-white/40 underline-offset-8">
                   one of them count.
                 </span>
@@ -959,15 +1100,38 @@ export function Landing() {
         </div>
       </section>
 
+      {/* Floating note at the exact intersection of Philosophy and Features */}
+      <div className="hidden lg:block absolute left-1/2 w-0 h-0 pointer-events-none z-30">
+        <svg className="overflow-visible w-96 h-32 -mt-10 -ml-2">
+          <text
+            x="20"
+            y="30"
+            fill="#ff69b4"
+            fontSize="32"
+            fontWeight="bold"
+            fontFamily='"Caveat", "Reenie Beanie", "Comic Sans MS", "Marker Felt", "Bradley Hand", cursive'
+            transform="rotate(-5, 20, 30)"
+            opacity="0.85"
+          >
+            <tspan x="20" dy="0">
+              Find someone who adds
+            </tspan>
+            <tspan x="20" dy="36">
+              color in your life...... !!
+            </tspan>
+          </text>
+        </svg>
+      </div>
+
       {/* Features Section */}
-      <section id="features" className="py-24 px-6 bg-bg">
+      <section id="features" className="py-24 px-6 bg-bg relative">
         <div className="max-w-6xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
-            className="text-center mb-6"
+            className="text-center mb-6 relative z-10"
           >
             <p className="text-[11px] uppercase tracking-[0.4em] opacity-40 mb-4">How it works</p>
             <h2 className="text-4xl md:text-6xl font-serif italic tracking-tight mb-6">
@@ -985,10 +1149,12 @@ export function Landing() {
               aria-label="Choose your relationship status"
               className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-white"
             >
-              {([
-                { key: 'single', label: 'Single' },
-                { key: 'taken', label: 'Seeing someone' },
-              ] as const).map((option) => {
+              {(
+                [
+                  { key: 'single', label: 'Single' },
+                  { key: 'taken', label: 'Seeing someone' },
+                ] as const
+              ).map((option) => {
                 const isActive = relationshipMode === option.key;
                 return (
                   <button
@@ -1011,7 +1177,7 @@ export function Landing() {
           </motion.div>
 
           {/* Stepper: counter + progress timeline + controls */}
-          <div className="mt-12 mb-2">
+          <div className="mt-12 mb-2 relative z-10">
             <div className="flex items-center justify-between gap-4 mb-6">
               <div className="text-xs uppercase tracking-[0.28em] opacity-50">
                 Step{' '}
@@ -1033,9 +1199,7 @@ export function Landing() {
                 <button
                   type="button"
                   aria-label="Next step"
-                  onClick={() =>
-                    scrollToStep(Math.min(activeStep + 1, howItWorksSteps.length - 1))
-                  }
+                  onClick={() => scrollToStep(Math.min(activeStep + 1, howItWorksSteps.length - 1))}
                   disabled={activeStep === howItWorksSteps.length - 1}
                   className="w-11 h-11 rounded-full border border-border flex items-center justify-center transition-all hover:border-accent hover:bg-accent hover:text-white disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current disabled:hover:border-border"
                 >
@@ -1065,7 +1229,7 @@ export function Landing() {
                       aria-selected={isActive}
                       aria-label={`Step ${index + 1}: ${step.label}`}
                       onClick={() => scrollToStep(index)}
-                      className="group flex flex-col items-center gap-3 bg-bg px-2 -mx-2"
+                      className="group flex flex-col items-center gap-3 px-2 -mx-2 relative z-10"
                     >
                       <span
                         className={`w-[18px] h-[18px] rounded-full border-2 transition-all duration-300 ${
@@ -1106,7 +1270,7 @@ export function Landing() {
                 scrollToStep(Math.max(activeStep - 1, 0));
               }
             }}
-            className="flex gap-6 overflow-x-auto pt-10 pb-14 px-[calc(50%-41vw)] sm:px-[calc(50%-190px)] lg:px-[calc(50%-230px)] snap-x snap-mandatory scroll-smooth scrollbar-none rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            className="flex gap-6 overflow-x-auto pt-10 pb-14 px-[calc(50%-41vw)] sm:px-[calc(50%-190px)] lg:px-[calc(50%-230px)] snap-x snap-mandatory scroll-smooth scrollbar-none rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 relative z-10"
           >
             {howItWorksSteps.map((step, index) => {
               const isActive = activeStep === index;
@@ -1121,7 +1285,11 @@ export function Landing() {
                   initial={{ opacity: 0, y: 40, scale: 0.95 }}
                   whileInView={{ opacity: 1, y: 0, scale: 1 }}
                   viewport={{ once: true, margin: '-5% 0px -5% 0px' }}
-                  transition={{ duration: 0.8, delay: index * 0.05, ease: [0.21, 0.47, 0.32, 0.98] }}
+                  transition={{
+                    duration: 0.8,
+                    delay: index * 0.05,
+                    ease: [0.21, 0.47, 0.32, 0.98],
+                  }}
                   className={`group relative shrink-0 snap-center w-[82vw] sm:w-[380px] lg:w-[460px] rounded-3xl border overflow-hidden bg-white flex flex-col transition-all duration-700 ease-out ${
                     isActive
                       ? 'border-accent shadow-2xl shadow-black/10 -translate-y-2 z-10'
@@ -1179,21 +1347,15 @@ export function Landing() {
           </div>
 
           {/* Swipe/keys hint */}
-          <p className="text-center text-[10px] uppercase tracking-[0.28em] opacity-30 mt-2">
+          <p className="text-center text-[10px] uppercase tracking-[0.28em] opacity-30 mt-2 relative z-10">
             Swipe, use the arrows, or press ← / →
           </p>
 
           {/* Matching intelligence — the science behind a single good match */}
-          <motion.div
-            initial={{ opacity: 0, y: 28 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-10% 0px' }}
-            transition={{ duration: 0.7 }}
-            className="relative mt-20 lg:mt-28 bg-accent text-white overflow-visible isolate w-screen -ml-[50vw] left-[50%]"
-          >
+          <div className="relative mt-20 lg:mt-28 bg-accent text-white overflow-visible w-screen -ml-[50vw] left-[50%] z-10">
             {/* Parabolic curve top */}
             <div
-              className="absolute top-0 left-0 right-0 h-12 sm:h-16 lg:h-20 bg-white -translate-y-full"
+              className="absolute top-0 left-0 right-0 h-12 sm:h-16 lg:h-20 bg-accent -translate-y-full z-0"
               style={{
                 clipPath: 'ellipse(100% 100% at 50% 100%)',
               }}
@@ -1201,251 +1363,272 @@ export function Landing() {
 
             {/* Parabolic curve bottom */}
             <div
-              className="absolute bottom-0 left-0 right-0 h-12 sm:h-16 lg:h-20 bg-white translate-y-full"
+              className="absolute bottom-0 left-0 right-0 h-12 sm:h-16 lg:h-20 bg-accent translate-y-full z-0"
               style={{
                 clipPath: 'ellipse(100% 100% at 50% 0%)',
               }}
             />
 
-            {/* Soft radial glow accent */}
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-[0.12] blur-3xl"
-              style={{ background: 'radial-gradient(circle, #fff 0%, transparent 70%)' }}
-            />
-
-            {/* Content wrapper to maintain centered layout */}
-            <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
-              <div className="relative py-14 lg:py-20">
-              <div className="max-w-3xl relative">
-                <p className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-5 inline-flex items-center gap-3">
-                  <Sparkles className="w-3.5 h-3.5" /> Under the hood
-                </p>
-
-                <h3 className="text-3xl md:text-5xl font-serif italic tracking-tight leading-[1.05]">
-                  The science of one good match.
-                </h3>
-                <p className="mt-6 text-base md:text-lg text-white/70 leading-relaxed">
-                  Behind the calm interface is a matching engine built like infrastructure. It reads
-                  meaning, not keywords, and optimizes for a two-way spark &mdash; not just whether
-                  you&rsquo;d swipe right.
-                </p>
-              {/* Pipeline strip: Signals → Scoring → Stable match (stacks vertically when > 2 lines) */}
-              <AdaptiveFlow
-                className="mt-12 text-[10px] font-black uppercase tracking-[0.24em]"
-                rowClass="flex flex-wrap items-center gap-3"
-                colClass="flex flex-col items-center gap-3"
-                parts={[
-                  {
-                    key: 'signals',
-                    content: (
-                      <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
-                        Signals
-                      </span>
-                    ),
-                  },
-                  { key: 'a1', rotateWhenStacked: true, content: <ArrowRight className="w-4 h-4 text-white/40" /> },
-                  {
-                    key: 'scoring',
-                    content: (
-                      <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
-                        Reciprocal scoring
-                      </span>
-                    ),
-                  },
-                  { key: 'a2', rotateWhenStacked: true, content: <ArrowRight className="w-4 h-4 text-white/40" /> },
-                  {
-                    key: 'stable',
-                    content: (
-                      <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
-                        Stable match
-                      </span>
-                    ),
-                  },
-                ]}
+            <motion.div
+              initial={{ opacity: 0, y: 28 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-10% 0px' }}
+              transition={{ duration: 0.7 }}
+              className="relative z-10"
+            >
+              {/* Soft radial glow accent */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-[0.12] blur-3xl"
+                style={{ background: 'radial-gradient(circle, #fff 0%, transparent 70%)' }}
               />
 
-              {/* Mascot — spans the copy + pipeline block, sitting just right of it.
+              {/* Content wrapper to maintain centered layout */}
+              <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
+                <div className="relative py-14 lg:py-20">
+                  <div className="max-w-3xl relative">
+                    <p className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-5 inline-flex items-center gap-3">
+                      <Sparkles className="w-3.5 h-3.5" /> Under the hood
+                    </p>
+
+                    <h3 className="text-3xl md:text-5xl font-serif italic tracking-tight leading-[1.05]">
+                      The science of one good match.
+                    </h3>
+                    <p className="mt-6 text-base md:text-lg text-white/70 leading-relaxed">
+                      Behind the calm interface is a matching engine built like infrastructure. It
+                      reads meaning, not keywords, and optimizes for a two-way spark &mdash; not
+                      just whether you&rsquo;d swipe right.
+                    </p>
+                    {/* Pipeline strip: Signals → Scoring → Stable match (stacks vertically when > 2 lines) */}
+                    <AdaptiveFlow
+                      className="mt-12 text-[10px] font-black uppercase tracking-[0.24em]"
+                      rowClass="flex flex-wrap items-center gap-3"
+                      colClass="flex flex-col items-center gap-3"
+                      parts={[
+                        {
+                          key: 'signals',
+                          content: (
+                            <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
+                              Signals
+                            </span>
+                          ),
+                        },
+                        {
+                          key: 'a1',
+                          rotateWhenStacked: true,
+                          content: <ArrowRight className="w-4 h-4 text-white/40" />,
+                        },
+                        {
+                          key: 'scoring',
+                          content: (
+                            <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
+                              Reciprocal scoring
+                            </span>
+                          ),
+                        },
+                        {
+                          key: 'a2',
+                          rotateWhenStacked: true,
+                          content: <ArrowRight className="w-4 h-4 text-white/40" />,
+                        },
+                        {
+                          key: 'stable',
+                          content: (
+                            <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
+                              Stable match
+                            </span>
+                          ),
+                        },
+                      ]}
+                    />
+
+                    {/* Mascot — spans the copy + pipeline block, sitting just right of it.
                   Hovering makes it excited; clicking plays the explainer video in
                   the capability grid below. */}
-              <div
-                ref={mascotRef}
-                className="hidden lg:block absolute right-0 top-0 bottom-0 translate-x-full -translate-y-2 pl-10"
-              >
-                <AlienScanner
-                  className="h-full aspect-square max-w-[130px] xl:max-w-[260px]"
-                  primaryColor="#ff69b4"
-                  scanColor="#0052CC"
-                  onClick={() => setShowMascotVideo((open) => !open)}
-                  forceExcited={showMascotVideo}
-                  hoverLabel={
-                    showMascotVideo
-                      ? 'Click to know how onehook.club finds matches'
-                      : 'Click to watch me explain more about onehook.club'
-                  }
-                />
-              </div>
-              </div>
+                    <div
+                      id="mascot-container"
+                      ref={mascotRef}
+                      className="hidden xl:flex absolute right-0 top-0 bottom-0 translate-x-full pl-10 z-10 items-center"
+                    >
+                      <AlienScanner
+                        className="w-[260px] h-[260px] shrink-0"
+                        primaryColor="#ff69b4"
+                        scanColor="#0052CC"
+                        onClick={() => setShowMascotVideo((open) => !open)}
+                        forceExcited={showMascotVideo}
+                        hoverLabel={
+                          showMascotVideo
+                            ? 'Click to know how onehook.club finds matches'
+                            : 'Click to watch me explain more about onehook.club'
+                        }
+                      />
+                    </div>
+                  </div>
 
-              {/* Capability grid — swapped for the mascot's explainer video when clicked.
+                  {/* Capability grid — swapped for the mascot's explainer video when clicked.
                   Plain conditional render (no AnimatePresence): these are large
                   subtrees and exit-coordination left both mounted, so the outgoing
                   block is unmounted immediately and the incoming one fades in. */}
-              {showMascotVideo ? (
-                  <motion.div
-                    key="hood-video"
-                    ref={mascotVideoRef}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.28, ease: 'easeOut' }}
-                    className="mt-10"
-                  >
-                    <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black shadow-2xl">
-                      <div className="aspect-video w-full">
-                        <iframe
-                          src={MASCOT_VIDEO_EMBED_URL}
-                          title="OneHook explained"
-                          loading="lazy"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                          allowFullScreen
-                          referrerPolicy="strict-origin-when-cross-origin"
-                          className="h-full w-full border-0"
-                        />
+                  {showMascotVideo ? (
+                    <motion.div
+                      key="hood-video"
+                      ref={mascotVideoRef}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.28, ease: 'easeOut' }}
+                      className="mt-10"
+                    >
+                      <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black shadow-2xl">
+                        <div className="aspect-video w-full">
+                          <iframe
+                            src={MASCOT_VIDEO_EMBED_URL}
+                            title="OneHook explained"
+                            loading="lazy"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                            referrerPolicy="strict-origin-when-cross-origin"
+                            className="h-full w-full border-0"
+                          />
+                        </div>
+
+                        {/* Close the player and return to the feature grid */}
+                        <button
+                          type="button"
+                          onClick={() => setShowMascotVideo(false)}
+                          aria-label="Close video"
+                          title="Close video (Esc)"
+                          className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-white hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
                       </div>
 
-                      {/* Close the player and return to the feature grid */}
                       <button
                         type="button"
                         onClick={() => setShowMascotVideo(false)}
-                        aria-label="Close video"
-                        title="Close video (Esc)"
-                        className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-white hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        className="mt-5 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-white/60 transition-colors hover:text-white"
                       >
-                        <X className="h-4 w-4" />
+                        <ArrowLeft className="h-3.5 w-3.5" /> Back to the features
                       </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowMascotVideo(false)}
-                      className="mt-5 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-white/60 transition-colors hover:text-white"
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="hood-grid"
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.28, ease: 'easeOut' }}
+                      className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/10 rounded-2xl overflow-hidden"
                     >
-                      <ArrowLeft className="h-3.5 w-3.5" /> Back to the features
-                    </button>
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="hood-grid"
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.28, ease: 'easeOut' }}
-                    className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/10 rounded-2xl overflow-hidden"
-                  >
-                {[
-                  {
-                    icon: MapPin,
-                    title: 'Geospatial discovery',
-                    text: 'PostGIS proximity search surfaces people genuinely within reach — never a random global feed.',
-                  },
-                  {
-                    icon: Sparkles,
-                    title: 'Semantic embeddings',
-                    text: 'Profiles become 1,536-dimension vectors, so we match on meaning and vibe — not keywords.',
-                  },
-                  {
-                    icon: HeartHandshake,
-                    title: 'Reciprocal compatibility',
-                    text: 'A learned model scores two-way fit: how likely you are to click, not just to be liked.',
-                  },
-                  {
-                    icon: Scale,
-                    title: 'Stable matching',
-                    text: 'A Gale–Shapley bilateral algorithm keeps everyone from chasing the same few profiles.',
-                  },
-                  {
-                    icon: Gauge,
-                    title: 'Engagement-aware',
-                    text: 'Dwell time, photos viewed and prompts read quietly sharpen your ranking over time.',
-                  },
-                  {
-                    icon: Target,
-                    title: 'Intent-aware',
-                    text: 'We read serious vs. casual intent, so a mismatch never outranks a genuine one.',
-                  },
-                  {
-                    icon: Radar,
-                    title: 'Fair by design',
-                    text: 'An explore/exploit balance gives newer profiles real, daily-rotating visibility.',
-                  },
-                  {
-                    icon: Zap,
-                    title: 'No cold starts',
-                    text: 'A freshness boost gives new members early exposure from their very first day.',
-                  },
-                ].map((f, i) => (
-                  <motion.div
-                    key={f.title}
-                    initial={{ opacity: 0, y: 16 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.5, delay: i * 0.05 }}
-                    className="group bg-accent p-6 hover:bg-white/[0.03] transition-colors"
-                  >
-                    <f.icon className="w-5 h-5 text-white/70 group-hover:text-white transition-colors" />
-                    <h4 className="mt-4 text-sm font-black uppercase tracking-[0.18em]">
-                      {f.title}
-                    </h4>
-                    <p className="mt-2 text-[13px] leading-relaxed text-white/55">{f.text}</p>
-                  </motion.div>
-                ))}
-                  </motion.div>
-                )}
+                      {[
+                        {
+                          icon: MapPin,
+                          title: 'Geospatial discovery',
+                          text: 'PostGIS proximity search surfaces people genuinely within reach — never a random global feed.',
+                        },
+                        {
+                          icon: Sparkles,
+                          title: 'Semantic embeddings',
+                          text: 'Profiles become 1,536-dimension vectors, so we match on meaning and vibe — not keywords.',
+                        },
+                        {
+                          icon: HeartHandshake,
+                          title: 'Reciprocal compatibility',
+                          text: 'A learned model scores two-way fit: how likely you are to click, not just to be liked.',
+                        },
+                        {
+                          icon: Scale,
+                          title: 'Stable matching',
+                          text: 'A Gale–Shapley bilateral algorithm keeps everyone from chasing the same few profiles.',
+                        },
+                        {
+                          icon: Gauge,
+                          title: 'Engagement-aware',
+                          text: 'Dwell time, photos viewed and prompts read quietly sharpen your ranking over time.',
+                        },
+                        {
+                          icon: Target,
+                          title: 'Intent-aware',
+                          text: 'We read serious vs. casual intent, so a mismatch never outranks a genuine one.',
+                        },
+                        {
+                          icon: Radar,
+                          title: 'Fair by design',
+                          text: 'An explore/exploit balance gives newer profiles real, daily-rotating visibility.',
+                        },
+                        {
+                          icon: Zap,
+                          title: 'No cold starts',
+                          text: 'A freshness boost gives new members early exposure from their very first day.',
+                        },
+                      ].map((f, i) => (
+                        <motion.div
+                          key={f.title}
+                          initial={{ opacity: 0, y: 16 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.5, delay: i * 0.05 }}
+                          className="group bg-accent p-6 hover:bg-white/[0.03] transition-colors"
+                        >
+                          <f.icon className="w-5 h-5 text-white/70 group-hover:text-white transition-colors" />
+                          <h4 className="mt-4 text-sm font-black uppercase tracking-[0.18em]">
+                            {f.title}
+                          </h4>
+                          <p className="mt-2 text-[13px] leading-relaxed text-white/55">{f.text}</p>
+                        </motion.div>
+                      ))}
+                    </motion.div>
+                  )}
 
-              {/* Weighted blend — the honest formula, centered; hidden entirely when it wraps to multiple lines */}
-              <AdaptiveFlow
-                className="mt-10 text-[10px] font-bold uppercase tracking-[0.2em] text-white/50"
-                rowClass="flex flex-wrap items-center gap-x-2 gap-y-3"
-                colClass="flex flex-col items-center gap-y-3"
-                centerHorizontal
-                maxLines={1}
-                overflowBehavior="hide"
-                parts={[
-                  { key: 'lead', content: <span className="text-white/40">Final rank =</span> },
-                  {
-                    key: 'reciprocity',
-                    content: (
-                      <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
-                        Reciprocity
-                      </span>
-                    ),
-                  },
-                  { key: 'p1', content: <span className="text-white/30">+</span> },
-                  {
-                    key: 'proximity',
-                    content: (
-                      <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
-                        Proximity
-                      </span>
-                    ),
-                  },
-                  { key: 'p2', content: <span className="text-white/30">+</span> },
-                  {
-                    key: 'desirability',
-                    content: (
-                      <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
-                        Desirability
-                      </span>
-                    ),
-                  },
-                  {
-                    key: 'trail',
-                    content: <span className="text-white/30">&times; freshness, stratified by intent</span>,
-                  },
-                ]}
-              />
+                  {/* Weighted blend — the honest formula, centered; hidden entirely when it wraps to multiple lines */}
+                  <AdaptiveFlow
+                    className="mt-10 text-[10px] font-bold uppercase tracking-[0.2em] text-white/50"
+                    rowClass="flex flex-wrap items-center gap-x-2 gap-y-3"
+                    colClass="flex flex-col items-center gap-y-3"
+                    centerHorizontal
+                    maxLines={1}
+                    overflowBehavior="hide"
+                    parts={[
+                      { key: 'lead', content: <span className="text-white/40">Final rank =</span> },
+                      {
+                        key: 'reciprocity',
+                        content: (
+                          <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
+                            Reciprocity
+                          </span>
+                        ),
+                      },
+                      { key: 'p1', content: <span className="text-white/30">+</span> },
+                      {
+                        key: 'proximity',
+                        content: (
+                          <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
+                            Proximity
+                          </span>
+                        ),
+                      },
+                      { key: 'p2', content: <span className="text-white/30">+</span> },
+                      {
+                        key: 'desirability',
+                        content: (
+                          <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
+                            Desirability
+                          </span>
+                        ),
+                      },
+                      {
+                        key: 'trail',
+                        content: (
+                          <span className="text-white/30">
+                            &times; freshness, stratified by intent
+                          </span>
+                        ),
+                      },
+                    ]}
+                  />
+                </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
@@ -1549,7 +1732,9 @@ export function Landing() {
             </div>
 
             <p className="mt-6 text-xs text-white/50 italic">
-              <span className="hidden md:inline">On your phone? Point your camera at the code.</span>
+              <span className="hidden md:inline">
+                On your phone? Point your camera at the code.
+              </span>
               <span className="md:hidden">Tap a badge to download.</span>
             </p>
           </motion.div>
@@ -1593,7 +1778,8 @@ export function Landing() {
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
                       <div className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-accent">
-                        <span className="w-1.5 h-1.5 rounded-full bg-status-hooked animate-pulse" /> Hooked
+                        <span className="w-1.5 h-1.5 rounded-full bg-status-hooked animate-pulse" />{' '}
+                        Hooked
                       </div>
                       <div className="absolute bottom-3 left-3 text-white">
                         <p className="text-lg font-serif italic leading-none">Ava</p>
@@ -1638,7 +1824,12 @@ export function Landing() {
                     aria-hidden="true"
                     initial={{ y: '-120%' }}
                     animate={{ y: '120%' }}
-                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', repeatType: 'reverse' }}
+                    transition={{
+                      duration: 1.8,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                      repeatType: 'reverse',
+                    }}
                     className="pointer-events-none absolute left-0 right-0 h-8 bg-gradient-to-b from-transparent via-status-hooked/50 to-transparent"
                   />
                   {/* scanner corner brackets */}
@@ -1716,6 +1907,7 @@ export function Landing() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.3 }}
+            id="sticky-cta"
             className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] sm:w-auto"
           >
             {/* Invisible mirror (always both buttons) — measures whether the
@@ -1730,7 +1922,9 @@ export function Landing() {
               </span>
               <span className="flex-1 sm:flex-none block text-center px-5 py-3 border border-white/40 text-[11px] font-black uppercase tracking-[0.24em] rounded-full">
                 <Smartphone className="inline w-4 h-4 mr-2 align-middle" />
-                <span ref={ctaAppTextRef} className="align-middle">Get the app</span>
+                <span ref={ctaAppTextRef} className="align-middle">
+                  Get the app
+                </span>
               </span>
               <span className="flex-1 sm:flex-none px-5 py-3 text-[11px] font-black uppercase tracking-[0.24em] rounded-full inline-flex items-center justify-center gap-2">
                 <span className="hidden sm:inline">Redeem invite</span>
@@ -1763,6 +1957,8 @@ export function Landing() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ChatbotWidget />
     </div>
   );
 }

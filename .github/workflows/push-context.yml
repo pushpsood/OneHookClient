@@ -1,0 +1,46 @@
+name: Push Codebase Context to Azure
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  push-context:
+    name: Push Context to Blob Storage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_CLIENT }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID_CLIENT }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_CLIENT }}
+
+      - name: Zip and Upload Context
+        run: |
+          echo "Packaging source code into context text file..."
+          cd src
+          find . -name "*.ts" -o -name "*.tsx" -exec cat {} + > ../onehookclient-context.txt
+          cd ..
+          
+          echo "Finding Azure Storage Account..."
+          # Fetch the storage account dynamically from the chatbot resource group
+          STORAGE_ACCOUNT=$(az storage account list --resource-group onehook-chatbot-rg --query "[0].name" -o tsv)
+          
+          echo "Uploading to Azure Blob Storage ($STORAGE_ACCOUNT)..."
+          az storage blob upload \
+            --account-name $STORAGE_ACCOUNT \
+            --container-name codecontext \
+            --name onehookclient-context.txt \
+            --file onehookclient-context.txt \
+            --auth-mode login
