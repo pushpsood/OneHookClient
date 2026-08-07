@@ -13,12 +13,7 @@ jobs:
         with:
           path: OneHookClient
 
-      - name: Checkout OneHookBackend
-        uses: actions/checkout@v4
-        with:
-          repository: pushpsood/OneHookBackend
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: OneHookBackend
+
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -27,17 +22,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: OneHookClient/package-lock.json
 
-      - name: Setup Java (for Smithy SDK generation)
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'corretto'
 
-      - name: Generate API SDK
-        working-directory: OneHookBackend
-        run: |
-          npm ci
-          npm run generate
 
       - name: Install Frontend Dependencies
         working-directory: OneHookClient

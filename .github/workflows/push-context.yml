@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'infra/**'
+      - '.github/workflows/push-context.yml'
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -29,9 +32,7 @@ jobs:
       - name: Zip and Upload Context
         run: |
           echo "Packaging source code into context text file..."
-          cd src
-          find . -name "*.ts" -o -name "*.tsx" -exec cat {} + > ../onehookclient-context.txt
-          cd ..
+          find src infra -name "*.ts" -o -name "*.tsx" -exec cat {} + > onehookclient-context.txt
           
           echo "Finding Azure Storage Account..."
           # Fetch the storage account dynamically from the chatbot resource group
