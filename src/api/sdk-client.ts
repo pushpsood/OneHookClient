@@ -1,4 +1,4 @@
-import { OneHookService } from '@onehook/api-client';
+import { OneHookService } from '@pushpsood/api-client';
 import { config, apiBaseUrl } from '../utils/env.config';
 
 async function getAuthToken(): Promise<string | null> {

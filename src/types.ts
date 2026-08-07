@@ -1,4 +1,4 @@
-// TEMPORARY STUB: @onehook/api-client codegen is not built for static launch.
+// TEMPORARY STUB: @pushpsood/api-client codegen is not built for static launch.
 // The public site (Landing, Careers, Contact, etc.) does not use these types.
 // Auth/app routes will gracefully degrade when backend is unavailable.
 export type ProfileResponse = Record<string, any>;
@@ -18,7 +18,7 @@ import {
   UserResponse,
   MatchRecord,
   UserStateResponse,
-} from '@onehook/api-client';
+} from '@pushpsood/api-client';
 */
 
 export enum UserState {

@@ -29,17 +29,17 @@ const ensureOutDirPlugin = (): Plugin => ({
 });
 
 /**
- * `@onehook/api-client` is a `file:` link into the sibling OneHookBackend repo's generated Smithy
+ * `@pushpsood/api-client` is a `file:` link into the sibling OneHookBackend repo's generated Smithy
  * output. It is a HARD requirement: there is deliberately no stub/mock fallback, because a build
  * that silently substitutes fake API behaviour can reach production looking healthy. Fail loudly
  * instead, with the command needed to generate it.
  */
 function assertApiClientAvailable(): void {
   try {
-    createRequire(import.meta.url).resolve('@onehook/api-client');
+    createRequire(import.meta.url).resolve('@pushpsood/api-client');
   } catch {
     throw new Error(
-      '[onehook] @onehook/api-client is not available.\n' +
+      '[onehook] @pushpsood/api-client is not available.\n' +
         'Generate the SDK from the API contract before building:\n' +
         '  cd ../OneHookBackend/packages/api-models && mvn -q exec:java\n' +
         '  npm install   # re-links the file: dependency\n' +
@@ -113,7 +113,7 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       fs: {
-        // The @onehook/api-client SDK is symlinked to the backend repo; allow Vite
+        // The @pushpsood/api-client SDK is symlinked to the backend repo; allow Vite
         // to read/serve those files during dev.
         allow: [resolve(__dirname), resolve(__dirname, '..', 'OneHookBackend')],
       },
@@ -162,7 +162,7 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       // Pre-bundle the linked SDK (and its @smithy deps) so dev doesn't serve
       // dozens of unbundled ESM files over /@fs, which made first load very slow.
-      include: ['@onehook/api-client'],
+      include: ['@pushpsood/api-client'],
     },
     build: {
       assetsInlineLimit: 4096,
@@ -179,7 +179,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: [
         { find: '@', replacement: resolve(__dirname, 'src') },
-        { find: /@onehook\/api-client\/dist-es\/runtimeConfig$/, replacement: '@onehook/api-client/dist-es/runtimeConfig.browser' },
+        { find: /@pushpsood\/api-client\/dist-es\/runtimeConfig$/, replacement: '@pushpsood/api-client/dist-es/runtimeConfig.browser' },
       ],
     },
     define: {

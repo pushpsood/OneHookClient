@@ -1,7 +1,7 @@
 import { sdkClient } from './sdk-client';
 import { UserProfile } from '../types';
 // TEMPORARY STUB: @onehook/api-client not built.
-// import type { ProfileUpdateRequest, MediaUploadUrlResponse } from '@onehook/api-client';
+// import type { ProfileUpdateRequest, MediaUploadUrlResponse } from '@pushpsood/api-client';
 type ProfileUpdateRequest = Record<string, any>;
 type MediaUploadUrlResponse = { uploadUrl?: string; mediaId?: string; objectKey?: string };
 
