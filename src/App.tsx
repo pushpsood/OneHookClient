@@ -10,9 +10,10 @@ import {
   ChatMessageDTO,
   UserPreferences,
 } from './types';
-import { useAppStore } from './store/app-store';
+import { useAppStore, isPremium } from './store/app-store';
 import {
   useProfile,
+  useUserState,
   useCandidates,
   useSwipe,
   useChatMessages,
@@ -115,9 +116,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Redirects users still in onboarding to the wizard before app access
 function OnboardedRoute({ children }: { children: React.ReactNode }) {
-  const { currentUser } = useAppStore();
+  const { userState } = useAppStore();
 
-  if (currentUser?.currentState === UserState.ONBOARDING) {
+  // Onboarding status is owned by the State service, not the profile read model.
+  if (userState?.state === UserState.ONBOARDING) {
     return <Navigate to="/onboarding" replace />;
   }
 
@@ -127,18 +129,24 @@ function OnboardedRoute({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const navigate = useNavigate();
   const [appState, setAppState] = useState<'DISCOVERY' | 'CHAT' | 'PROFILE'>('DISCOVERY');
-  const { currentUser, setCurrentUser, logout } = useAppStore();
+  const { currentUser, setCurrentUser, logout, userState } = useAppStore();
   const { profile, loading: profileLoading, error: profileError, refetch: refetchProfile } = useProfile();
+  // Authoritative tier + connection state (State service owns these; the profile omits the tier).
+  const { refetch: refetchUserState } = useUserState();
+  const premium = useAppStore(isPremium);
   const [upgrading, setUpgrading] = useState(false);
 
   const handleUpgrade = async () => {
     if (!currentUser) return;
     setUpgrading(true);
     try {
-      await upgradeSubscription(currentUser.id, 'GOLD');
+      // Body-less reconciliation; the response is the freshly reconciled authoritative state.
+      await upgradeSubscription();
+      // Refresh the token so the custom:subscriptionTier claim other services read catches up,
+      // then re-read the authoritative state to update the UI.
       const auth = getCognitoAuth();
       await auth.refreshAccessToken();
-      await refetchProfile();
+      await Promise.all([refetchUserState(), refetchProfile()]);
       showToast('Upgraded to Premium successfully! 🎉', 'success');
     } catch (error) {
       console.error('Upgrade failed:', error);
@@ -165,10 +173,10 @@ function AppContent() {
   }, [profile, setCurrentUser]);
 
   useEffect(() => {
-    if (currentUser?.currentState === UserState.ONBOARDING) {
+    if (userState?.state === UserState.ONBOARDING) {
       navigate('/onboarding', { replace: true });
     }
-  }, [currentUser?.currentState, navigate]);
+  }, [userState?.state, navigate]);
 
   useEffect(() => {
     if (!activeMatchId && currentUser?.currentMatches?.length) {
@@ -261,7 +269,7 @@ function AppContent() {
         <div className="flex items-center gap-2">
           <BrandWordmark className="text-xl font-bold tracking-tighter uppercase" />
           <span className="text-[10px] px-2 py-0.5 bg-accent text-white rounded-full tracking-widest font-bold">
-            {currentUser.subscriptionTier === SubscriptionTier.FREE ? 'BASIC' : 'PREMIUM'}
+            {premium ? 'PREMIUM' : 'BASIC'}
           </span>
         </div>
         <div className="flex items-center gap-8 text-[10px] font-bold tracking-[0.2em] uppercase">
@@ -329,7 +337,7 @@ function AppContent() {
 
       {/* Connection Guard Overlay */}
       <AnimatePresence>
-        {currentUser.currentState === UserState.HOOKED && appState === 'DISCOVERY' && (
+        {userState?.state === UserState.HOOKED && appState === 'DISCOVERY' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -896,6 +904,11 @@ function ChatView({
 }
 
 function ProfileView({ user, onUpgrade, upgrading, onVerified }: { key?: string; user: UserProfile; onUpgrade?: () => void; upgrading?: boolean; onVerified?: () => void }) {
+  // Tier is server-owned: read it from the authoritative State snapshot, never from the profile
+  // (the Profile read model intentionally omits subscriptionTier).
+  const { userState } = useAppStore();
+  const premium = useAppStore(isPremium);
+  const tierLabel = userState?.subscriptionTier ?? '—';
   const { showToast } = useToast();
   const { prefs, save: savePreferences, saving } = usePreferences(user.id);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -1038,7 +1051,7 @@ function ProfileView({ user, onUpgrade, upgrading, onVerified }: { key?: string;
               <h2 className="text-6xl font-serif italic tracking-tighter uppercase">{user.name}</h2>
               <div className="flex items-center gap-3">
                 <span className="text-[11px] text-accent font-black uppercase tracking-[0.4em]">
-                  {user.subscriptionTier}
+                  {tierLabel}
                 </span>
                 {user.verified && (
                   <>
@@ -1243,7 +1256,7 @@ function ProfileView({ user, onUpgrade, upgrading, onVerified }: { key?: string;
           </section>
         </div>
 
-        {user.subscriptionTier === SubscriptionTier.FREE && (
+        {userState != null && !premium && (
           <div className="bg-accent/5 border border-accent/20 p-8 space-y-4">
             <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent">
               Premium Features Locked

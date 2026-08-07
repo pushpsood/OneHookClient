@@ -1,44 +1,52 @@
 import { sdkClient } from './sdk-client';
+import type { UserStateSnapshot } from '../types';
 
 /**
  * State service wrapper.
  *
  * Design philosophy (see OneHookBackend/packages/state): the State service owns
  * the user connection state machine (ONBOARDING -> AVAILABLE -> HOOKED ->
- * AVAILABLE) and the Match aggregate. A "hook" is an atomic mutual connection;
- * creating one can fail with 409 when either user is at their connection limit.
- * complete-onboarding transitions ONBOARDING -> AVAILABLE after profile setup.
+ * AVAILABLE) and the Match aggregate, and it is the source of truth for the
+ * subscription tier.
+ *
+ * Two contract rules to keep in mind when editing this file:
+ *
+ * 1. **Identity is never sent in a body.** Every mutating route derives the caller from the
+ *    verified Cognito JWT (`sub`), so `init`, `complete-onboarding` and `upgrade` are body-less
+ *    and `unhook` carries only the match it releases.
+ * 2. **There is no public "create hook" route.** Hooks are created exclusively by the internal
+ *    `MutualMatch` event so a client cannot fabricate a connection.
  */
 export const StateApi = {
-  initUser: async (userId: string, subscriptionTier?: string) => {
-    return sdkClient.initUser({ userId, subscriptionTier });
+  /** Initialize the caller's state record. Body-less; the tier is always seeded FREE server-side. */
+  initUser: async () => {
+    return (sdkClient as any).initUser({});
   },
 
-  createHook: async (userA: string, userB: string) => {
-    return sdkClient.hook({ userA, userB });
+  /** Release a match the caller participates in. */
+  releaseHook: async (matchId: string, reason?: string) => {
+    return (sdkClient as any).unhook({ matchId, reason });
   },
 
-  releaseHook: async (userId: string, matchId: string, reason?: string) => {
-    return sdkClient.unhook({ userId, matchId, reason });
+  /**
+   * Body-less entitlement reconciliation. The server re-checks the billing source of truth and
+   * returns the caller's freshly reconciled state — so the response is the authoritative tier.
+   * Carries no tier: a client can request a re-check but can never assert the outcome.
+   */
+  reconcileEntitlements: async (): Promise<UserStateSnapshot> => {
+    return (sdkClient as any).upgradeUser({});
   },
 
-  updateMaxConnections: async (userId: string, maxConnections: number) => {
-    return sdkClient.updateMaxConnections({ userId, maxConnections });
+  completeOnboarding: async () => {
+    return (sdkClient as any).completeOnboarding({});
   },
 
-  upgradeUser: async (userId: string, subscriptionTier: string) => {
-    return sdkClient.upgradeUser({ userId, subscriptionTier });
-  },
-
-  completeOnboarding: async (userId: string) => {
-    return sdkClient.completeOnboarding({ userId });
-  },
-
-  getUserState: async (userId: string) => {
-    return sdkClient.getState({ userId });
+  /** Authoritative connection state + entitlement for a user (the caller may only read their own). */
+  getUserState: async (userId: string): Promise<UserStateSnapshot> => {
+    return (sdkClient as any).getState({ userId });
   },
 
   getMatch: async (matchId: string) => {
-    return sdkClient.getMatch({ matchId });
+    return (sdkClient as any).getMatch({ matchId });
   },
 };

@@ -1,6 +1,5 @@
 import { api } from '../lib/api-client';
 import { getCognitoAuth } from '../lib/cognito-auth';
-import { useMockApi } from '../utils/env.config';
 
 /**
  * Face Liveness verification (client side).
@@ -25,7 +24,6 @@ async function authHeaders(): Promise<Record<string, string>> {
 export const LivenessApi = {
   /** Create a Rekognition streaming liveness session. */
   createSession: async (): Promise<{ sessionId: string }> => {
-    if (useMockApi) return { sessionId: `mock-session-${Date.now()}` };
     const headers = await authHeaders();
     return api.post<{ sessionId: string }>('/profile/liveness/session', undefined, { headers });
   },

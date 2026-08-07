@@ -23,7 +23,6 @@ interface RuntimeEnv extends ImportMetaEnv {
   readonly VITE_COGNITO_REDIRECT_SIGN_OUT?: string;
   readonly VITE_ENABLE_ANALYTICS?: string;
   readonly VITE_ENABLE_DEBUG?: string;
-  readonly VITE_USE_MOCK_API?: string;
   readonly VITE_API_TIMEOUT_MS?: string;
   readonly VITE_LOG_LEVEL?: string;
 }
@@ -43,7 +42,6 @@ interface EnvConfig {
   cognitoRedirectSignOut: string;
   enableAnalytics: boolean;
   enableDebug: boolean;
-  useMockApi: boolean;
   requestTimeoutMs: number;
   logLevel: LogLevel;
   isDevelopment: boolean;
@@ -55,7 +53,7 @@ const defaults: Record<
   Environment,
   Omit<
     EnvConfig,
-    'isDevelopment' | 'isStaging' | 'isProduction' | 'useMockApi' | 'requestTimeoutMs'
+    'isDevelopment' | 'isStaging' | 'isProduction' | 'requestTimeoutMs'
   >
 > = {
   development: {
@@ -193,10 +191,6 @@ export function createEnvConfig(envName: Environment = detectEnvironment()): Env
   const cognitoRedirectSignOut = env.VITE_COGNITO_REDIRECT_SIGN_OUT?.trim() || baseConfig.cognitoRedirectSignOut;
   const enableAnalytics = parseBoolean(env.VITE_ENABLE_ANALYTICS, baseConfig.enableAnalytics);
   const enableDebug = parseBoolean(env.VITE_ENABLE_DEBUG, baseConfig.enableDebug);
-  const useMockApi = parseBoolean(
-    env.VITE_USE_MOCK_API,
-    envName === 'development' && apiBaseUrl.length === 0
-  );
   const requestTimeoutMs =
     Number.parseInt(env.VITE_API_TIMEOUT_MS ?? '', 10) ||
     (envName === 'production' ? 15000 : 30000);
@@ -218,7 +212,6 @@ export function createEnvConfig(envName: Environment = detectEnvironment()): Env
     cognitoRedirectSignOut,
     enableAnalytics,
     enableDebug,
-    useMockApi,
     requestTimeoutMs,
     logLevel,
     isDevelopment: envName === 'development',
@@ -243,7 +236,6 @@ export const cognitoRedirectSignIn = config.cognitoRedirectSignIn;
 export const cognitoRedirectSignOut = config.cognitoRedirectSignOut;
 export const enableAnalytics = config.enableAnalytics;
 export const enableDebug = config.enableDebug;
-export const useMockApi = config.useMockApi;
 export const requestTimeoutMs = config.requestTimeoutMs;
 export const logLevel = config.logLevel;
 export const isDevelopment = config.isDevelopment;

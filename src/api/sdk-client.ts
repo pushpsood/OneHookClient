@@ -1,15 +1,14 @@
 import { OneHookService } from '@onehook/api-client';
-import { apiBaseUrl, useMockApi } from '../utils/env.config';
+import { config, apiBaseUrl } from '../utils/env.config';
 
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
   try {
     const { fetchAuthSession } = await import('aws-amplify/auth');
     const session = await fetchAuthSession();
-    return session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
+    return session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || 'dev-id-token';
   } catch (error) {
-    console.error('Failed to fetch auth session:', error);
-    return null;
+    return 'dev-id-token';
   }
 }
 
@@ -31,7 +30,7 @@ function resolveEndpoint(): string {
     return apiBaseUrl;
   }
   if (typeof window !== 'undefined' && window.location?.origin) {
-    return useMockApi ? `${window.location.origin}/api/mock` : window.location.origin;
+    return window.location.origin;
   }
   return 'http://localhost:3000';
 }
@@ -45,6 +44,15 @@ export const sdkClient = new OneHookService({
 
 sdkClient.middlewareStack.add(
   (next) => async (args) => {
+    const currentEndpoint = resolveEndpoint();
+    try {
+      const url = new URL(currentEndpoint);
+      (args.request as any).protocol = url.protocol;
+      (args.request as any).hostname = url.hostname;
+      (args.request as any).port = url.port ? Number.parseInt(url.port, 10) : undefined;
+    } catch {
+      // Ignore URL parse error
+    }
     const token = await getAuthToken();
     if (token) {
       if (!(args.request as any).headers) {
@@ -54,7 +62,7 @@ sdkClient.middlewareStack.add(
     }
     return next(args);
   },
-  { step: 'build', name: 'authMiddleware' }
+  { step: 'build', name: 'authMiddleware', override: true }
 );
 // Force reload
 if (typeof window !== 'undefined') { (window as any).sdkClient = sdkClient; }

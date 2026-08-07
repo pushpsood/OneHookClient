@@ -12,7 +12,6 @@ import {
   resetPassword,
   confirmResetPassword,
 } from 'aws-amplify/auth';
-import { useMockApi } from '../utils/env.config';
 
 interface CognitoConfig {
   userPoolId: string;
@@ -95,20 +94,6 @@ class CognitoAuthService {
    * finish with {@link confirmLogin}.
    */
   async requestOtp(identifier: string): Promise<any> {
-    if (useMockApi) {
-      if (import.meta.env.VITE_MOCK_SCENARIO === 'wrong-login') {
-        throw new Error('Incorrect credentials.');
-      }
-      return {
-        isSignedIn: false,
-        nextStep: {
-          signInStep: this.isEmail(identifier)
-            ? 'CONFIRM_SIGN_IN_WITH_EMAIL_CODE'
-            : 'CONFIRM_SIGN_IN_WITH_SMS_CODE',
-        },
-      };
-    }
-
     return signIn({
       username: identifier,
       options: {
@@ -126,13 +111,6 @@ class CognitoAuthService {
    * challenge (e.g. MFA), which the caller handles via {@link confirmLogin}.
    */
   async loginWithPassword(identifier: string, password: string): Promise<any> {
-    if (useMockApi) {
-      if (import.meta.env.VITE_MOCK_SCENARIO === 'wrong-login') {
-        throw new Error('Incorrect password.');
-      }
-      return { isSignedIn: true, nextStep: { signInStep: 'DONE' } };
-    }
-
     return signIn({
       username: identifier,
       password,
@@ -154,9 +132,6 @@ class CognitoAuthService {
    * accounts setting a password for the first time — no old password required.
    */
   async requestPasswordReset(username: string): Promise<any> {
-    if (useMockApi) {
-      return { nextStep: { resetPasswordStep: 'CONFIRM_RESET_PASSWORD_WITH_CODE' } };
-    }
     return resetPassword({ username });
   }
 
@@ -166,20 +141,14 @@ class CognitoAuthService {
     confirmationCode: string,
     newPassword: string
   ): Promise<void> {
-    if (useMockApi) return;
     await confirmResetPassword({ username, confirmationCode, newPassword });
   }
 
   async confirmLogin(challengeResponse: string): Promise<any> {
-    if (useMockApi) {
-      return { isSignedIn: true, nextStep: { signInStep: 'DONE' } };
-    }
-    const response = await confirmSignIn({ challengeResponse });
-    return response;
+    return confirmSignIn({ challengeResponse });
   }
 
   async updateUserEmail(email: string): Promise<any> {
-    if (useMockApi) return { nextStep: { updateAttributeStep: 'CONFIRM_ATTRIBUTE_WITH_CODE' } };
     const result = await updateUserAttribute({
       userAttribute: { attributeKey: 'email', value: email },
     });
@@ -187,33 +156,23 @@ class CognitoAuthService {
   }
 
   async verifyEmail(code: string): Promise<void> {
-    if (useMockApi) return;
     await confirmUserAttribute({ userAttributeKey: 'email', confirmationCode: code });
   }
 
   async registerWebAuthn(): Promise<void> {
-    if (useMockApi) return;
     await associateWebAuthnCredential();
   }
 
   async federatedSignInGoogle(): Promise<void> {
-    if (useMockApi) return;
     await signInWithRedirect({ provider: 'Google' });
   }
 
   async federatedSignInApple(): Promise<void> {
-    if (useMockApi) return;
     await signInWithRedirect({ provider: 'Apple' });
   }
 
   async getStoredTokens(): Promise<CognitoTokens | null> {
     try {
-      if (useMockApi) {
-        return {
-          idToken: 'mock-id-token',
-          accessToken: 'mock-access-token',
-        };
-      }
       const session = await fetchAuthSession();
       if (!session.tokens) return null;
       return {
@@ -231,7 +190,6 @@ class CognitoAuthService {
 
   async getCurrentUser(): Promise<CognitoUser | null> {
     try {
-      if (useMockApi) return { username: 'mock_user', email: 'mock@example.com', sub: '1234' };
       const session = await fetchAuthSession();
       if (!session.tokens) return null;
       const attributes = await fetchUserAttributes();

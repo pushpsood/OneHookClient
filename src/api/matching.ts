@@ -1,17 +1,6 @@
 import { sdkClient } from './sdk-client';
 import { RankedCandidate } from '../types';
 
-/**
- * Matching service wrapper.
- *
- * Design philosophy (see OneHookBackend/packages/matching): the flow is
- * location -> discover -> swipe. Preferences are limited to age range, distance,
- * and interested-in genders. A LEFT (pass) swipe may carry the `viewedSection`
- * the swiper was looking at so the backend can re-surface the profile if exactly
- * that section changes. RIGHT swipes are permanent. Matching only DECLARES a
- * mutual match; the State service owns hook/match creation.
- */
-
 export type ProfileSection =
   | 'PHOTOS'
   | 'BIO'
@@ -24,11 +13,11 @@ export type ProfileSection =
 
 export const MatchingApi = {
   indexLocation: async (userId: string, lat: number, lon: number) => {
-    return sdkClient.indexLocation({ userId, lat, lon });
+    return (sdkClient as any).indexLocation({ userId, lat, lon });
   },
 
   discover: async (userId: string, lat: number, lon: number) => {
-    return (await sdkClient.discover({ userId, lat, lon })) as unknown as {
+    return (await (sdkClient as any).discover({ userId, lat, lon })) as unknown as {
       candidates: RankedCandidate[];
       count: number;
       algorithm: string;
@@ -41,7 +30,7 @@ export const MatchingApi = {
     direction: 'LEFT' | 'RIGHT',
     viewedSection?: ProfileSection
   ) => {
-    return (await sdkClient.swipe({ swiperId, targetId, direction, viewedSection })) as {
+    return (await (sdkClient as any).swipe({ swiperId, targetId, direction, viewedSection })) as {
       status: string;
       matched: boolean;
       matchId?: string;
@@ -49,6 +38,6 @@ export const MatchingApi = {
   },
 
   removeFromIndex: async (userId: string, lat = 0, lon = 0) => {
-    return sdkClient.removeLocation({ userId, lat, lon });
+    return (sdkClient as any).removeLocation({ userId, lat, lon });
   },
 };

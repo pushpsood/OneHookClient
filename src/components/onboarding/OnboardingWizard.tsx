@@ -93,7 +93,7 @@ export function OnboardingWizard() {
         genders: interestedInGenders,
       });
 
-      await StateApi.completeOnboarding(userId);
+      await StateApi.completeOnboarding();
 
       if (currentUser) {
         setCurrentUser({

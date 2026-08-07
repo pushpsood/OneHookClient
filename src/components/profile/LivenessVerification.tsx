@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useState } from 'react';
 import { ShieldCheck, Loader, Camera, RefreshCw, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 import { LivenessApi } from '../../api/liveness';
-import { cognitoRegion, useMockApi } from '../../utils/env.config';
+import { cognitoRegion } from '../../utils/env.config';
 import { useToast } from '../common/Toast';
 
 // The Rekognition detector (and the Amplify UI / liveness SDK + CSS it pulls in)
@@ -46,24 +46,17 @@ export function LivenessVerification({
     setPhase('preparing');
     try {
       // 1) Ask for camera permission BEFORE creating a session.
-      if (!useMockApi) {
-        if (!navigator.mediaDevices?.getUserMedia) {
-          throw new Error('Camera is not available in this browser.');
-        }
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        stream.getTracks().forEach((t) => t.stop());
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Camera is not available in this browser.');
       }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach((t) => t.stop());
 
       // 2) Create the streaming liveness session.
       const { sessionId: sid } = await LivenessApi.createSession();
       setSessionId(sid);
 
-      if (useMockApi) {
-        // No real camera/stream in dev — jump straight to the submitted state.
-        setTimeout(() => onSubmitted(), 1000);
-      } else {
-        setPhase('streaming');
-      }
+      setPhase('streaming');
     } catch (err) {
       handleStartError(err);
     }
@@ -146,7 +139,7 @@ export function LivenessVerification({
       {phase === 'preparing' && busySpinner('Preparing camera…')}
 
       {/* Live detector (real streaming) — lazily loaded */}
-      {phase === 'streaming' && sessionId && !useMockApi && (
+      {phase === 'streaming' && sessionId && (
         <Suspense fallback={busySpinner('Loading camera…')}>
           <FaceLivenessInner
             sessionId={sessionId}

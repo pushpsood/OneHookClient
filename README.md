@@ -17,15 +17,20 @@ React frontend application for the OneHook platform. Built with Vite, React 19, 
 
 - Node.js >= 20.0.0
 - npm >= 10.0.0
+- **The generated API SDK.** `@onehook/api-client` is a `file:` link into the sibling
+  `OneHookBackend` repo's generated Smithy output. It is a hard requirement — there is deliberately
+  **no stub or mock fallback**, so a missing SDK fails the build loudly instead of silently shipping
+  fake API behaviour:
+
+  ```bash
+  cd ../OneHookBackend/packages/api-models && mvn -q exec:java   # generate
+  cd ../../../OneHookClient && npm install                       # re-link
+  ```
 
 ## Quick Start
 
 ```bash
 # Install dependencies
-npm install
-
-
-# Clean dependencies
 npm install
 
 # Start dev server (port 3000)
@@ -34,9 +39,26 @@ npm run dev
 # Run tests
 npm test
 
+# Type-check
+npm run lint
+
 # Build for production
 npm run build
 ```
+
+## Local Development Setup
+
+**Local development scaffolding is each developer's own responsibility and is not committed to this
+repository.** There is no mock server, no mock scenarios, and no fixture data in the tree. Point the
+app at a real backend by creating your own `.env` (git-ignored — only `.env.example` is tracked):
+
+```bash
+cp .env.example .env   # then fill in the values for the backend you're developing against
+```
+
+Run against a deployed environment, or stand up the backend locally (see `OneHookBackend`'s
+`scripts/local-dev.sh` for LocalStack) — whichever you prefer. Because the choice is personal, keep
+it in your own untracked files; never add it to the repo.
 
 ## Environment Configuration
 
@@ -67,6 +89,107 @@ While it is possible to completely decouple the frontend from Cognito by using a
 3. There are imminent plans to migrate away from AWS Cognito to another Identity Provider.
 
 For this project's current needs, the `.env` approach remains the most efficient and standard practice.
+
+## Engineering Policy: No Test Code in Production (strict)
+
+**Test, mock, and local-development code must never reach a production artifact, and must not be
+committed to this repository.** This is a hard requirement, not a preference.
+
+What this forbids:
+
+| Forbidden | Why |
+|---|---|
+| Mock servers, mock scenarios, fixture data in the shipped tree | They become an alternate, untested code path that can activate in prod via a stray env var |
+| `if (useMockApi) { ... }` style branches inside `src/` | The fake path ships in the bundle; one misconfigured variable silently serves fake data |
+| Stub/fallback modules substituted at build time | A failed SDK/codegen step then produces a build that *looks* healthy but isn't |
+| `import.meta.env.DEV` short-circuits that fake success | Especially dangerous in auth: swallowing a Cognito error and returning "signed in" hides real failures |
+| Committing personal `.env` / LocalStack wiring | Local setup is per-developer; committed copies drift and leak environment details |
+
+What this requires instead:
+
+- **Fail loudly.** Missing prerequisites (e.g. the generated SDK) must break the build with an
+  actionable message — never degrade to a stub.
+- **Real backends for real behaviour.** Develop against a deployed environment or your own local
+  stack; keep that wiring in untracked files.
+- **Tests stay, mocks go.** Unit/integration tests under `src/tests` are *not* shipped (Vitest files
+  are never bundled) and remain first-class. What is banned is test-support code living in the
+  application's runtime path.
+- **Tests must be hermetic.** A committed test must not depend on a developer's local `.env`; stub
+  every variable it reads. (A previously committed env test silently passed only on machines with no
+  local `.env` — exactly the failure mode this rule prevents.)
+
+Anything test-related that must exist locally belongs in your own untracked working files.
+
+### Deployments are gated on tests
+
+`.github/workflows/deploy-frontend.yml` runs a **`verify` job (`npm run lint` + `npm test`) that the
+`deploy` job depends on** (`needs: verify`). Nothing is deployed unless type-checking and the test
+suite pass on the exact commit being deployed, and because the gate is a separate job, a failing
+build never reaches the AWS credential step — a red commit cannot assume the deploy role.
+
+This is deliberately duplicated from `ci.yml` rather than relying on it: `push` and `pull_request`
+are **independent triggers**, so PR checks alone do not gate a direct push to `main` or a manual
+`workflow_dispatch` run.
+
+> **Remaining manual step (GitHub setting, not in this repo):** mark `lint-and-test` a **required
+> status check** for `main` under *Settings → Branches → Branch protection*, so a red PR cannot be
+> merged in the first place. The in-workflow gate above stops a bad deploy; branch protection stops
+> a bad merge.
+
+## Rendering Model & Tier Personalization (SSR tradeoffs)
+
+Today this app is a **client-rendered SPA**: Vite builds static assets, S3 serves them, CloudFront
+caches them. There is no server-side rendering tier and no edge compute in the request path.
+
+### How the subscription tier is resolved (implemented)
+
+The tier is **server-authoritative**. It is read from the State service (`GET /state/{userId}`),
+which owns the connection state machine and the entitlement, and published to the Zustand store as
+`userState`; the UI derives `isPremium` from it.
+
+It is deliberately **not** read from the profile: the Profile service intentionally omits
+`subscriptionTier` from its read model, so reading it off a profile silently yields `undefined` —
+which previously made *every* user render as `PREMIUM` and hid the upgrade CTA from free users.
+
+`isPremium` **fails closed**: until the snapshot loads the UI shows `BASIC`, so it never briefly
+promises premium.
+
+> **The UI is not a security boundary.** A user can edit their own browser and reveal a premium
+> control; clicking it still fails, because entitlement is enforced independently server-side (State
+> enforces capacity in a DynamoDB condition expression, Chat rejects premium mutations for `FREE`
+> callers, Profile derives the tier from the verified JWT claim and ignores any tier in a request
+> body). Tier in the client is a **rendering input only**.
+
+### Options considered for server-side personalization
+
+| | What it does | Cost | First paint |
+|---|---|---|---|
+| **A — Edge tier-routing** | Lambda@Edge verifies the JWT and serves one of ~3 pre-rendered per-tier HTML variants; CDN cache key includes a coarse tier cookie | ~3–5 days | Already correct |
+| **B — SSR/BFF on Lambda** | Real per-user server rendering behind CloudFront; httpOnly session cookie; OAuth code exchange | ~1.5–3 weeks | Already correct, per-user |
+| **C — Server-authoritative bootstrap** ✅ | Keep the SPA; render from the tier the server reports | ~1 day | Generic, then corrects |
+
+**We chose C.** Rationale: the goal was correctness of the rendered value, and enforcement was
+already server-side — so A and B would have added infrastructure without adding security. A/B only
+become worthwhile for first-paint/SEO reasons (no flicker, correct HTML for crawlers).
+
+### Prerequisites if A or B is ever adopted
+
+Real blockers found while scoping; they apply regardless of which option:
+
+1. **No Cognito hosted-UI domain exists**, and the app client's callback URL is still the CDK
+   placeholder (`https://example.com`). The OAuth *code* flow this client already configures cannot
+   work in deployed environments until a `UserPoolDomain` and real callback/logout URLs are added —
+   social sign-in is affected today.
+2. **Tokens are invisible to the server.** Amplify keeps them in browser storage, so an origin never
+   receives them. Server-side tier reading needs an httpOnly session cookie (a BFF), not
+   JS-readable cookie storage.
+3. **CloudFront would leak personalized HTML.** The cache policy ignores cookies with a 1-day TTL, so
+   personalized HTML would be served across users. Any per-tier rendering must add the tier to the
+   cache key (coarse buckets) or mark authenticated HTML `private, no-store`.
+4. **Drop the `implicit` OAuth flow** (currently enabled by CDK default) and keep `code` only.
+5. **Staleness**: the JWT claim is only as fresh as the token (~1h). After a purchase, force a token
+   refresh and re-read `GET /state/{userId}` — `POST /state/upgrade` already returns the freshly
+   reconciled state for this purpose.
 
 ## Deployment
 

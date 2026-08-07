@@ -1,9 +1,15 @@
 import { create } from 'zustand';
-import { DiscoveryCandidate, UserProfile, Match } from '../types';
+import { DiscoveryCandidate, UserProfile, Match, UserStateSnapshot, SubscriptionTier } from '../types';
 
 interface AppState {
   // User state
   currentUser: UserProfile | null;
+  /**
+   * Authoritative connection state + entitlement from the State service
+   * (`GET /state/{userId}`). This — not `currentUser` — is the source of truth for the
+   * subscription tier, because the Profile read model intentionally omits it.
+   */
+  userState: UserStateSnapshot | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 
@@ -20,6 +26,7 @@ interface AppState {
 
   // Actions
   setCurrentUser: (user: UserProfile | null) => void;
+  setUserState: (state: UserStateSnapshot | null) => void;
   setAuthenticated: (isAuth: boolean) => void;
   setLoading: (loading: boolean) => void;
   setMatches: (matches: Match[]) => void;
@@ -34,6 +41,7 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   // Initial state
   currentUser: null,
+  userState: null,
   isAuthenticated: false,
   isLoading: false,
   matches: [],
@@ -44,6 +52,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   // Actions
   setCurrentUser: (user) => set({ currentUser: user }),
+
+  setUserState: (userState) => set({ userState }),
 
   setAuthenticated: (isAuth) => set({ isAuthenticated: isAuth }),
 
@@ -67,6 +77,7 @@ export const useAppStore = create<AppState>((set) => ({
     localStorage.removeItem('accessToken');
     set({
       currentUser: null,
+      userState: null,
       isAuthenticated: false,
       matches: [],
       activeMatch: null,
@@ -76,3 +87,15 @@ export const useAppStore = create<AppState>((set) => ({
     });
   },
 }));
+
+/**
+ * Whether the caller is on a paid tier, derived from the authoritative State snapshot.
+ *
+ * <p>Returns `false` until the snapshot has loaded, so the UI fails closed (shows BASIC) rather
+ * than briefly promising premium. This is a presentation decision only — the server independently
+ * enforces entitlement on every premium operation.</p>
+ */
+export function isPremium(state: Pick<AppState, 'userState'>): boolean {
+  const tier = state.userState?.subscriptionTier;
+  return tier != null && tier !== SubscriptionTier.FREE;
+}

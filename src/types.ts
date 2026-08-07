@@ -35,6 +35,27 @@ export enum SubscriptionTier {
 }
 
 /**
+ * Authoritative, server-owned view of a user's connection state and entitlement.
+ *
+ * <p>This is the response of `GET /state/{userId}` from the State service, which is the single
+ * source of truth for the subscription tier and the connection state machine. It is deliberately
+ * NOT derived from the profile: the Profile service intentionally omits `subscriptionTier` from its
+ * read model (see ProfileDtoMapper), so reading the tier off a profile always yields `undefined`.</p>
+ *
+ * <p>Treat these values as a <strong>rendering input only</strong>. Entitlement is enforced
+ * server-side (DynamoDB capacity conditions, premium chat resolvers, the verified JWT claim), so a
+ * tampered client can reveal a premium control but cannot use it.</p>
+ */
+export type UserStateSnapshot = {
+  userId: string;
+  /** ONBOARDING | AVAILABLE | HOOKED */
+  state: UserState;
+  activeConnections: number;
+  matchIds: string[];
+  subscriptionTier: SubscriptionTier;
+};
+
+/**
  * The full user model as understood by the UI. It is built on top of the
  * backend {@link ProfileResponse} contract and augmented with client-only view
  * concerns (photos, location, live connection state) that are hydrated from the
@@ -46,10 +67,14 @@ export type UserProfile = ProfileResponse & {
   birthDate?: string;
   photos: string[];
   location: { lat: number; lng: number; geohash: string };
-  currentState: UserState;
-  currentMatches: string[];
-  maxConnections: number;
-  activeConnections: number;
+  /**
+   * Connection-state fields below are owned by the State service, not the profile read model.
+   * They are optional here because a profile response never carries them — read them from
+   * {@link UserStateSnapshot} (see the `userState` store slice) instead.
+   */
+  currentState?: UserState;
+  currentMatches?: string[];
+  activeConnections?: number;
   inviteCode?: string;
 };
 

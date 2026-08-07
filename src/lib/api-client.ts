@@ -1,4 +1,5 @@
-import { apiBaseUrl, useMockApi, requestTimeoutMs } from '../utils/env.config';
+import { apiBaseUrl, requestTimeoutMs } from '../utils/env.config';
+import type { UserStateSnapshot } from '../types';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
@@ -99,10 +100,6 @@ export async function apiRequest<T>(endpoint: string, options: RequestConfig = {
   const token = await getAuthToken();
   let url = `${apiBaseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
-  if (useMockApi) {
-    url = `/api/mock${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-  }
-
   const headers = mergeHeaders({ 'Content-Type': 'application/json' }, fetchOptions.headers);
 
   if (token) {
@@ -194,10 +191,14 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return response.text() as unknown as T;
 }
 
-export async function upgradeSubscription(userId: string, tier: string): Promise<{ status: string }> {
-  return apiRequest<{ status: string }>('/state/upgrade', {
+/**
+ * Triggers a synchronous entitlement reconciliation and returns the caller's freshly reconciled
+ * state. Deliberately body-less: the caller is taken from the verified JWT and the tier is resolved
+ * from the billing source of truth, so a client can request a re-check but never assert the outcome.
+ */
+export async function upgradeSubscription(): Promise<UserStateSnapshot> {
+  return apiRequest<UserStateSnapshot>('/state/upgrade', {
     method: 'POST',
-    body: JSON.stringify({ userId, subscriptionTier: tier }),
   });
 }
 

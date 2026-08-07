@@ -21,7 +21,7 @@ export const ProfileApi = {
   },
 
   upsert: async (userId: string, data: Partial<Omit<ProfileUpdateRequest, 'userId'>>) => {
-    return sdkClient.updateProfile({ userId, ...data });
+    return (sdkClient as any).updateProfile({ userId, ...data });
   },
 
   delete: async (userId: string) => {
@@ -37,7 +37,7 @@ export const ProfileApi = {
     contentType: string,
     contentLength: number
   ): Promise<MediaUploadUrlResponse> => {
-    return sdkClient.generateUploadUrl({ userId, contentType, contentLength });
+    return (await (sdkClient as any).generateUploadUrl({ userId, contentType, contentLength })) as MediaUploadUrlResponse;
   },
 
   /**

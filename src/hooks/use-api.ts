@@ -7,6 +7,7 @@ import {
   DiscoverResponse,
   UserPreferences,
   UserProfile,
+  UserStateSnapshot,
 } from '../types';
 import { PreferencesApi } from '../api/preferences';
 import { StateApi } from '../api/state';
@@ -71,6 +72,7 @@ export function useAsync<T>(fn: () => Promise<T>, dependencies: unknown[] = []) 
       const result = await fn();
       setData(result);
     } catch (err) {
+      console.error('useAsync error:', err);
       setError(err as ApiError);
     } finally {
       setLoading(false);
@@ -102,26 +104,41 @@ export function useProfile(userId?: string) {
   return { profile: data, loading, error, refetch };
 }
 
-export function useMatches() {
-  const { currentUser, setMatches } = useAppStore();
+/**
+ * Fetches the authoritative user state (`GET /state/{userId}`) and publishes it to the store.
+ *
+ * <p>This is the single place the UI learns the subscription tier and connection state. It is
+ * deliberately sourced from the State service rather than the profile, because the Profile read
+ * model intentionally omits `subscriptionTier` — reading it off a profile silently yields
+ * `undefined`, which previously made every user look PREMIUM.</p>
+ *
+ * <p>The same response also carries `matchIds`, so matches are derived here instead of issuing a
+ * second identical request.</p>
+ */
+export function useUserState() {
+  const { currentUser, setUserState, setMatches } = useAppStore();
   const uid = currentUser?.id || 'me';
 
-  const { data, loading, error, refetch } = useAsync(
-    async () => {
-      const state = await StateApi.getUserState(uid);
-      // Map matchIds to a minimal Match[] shape expected by the UI.
-      return { matches: (state.matchIds ?? []).map((id: string) => ({ matchId: id })) };
-    },
+  const { data, loading, error, refetch } = useAsync<UserStateSnapshot>(
+    () => StateApi.getUserState(uid),
     [uid]
   );
 
   useEffect(() => {
-    if (data?.matches) {
-      setMatches(data.matches as never);
-    }
-  }, [data, setMatches]);
+    if (!data) return;
+    setUserState(data);
+    // Map matchIds to the minimal Match[] shape the UI expects.
+    setMatches((data.matchIds ?? []).map((id: string) => ({ matchId: id })) as never);
+  }, [data, setUserState, setMatches]);
 
-  return { matches: data?.matches || [], loading, error, refetch };
+  return { userState: data, loading, error, refetch };
+}
+
+export function useMatches() {
+  const { matches } = useAppStore();
+  const { loading, error, refetch } = useUserState();
+
+  return { matches, loading, error, refetch };
 }
 
 export function useCandidates() {
@@ -441,7 +458,7 @@ export function useCompleteOnboarding() {
     try {
       setLoading(true);
       setError(null);
-      return await StateApi.completeOnboarding(currentUser.id);
+      return await StateApi.completeOnboarding();
     } catch (err) {
       setError(err as ApiError);
       throw err;

@@ -3,11 +3,10 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { rm } from 'fs/promises';
-import { existsSync, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { createRequire } from 'module';
 import { execSync } from 'child_process';
 import Sitemap from 'vite-plugin-sitemap';
-import { mockApiPlugin } from './vite-mock-plugin';
 
 const distDir = resolve(__dirname, 'dist');
 
@@ -30,18 +29,22 @@ const ensureOutDirPlugin = (): Plugin => ({
 });
 
 /**
- * `@onehook/api-client` is a `file:` link into the sibling OneHookBackend repo's
- * generated Smithy output, so it is absent in CI and in fresh clones. Detect it
- * and fall back to a local stub (see src/api/sdk-client.stub.ts) so the static
- * site still builds; when the real SDK is present nothing changes.
+ * `@onehook/api-client` is a `file:` link into the sibling OneHookBackend repo's generated Smithy
+ * output. It is a HARD requirement: there is deliberately no stub/mock fallback, because a build
+ * that silently substitutes fake API behaviour can reach production looking healthy. Fail loudly
+ * instead, with the command needed to generate it.
  */
-function resolveApiClientAlias(): string | null {
+function assertApiClientAvailable(): void {
   try {
     createRequire(import.meta.url).resolve('@onehook/api-client');
-    return null; // real SDK available — use it
   } catch {
-    const stub = resolve(__dirname, 'src/api/sdk-client.stub.ts');
-    return existsSync(stub) ? stub : null;
+    throw new Error(
+      '[onehook] @onehook/api-client is not available.\n' +
+        'Generate the SDK from the API contract before building:\n' +
+        '  cd ../OneHookBackend/packages/api-models && mvn -q exec:java\n' +
+        '  npm install   # re-links the file: dependency\n' +
+        'No stub fallback exists by design — see "No test code in production" in README.md.'
+    );
   }
 }
 
@@ -70,25 +73,19 @@ const leanMediaPrunePlugin = (): Plugin => ({
 });
 
 export default defineConfig(({ mode }) => {
-  const apiClientAlias = resolveApiClientAlias();
-  if (apiClientAlias) {
-    console.warn(
-      '[onehook] @onehook/api-client not found — falling back to src/api/sdk-client.stub.ts. ' +
-        'Backend operations are disabled in this build.'
-    );
-  }
+  assertApiClientAvailable();
 
   let appsyncApiId = '';
   if (mode === 'development') {
     try {
-      const output = execSync('AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test aws --endpoint-url=http://localhost:4566 --region us-east-1 appsync list-graphql-apis', { encoding: 'utf-8', stdio: 'pipe' });
+      const output = execSync('AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test aws --endpoint-url=http://localhost:4566 --region us-east-1 appsync list-graphql-apis', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] });
       const apis = JSON.parse(output);
       const chatApi = apis.graphqlApis?.find((api: any) => api.name === 'OneHook-Chat-local-ChatApi');
       if (chatApi) {
         appsyncApiId = chatApi.apiId;
       }
-    } catch (e) {
-      console.warn('Could not fetch AppSync API ID from LocalStack', e);
+    } catch {
+      // AppSync disabled or unavailable in LocalStack community edition
     }
   }
 
@@ -100,7 +97,6 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       ensureOutDirPlugin(),
       leanMediaPrunePlugin(),
-      mockApiPlugin(),
       Sitemap({
         hostname: 'https://onehook.club',
         dynamicRoutes: [
@@ -166,8 +162,7 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       // Pre-bundle the linked SDK (and its @smithy deps) so dev doesn't serve
       // dozens of unbundled ESM files over /@fs, which made first load very slow.
-      // Skipped when the SDK is absent (stub build) — there is nothing to pre-bundle.
-      include: apiClientAlias ? [] : ['@onehook/api-client'],
+      include: ['@onehook/api-client'],
     },
     build: {
       assetsInlineLimit: 4096,
@@ -185,10 +180,6 @@ export default defineConfig(({ mode }) => {
       alias: [
         { find: '@', replacement: resolve(__dirname, 'src') },
         { find: /@onehook\/api-client\/dist-es\/runtimeConfig$/, replacement: '@onehook/api-client/dist-es/runtimeConfig.browser' },
-        // Only present when the generated SDK is missing (CI / fresh clone).
-        ...(apiClientAlias
-          ? [{ find: /^@onehook\/api-client$/, replacement: apiClientAlias }]
-          : []),
       ],
     },
     define: {

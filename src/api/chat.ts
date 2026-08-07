@@ -1,6 +1,5 @@
 import { generateClient } from 'aws-amplify/api';
 import { sdkClient } from './sdk-client';
-import { useMockApi } from '../utils/env.config';
 
 /**
  * Chat service client.
@@ -155,7 +154,6 @@ async function graphql<T>(query: string, variables: Record<string, unknown>): Pr
  */
 export const ChatMessagingApi = {
   getMessages: async (matchId: string, after?: number): Promise<ChatMessage[]> => {
-    if (useMockApi) return [];
     const data = await graphql<{ getMessages: (ChatMessage | null)[] | null }>(GET_MESSAGES, {
       matchId,
       after,
@@ -168,16 +166,6 @@ export const ChatMessagingApi = {
     senderId: string,
     ciphertext: string
   ): Promise<ChatMessage> => {
-    if (useMockApi) {
-      return {
-        messageId: `mock_${Date.now()}`,
-        matchId,
-        senderId,
-        ciphertext,
-        timestamp: Date.now(),
-        status: 'SENT',
-      };
-    }
     const data = await graphql<{ sendMessage: ChatMessage }>(SEND_MESSAGE, {
       matchId,
       senderId,
@@ -193,7 +181,6 @@ export const ChatMessagingApi = {
     messageId: string,
     userId: string
   ): Promise<MessageReceipt | null> => {
-    if (useMockApi) return null;
     const data = await graphql<{ markAsDelivered: MessageReceipt }>(MARK_AS_DELIVERED, {
       matchId,
       timestamp,
@@ -210,7 +197,6 @@ export const ChatMessagingApi = {
     messageId: string,
     userId: string
   ): Promise<MessageReceipt | null> => {
-    if (useMockApi) return null;
     const data = await graphql<{ markAsRead: MessageReceipt }>(MARK_AS_READ, {
       matchId,
       timestamp,
@@ -222,7 +208,6 @@ export const ChatMessagingApi = {
 
   /** PREMIUM only — deletes a single message for everyone. */
   deleteMessage: async (matchId: string, timestamp: number): Promise<DeletedMessage | null> => {
-    if (useMockApi) return null;
     const data = await graphql<{ deleteMessage: DeletedMessage }>(DELETE_MESSAGE, {
       matchId,
       timestamp,
@@ -232,7 +217,6 @@ export const ChatMessagingApi = {
 
   /** Subscribe to new messages for a match. Returns an unsubscribe function. */
   subscribeToNewMessages: (matchId: string, onMessage: (m: ChatMessage) => void): (() => void) => {
-    if (useMockApi) return () => {};
     const sub = (
       client().graphql({ query: ON_NEW_MESSAGE, variables: { matchId } }) as unknown as {
         subscribe: (o: { next: (v: { data?: { onNewMessage?: ChatMessage } }) => void; error: (e: unknown) => void }) => { unsubscribe: () => void };
@@ -251,7 +235,6 @@ export const ChatMessagingApi = {
     matchId: string,
     onUpdate: (r: MessageReceipt) => void
   ): (() => void) => {
-    if (useMockApi) return () => {};
     const sub = (
       client().graphql({ query: ON_MESSAGE_STATUS_UPDATE, variables: { matchId } }) as unknown as {
         subscribe: (o: { next: (v: { data?: { onMessageStatusUpdate?: MessageReceipt } }) => void; error: (e: unknown) => void }) => { unsubscribe: () => void };
@@ -270,7 +253,6 @@ export const ChatMessagingApi = {
     matchId: string,
     onDelete: (d: DeletedMessage) => void
   ): (() => void) => {
-    if (useMockApi) return () => {};
     const sub = (
       client().graphql({ query: ON_MESSAGE_DELETED, variables: { matchId } }) as unknown as {
         subscribe: (o: { next: (v: { data?: { onMessageDeleted?: DeletedMessage } }) => void; error: (e: unknown) => void }) => { unsubscribe: () => void };
@@ -295,7 +277,7 @@ export const ChatApi = {
     identityKey: string,
     signedPreKey: string,
     oneTimePreKeys: string[]
-  ) => sdkClient.uploadPreKeys({ userId, identityKey, signedPreKey, oneTimePreKeys }),
+  ) => (sdkClient as any).uploadPreKeys({ userId, identityKey, signedPreKey, oneTimePreKeys }),
 
   /**
    * Claim a pre-key bundle for a target user to start an E2EE session. Requires
