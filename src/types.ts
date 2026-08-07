@@ -1,16 +1,7 @@
-// TEMPORARY STUB: @pushpsood/api-client codegen is not built for static launch.
-// The public site (Landing, Careers, Contact, etc.) does not use these types.
-// Auth/app routes will gracefully degrade when backend is unavailable.
-export type ProfileResponse = Record<string, any>;
-export type CandidateDto = Record<string, any>;
-export type DiscoverResponse = Record<string, any>;
-export type UserPreferencesResponse = Record<string, any>;
-export type UserResponse = Record<string, any>;
-export type MatchRecord = Record<string, any>;
-export type UserStateResponse = Record<string, any>;
-
-/*
-import {
+// ── Canonical DTO re-exports from the generated API client ──────────────────
+// onehook-api-client is the single source of truth. Do NOT duplicate these
+// types locally — if a shape is wrong, fix it in the backend codegen.
+export type {
   ProfileResponse,
   CandidateDto,
   DiscoverResponse,
@@ -18,8 +9,14 @@ import {
   UserResponse,
   MatchRecord,
   UserStateResponse,
-} from '@pushpsood/api-client';
-*/
+} from 'onehook-api-client';
+
+import type {
+  ProfileResponse,
+  MatchRecord,
+  UserPreferencesResponse,
+  CandidateDto,
+} from 'onehook-api-client';
 
 export enum UserState {
   ONBOARDING = 'ONBOARDING',
@@ -98,8 +95,7 @@ export type RankedCandidate = CandidateDto & {
   score?: number;
 };
 
-// REMOVED: export type { DiscoverResponse, UserResponse };
-// These are now stubbed at the top of the file
+
 
 /**
  * Client-facing matching preferences. The backend contract only supports the
@@ -110,43 +106,21 @@ export type RankedCandidate = CandidateDto & {
 export type UserPreferences = UserPreferencesResponse;
 
 export type Match = MatchRecord;
-// REMOVED: export type { UserStateResponse };
-// This is now stubbed at the top of the file
 
-export enum MessageStatus {
-  SENDING = 'SENDING',
-  SENT = 'SENT',
-  DELIVERED = 'DELIVERED',
-  READ = 'READ',
-  FAILED = 'FAILED',
-}
 
-export interface ChatMessageDTO {
-  messageId: string;
-  senderId: string;
-  ciphertext: string;
-  timestamp: number;
-  status: MessageStatus | 'SENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
-  deliveredAt?: number;
-  readAt?: number;
-}
+// ── Canonical GraphQL type re-exports ────────────────────────────────────────
+// Chat message types come from the generated GraphQL codegen.
+export {
+  MessageStatus,
+  type Message,
+  type MessageReceipt,
+  type DeletedMessage,
+} from 'onehook-api-client/graphql';
 
-export interface ChatHistoryResponse {
-  messages: ChatMessageDTO[];
-}
+import type { Message } from 'onehook-api-client/graphql';
 
-export interface Message {
-  id: string;
-  matchId: string;
-  senderId: string;
-  ciphertext: string;
-  timestamp: number;
-  expiresAt: number;
-  status: MessageStatus;
-  deliveredAt?: number;
-  readAt?: number;
-  readBy?: string[];
-}
+/** Backward-compat alias — consumers should migrate to `Message`. */
+export type ChatMessageDTO = Message;
 
 export interface Invite {
   code: string;

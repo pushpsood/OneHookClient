@@ -10,6 +10,7 @@ import {
   ChatMessageDTO,
   UserPreferences,
 } from './types';
+import { MessageStatus } from 'onehook-api-client/graphql';
 import { useAppStore, isPremium } from './store/app-store';
 import {
   useProfile,
@@ -701,15 +702,15 @@ function ChatView({
     if (message.senderId !== 'me') return null;
 
     switch (message.status) {
-      case 'SENDING':
+      case MessageStatus.Sending:
         return <span className="text-[8px] opacity-30">⏱</span>;
-      case 'SENT':
+      case MessageStatus.Sent:
         return <span className="text-[8px] opacity-50">✓</span>;
-      case 'DELIVERED':
+      case MessageStatus.Delivered:
         return <span className="text-[8px] opacity-70">✓✓</span>;
-      case 'READ':
+      case MessageStatus.Read:
         return <span className="text-[8px] text-blue-500">✓✓</span>;
-      case 'FAILED':
+      case MessageStatus.Failed:
         return <span className="text-[8px] text-red-500">✗</span>;
       default:
         return null;

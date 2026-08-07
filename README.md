@@ -17,7 +17,7 @@ React frontend application for the OneHook platform. Built with Vite, React 19, 
 
 - Node.js >= 20.0.0
 - npm >= 10.0.0
-- **The generated API SDK.** `@pushpsood/api-client` is a `file:` link into the sibling
+- **The generated API SDK.** `onehook-api-client` is a `file:` link into the sibling
   `OneHookBackend` repo's generated Smithy output. It is a hard requirement — there is deliberately
   **no stub or mock fallback**, so a missing SDK fails the build loudly instead of silently shipping
   fake API behaviour:

@@ -4,11 +4,12 @@ import { useAppStore } from '../store/app-store';
 import {
   ChatMessageDTO,
   DiscoveryCandidate,
-  DiscoverResponse,
   UserPreferences,
   UserProfile,
   UserStateSnapshot,
 } from '../types';
+import type { DiscoverResponse } from 'onehook-api-client';
+import { MessageStatus } from 'onehook-api-client/graphql';
 import { PreferencesApi } from '../api/preferences';
 import { StateApi } from '../api/state';
 import { ProfileApi } from '../api/profile';
@@ -330,10 +331,11 @@ export function useChatMessages(matchId: string, recipientId?: string) {
 
       const tempMessage: ChatMessageDTO = {
         messageId,
+        matchId,
         senderId: 'me',
         ciphertext: plaintext,
         timestamp,
-        status: 'SENDING',
+        status: MessageStatus.Sending,
       };
       setMessages((prev) => [...prev, tempMessage]);
 
@@ -342,14 +344,14 @@ export function useChatMessages(matchId: string, recipientId?: string) {
         setMessages((prev) =>
           prev.map((m) =>
             m.messageId === messageId
-              ? { ...m, messageId: sent.messageId, timestamp: sent.timestamp, status: 'SENT' }
+              ? { ...m, messageId: sent.messageId, timestamp: sent.timestamp, status: MessageStatus.Sent }
               : m
           )
         );
-        return { messageId: sent.messageId, timestamp: sent.timestamp, status: 'SENT' as const };
+        return { messageId: sent.messageId, timestamp: sent.timestamp, status: MessageStatus.Sent };
       } catch (err) {
         setMessages((prev) =>
-          prev.map((m) => (m.messageId === messageId ? { ...m, status: 'FAILED' } : m))
+          prev.map((m) => (m.messageId === messageId ? { ...m, status: MessageStatus.Failed } : m))
         );
         setError(err as ApiError);
         throw err;
@@ -366,7 +368,7 @@ export function useChatMessages(matchId: string, recipientId?: string) {
         await ChatMessagingApi.markAsDelivered(matchId, message.timestamp, messageId, myId || 'me');
         setMessages((prev) =>
           prev.map((m) =>
-            m.messageId === messageId ? { ...m, status: 'DELIVERED', deliveredAt: Date.now() } : m
+            m.messageId === messageId ? { ...m, status: MessageStatus.Delivered, deliveredAt: Date.now() } : m
           )
         );
       } catch (err) {
@@ -385,7 +387,7 @@ export function useChatMessages(matchId: string, recipientId?: string) {
         await ChatMessagingApi.markAsRead(matchId, message.timestamp, messageId, myId || 'me');
         setMessages((prev) =>
           prev.map((m) =>
-            m.messageId === messageId ? { ...m, status: 'READ', readAt: Date.now() } : m
+            m.messageId === messageId ? { ...m, status: MessageStatus.Read, readAt: Date.now() } : m
           )
         );
       } catch (err) {

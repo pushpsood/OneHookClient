@@ -1,5 +1,12 @@
 import { generateClient } from 'aws-amplify/api';
 import { sdkClient } from './sdk-client';
+import type {
+  Message as ChatMessage,
+  MessageReceipt,
+  DeletedMessage,
+} from 'onehook-api-client/graphql';
+
+export type { ChatMessage, MessageReceipt, DeletedMessage };
 
 /**
  * Chat service client.
@@ -16,29 +23,6 @@ import { sdkClient } from './sdk-client';
  *      POST   /chat/prekeys/{userId}?matchId=   -> claim a bundle (consumes an OTK)
  *      DELETE /chat/match/{matchId}             -> hard-delete a match's messages
  */
-
-export interface ChatMessage {
-  messageId: string;
-  matchId: string;
-  senderId: string;
-  ciphertext: string;
-  timestamp: number;
-  status: 'SENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
-  deliveredAt?: number | null;
-  readAt?: number | null;
-}
-
-export interface MessageReceipt {
-  messageId: string;
-  status: string;
-  timestamp: number;
-}
-
-export interface DeletedMessage {
-  matchId: string;
-  messageId: string;
-  timestamp: number;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GraphQL documents (AppSync schema: OneHookBackend/packages/api-models/model/schema.graphql)

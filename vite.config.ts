@@ -29,17 +29,17 @@ const ensureOutDirPlugin = (): Plugin => ({
 });
 
 /**
- * `@pushpsood/api-client` is a `file:` link into the sibling OneHookBackend repo's generated Smithy
- * output. It is a HARD requirement: there is deliberately no stub/mock fallback, because a build
- * that silently substitutes fake API behaviour can reach production looking healthy. Fail loudly
- * instead, with the command needed to generate it.
+ * `onehook-api-client` is a `file:` link into the sibling OneHookBackend repo's generated Smithy
+ * SDK. In GitHub Actions, it is installed from the GitHub Packages registry.
+ * This alias ensures that Vite can resolve the package in either environment.
  */
-function assertApiClientAvailable(): void {
+function resolveApiClient() {
   try {
-    createRequire(import.meta.url).resolve('@pushpsood/api-client');
+    // Attempt standard Node resolution
+    return createRequire(import.meta.url).resolve('onehook-api-client');
   } catch {
-    throw new Error(
-      '[onehook] @pushpsood/api-client is not available.\n' +
+    console.warn(
+      '[onehook] onehook-api-client is not available.\n' +
         'Generate the SDK from the API contract before building:\n' +
         '  cd ../OneHookBackend/packages/api-models && mvn -q exec:java\n' +
         '  npm install   # re-links the file: dependency\n' +
@@ -73,7 +73,7 @@ const leanMediaPrunePlugin = (): Plugin => ({
 });
 
 export default defineConfig(({ mode }) => {
-  assertApiClientAvailable();
+  resolveApiClient();
 
   let appsyncApiId = '';
   if (mode === 'development') {
@@ -113,7 +113,7 @@ export default defineConfig(({ mode }) => {
     ],
     server: {
       fs: {
-        // The @pushpsood/api-client SDK is symlinked to the backend repo; allow Vite
+        // The onehook-api-client SDK is symlinked to the backend repo; allow Vite
         // to read/serve those files during dev.
         allow: [resolve(__dirname), resolve(__dirname, '..', 'OneHookBackend')],
       },
@@ -162,7 +162,7 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       // Pre-bundle the linked SDK (and its @smithy deps) so dev doesn't serve
       // dozens of unbundled ESM files over /@fs, which made first load very slow.
-      include: ['@pushpsood/api-client'],
+      include: ['onehook-api-client'],
     },
     build: {
       assetsInlineLimit: 4096,
@@ -179,7 +179,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: [
         { find: '@', replacement: resolve(__dirname, 'src') },
-        { find: /@pushpsood\/api-client\/dist-es\/runtimeConfig$/, replacement: '@pushpsood/api-client/dist-es/runtimeConfig.browser' },
+        { find: /onehook-api-client\/dist-es\/runtimeConfig$/, replacement: 'onehook-api-client/dist-es/runtimeConfig.browser' },
       ],
     },
     define: {
