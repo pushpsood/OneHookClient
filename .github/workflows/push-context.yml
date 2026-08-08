@@ -5,8 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'src/**'
-      - 'infra/**'
+      - 'CRUX.md'
       - '.github/workflows/push-context.yml'
   workflow_dispatch:
 
@@ -29,20 +28,17 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID_CLIENT }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_CLIENT }}
 
-      - name: Zip and Upload Context
+      - name: Upload CRUX.md
         run: |
-          echo "Packaging source code into context text file..."
-          find src infra -name "*.ts" -o -name "*.tsx" -exec cat {} + > onehookclient-context.txt
-          
           echo "Finding Azure Storage Account..."
           # Fetch the storage account dynamically from the chatbot resource group
           STORAGE_ACCOUNT=$(az storage account list --resource-group onehook-chatbot-rg --query "[0].name" -o tsv)
           
-          echo "Uploading to Azure Blob Storage ($STORAGE_ACCOUNT)..."
+          echo "Uploading CRUX.md to Azure Blob Storage ($STORAGE_ACCOUNT)..."
           az storage blob upload \
             --account-name $STORAGE_ACCOUNT \
             --container-name codecontext \
-            --name onehookclient-context.txt \
-            --file onehookclient-context.txt \
+            --name CRUX.md \
+            --file CRUX.md \
             --auth-mode login \
             --overwrite

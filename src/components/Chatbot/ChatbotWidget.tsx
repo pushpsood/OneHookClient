@@ -169,7 +169,7 @@ export const ChatbotWidget: React.FC = () => {
       {isOpen && (
         <div className="chatbot-window bg-white/95 backdrop-blur-md shadow-2xl rounded-2xl overflow-hidden flex flex-row">
           {/* Chat Side */}
-          <div className="flex flex-col w-[350px] border-r border-gray-200">
+          <div className="flex flex-col w-[350px]">
             <div className="bg-pink-600 text-white p-3 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Mascot mood={mood} className="w-8 h-8" />
@@ -226,28 +226,6 @@ export const ChatbotWidget: React.FC = () => {
                 <button onClick={handleSend} className="bg-pink-600 text-white rounded-full px-3 text-sm font-bold hover:bg-pink-700">Send</button>
               </div>
             )}
-          </div>
-
-          {/* Analytics Side */}
-          <div className="hidden sm:flex flex-col w-[250px] bg-gray-50 p-4">
-            <h3 className="font-bold text-gray-700 mb-4 border-b pb-2 text-sm">Relevant Analytics</h3>
-            <div className="flex flex-col gap-4">
-              <div className="bg-white p-3 rounded shadow-sm border border-gray-100">
-                <div className="text-xs text-gray-500">Active Onboardings</div>
-                <div className="text-xl font-bold text-pink-600">1,204</div>
-              </div>
-              <div className="bg-white p-3 rounded shadow-sm border border-gray-100">
-                <div className="text-xs text-gray-500">Platform Context Hit Rate</div>
-                <div className="text-xl font-bold text-pink-600">94.2%</div>
-              </div>
-              <div className="bg-white p-3 rounded shadow-sm border border-gray-100">
-                <div className="text-xs text-gray-500">Client Integrations</div>
-                <div className="text-xl font-bold text-pink-600">85 Active</div>
-              </div>
-            </div>
-            <div className="mt-auto pt-4 text-xs text-gray-400 text-center">
-              Powered by OneHook Intelligence
-            </div>
           </div>
         </div>
       )}
