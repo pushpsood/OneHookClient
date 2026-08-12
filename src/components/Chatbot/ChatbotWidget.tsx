@@ -47,6 +47,9 @@ export const ChatbotWidget: React.FC = () => {
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('chatbotToggle', { detail: isOpen }));
+    if (!isOpen) {
+      setIsFullScreen(false);
+    }
   }, [isOpen]);
 
   useEffect(() => {
@@ -130,7 +133,7 @@ export const ChatbotWidget: React.FC = () => {
       {!isOpen && (
         <div className="chatbot-trigger" onClick={() => setIsOpen(true)}>
           <div className="interactive-text bg-white text-black text-xs font-bold px-3 py-1 rounded-full shadow-lg absolute -top-4 left-1/2 whitespace-nowrap animate-float-thought pointer-events-none z-10">
-            {isInPageMascotVisible ? "He painted the wall" : "Talk to our mascot!"}
+            {isInPageMascotVisible ? "He painted the wall" : "Talk to Mr.OneHook!"}
           </div>
           <div className={`transition-all duration-300 ${isOverDark ? 'drop-shadow-[0_15px_15px_rgba(255,255,255,0.4)]' : 'drop-shadow-2xl'}`}>
             <Mascot mood={mood} lookingUpLeft={isInPageMascotVisible} className="w-24 h-24" />

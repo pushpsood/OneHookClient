@@ -714,7 +714,7 @@ export function Landing() {
                     onClick={() => scrollToSection('mascot')}
                     className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
                   >
-                    Mascot
+                    Mr.OneHook
                   </button>
                   <button
                     onClick={() => scrollToSection('get-app')}
@@ -740,10 +740,10 @@ export function Landing() {
                 How it works
               </button>
               <button
-                onClick={() => scrollToSection('mascot')}
+                onClick={() => scrollToSection('under-the-hood')}
                 className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity"
               >
-                Mascot
+                Mr.OneHook
               </button>
               <button
                 onClick={() => scrollToSection('get-app')}
@@ -1052,7 +1052,10 @@ export function Landing() {
                   'A countdown timer just to say hi',
                   'Pay to unblur who already likes you',
                 ].map((item) => (
-                  <li key={item} className="flex items-center md:flex-row-reverse gap-3 text-lg opacity-50">
+                  <li
+                    key={item}
+                    className="flex items-center md:flex-row-reverse gap-3 text-lg opacity-50"
+                  >
                     <span className="inline-flex w-6 h-6 rounded-full border border-border items-center justify-center shrink-0">
                       <X className="w-3 h-3" />
                     </span>
@@ -1414,7 +1417,7 @@ export function Landing() {
                 <section id="under-the-hood" className="relative pb-16 lg:pb-20 pt-10">
                   <div className="max-w-3xl relative mx-auto text-center">
                     <p className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-5 inline-flex items-center gap-3">
-                      <Sparkles className="w-3.5 h-3.5" /> Under the hood
+                      <Sparkles className="w-3.5 h-3.5" /> Under the hood: Mr.OneHook
                     </p>
 
                     <h3 className="text-3xl md:text-5xl font-serif italic tracking-tight leading-[1.05]">
@@ -1567,9 +1570,20 @@ export function Landing() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.28, ease: 'easeOut' }}
-              className="w-full max-w-4xl mx-auto"
+              className="relative z-50 w-full max-w-4xl mx-auto flex flex-col items-center gap-3"
             >
-              <div className="relative overflow-hidden rounded-2xl border border-accent/15 bg-black shadow-2xl">
+              {/* Close the player */}
+              <button
+                type="button"
+                onClick={() => setShowMascotVideo(false)}
+                aria-label="Close video"
+                title="Close video (Esc)"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-border/50 text-text/80 text-[11px] font-black uppercase tracking-[0.2em] hover:bg-accent hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <X className="h-4 w-4" /> Close Video
+              </button>
+
+              <div className="w-full relative overflow-hidden rounded-2xl border border-accent/15 bg-black shadow-2xl">
                 <div className="aspect-video w-full">
                   <iframe
                     src={MASCOT_VIDEO_EMBED_URL}
@@ -1581,29 +1595,18 @@ export function Landing() {
                     className="h-full w-full border-0"
                   />
                 </div>
-
-                {/* Close the player */}
-                <button
-                  type="button"
-                  onClick={() => setShowMascotVideo(false)}
-                  aria-label="Close video"
-                  title="Close video (Esc)"
-                  className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-white hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                >
-                  <X className="h-4 w-4" />
-                </button>
               </div>
             </motion.div>
           ) : (
-            <motion.div 
+            <motion.div
               key="hood-content"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.28, ease: 'easeOut' }}
               className="flex flex-col items-center justify-center max-w-4xl mx-auto"
             >
-              <div 
-                className="relative flex flex-col items-center justify-center gap-6 mx-auto z-10 w-full" 
+              <div
+                className="relative flex flex-col items-center justify-center gap-6 mx-auto z-10 w-full"
                 id="mascot-container"
               >
                 {/* Message Above Mascot */}
@@ -1612,7 +1615,7 @@ export function Landing() {
                 </div>
 
                 {/* The Mascot */}
-                <div 
+                <div
                   id="mascot-core"
                   className="relative w-[260px] h-[260px] flex items-center justify-center shrink-0"
                   ref={mascotRef}
@@ -1877,7 +1880,7 @@ export function Landing() {
               onClick={() => navigate('/login')}
               className="w-full sm:w-auto px-10 py-5 border border-accent text-accent text-sm font-black uppercase tracking-[0.3em] hover:bg-accent hover:text-white transition-colors"
             >
-              I already have an account
+              I have an account
             </button>
           </div>
 

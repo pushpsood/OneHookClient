@@ -17,6 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Instagram, Youtube } from 'lucide-react';
+import { AiSparkle } from './AiSparkle';
 
 interface AlienScannerProps {
   /** Fixed size in pixels (square). Omit to let the container control size (e.g. h-full). */
@@ -278,6 +279,12 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
       onMouseEnter={interactive ? () => setIsHovered(true) : undefined}
       onMouseLeave={interactive ? () => setIsHovered(false) : undefined}
     >
+      {/* Ai Sparkle Background Effect */}
+      <AiSparkle 
+        size="320%" 
+        className="hidden md:block absolute top-[80%] left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 pointer-events-none opacity-80" 
+      />
+
       {/* Excited hover tooltip (plain conditional: exit-coordination could leave
           a stale tooltip mounted, so it simply fades in and unmounts at once) */}
       {excited && !hideTooltips && (
