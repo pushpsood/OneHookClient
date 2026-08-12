@@ -77,9 +77,9 @@ export const AiSparkle: React.FC<AiSparkleProps> = ({
       >
         <defs>
           <radialGradient id="streamGradient" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="var(--stream-from, #ff69b4)" stopOpacity="0" />
-            <stop offset="25%" stopColor="var(--stream-from, #ff69b4)" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="var(--stream-to, #ff1493)" stopOpacity="1" />
+            <stop offset="0%" stopColor="var(--stream-from, #E2E6EC)" stopOpacity="0" />
+            <stop offset="25%" stopColor="var(--stream-from, #E2E6EC)" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="var(--stream-to, #A1A1AA)" stopOpacity="1" />
           </radialGradient>
         </defs>
         {branches.map(({ angle, label }, i) => {
@@ -103,7 +103,7 @@ export const AiSparkle: React.FC<AiSparkleProps> = ({
 
       {/* core glow */}
       <div className="burst-core absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-        <div className="bg-[image:var(--gradient-core,radial-gradient(circle_at_32%_26%,#ff69b4,#ff1493_72%))] w-16 h-16 rounded-full blur-2xl sm:w-20 sm:h-20 opacity-50" />
+        <div className="bg-[image:var(--gradient-core,radial-gradient(circle_at_32%_26%,#E2E6EC,#A1A1AA_72%))] w-16 h-16 rounded-full blur-2xl sm:w-20 sm:h-20 opacity-50" />
       </div>
 
       {/* tips */}
