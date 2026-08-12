@@ -208,7 +208,7 @@ export const ChatbotWidget: React.FC = () => {
               <div className="p-3 border-t bg-gray-50 flex gap-2">
                 <input 
                   type="text"
-                  className="flex-1 border rounded-full px-3 py-1 text-sm outline-none focus:border-pink-400"
+                  className="flex-1 border rounded-full px-3 py-1 text-[16px] md:text-sm outline-none focus:border-pink-400"
                   placeholder="Ask a question..."
                   value={input}
                   onChange={e => setInput(e.target.value)}

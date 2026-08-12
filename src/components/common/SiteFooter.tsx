@@ -66,7 +66,10 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
       <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8 text-sm opacity-60">
         <div className="text-center md:text-left">
           <BrandWordmark className="font-bold uppercase tracking-widest mb-2 text-sm" />
-          <p>One connection. Zero distractions.</p>
+          <p>
+            <span className="whitespace-nowrap">One connection.</span>{' '}
+            <span className="whitespace-nowrap">Zero distractions.</span>
+          </p>
         </div>
 
         <div className="flex flex-wrap justify-center items-center gap-6 md:gap-8">
@@ -106,8 +109,11 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
           </div>
         </div>
 
-        <div className="text-right">
-          <p>© 2026 OneHook. All rights reserved.</p>
+        <div className="text-center md:text-right">
+          <p>
+            <span className="whitespace-nowrap">© 2026 OneHook.</span>{' '}
+            <span className="whitespace-nowrap">All rights reserved.</span>
+          </p>
         </div>
       </div>
 

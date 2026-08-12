@@ -1902,7 +1902,7 @@ export function Landing() {
             exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.3 }}
             id="sticky-cta"
-            className="fixed bottom-4 inset-x-0 mx-auto z-40 w-[calc(100%-2rem)] sm:w-max sm:max-w-[calc(100%-2rem)]"
+            className="fixed bottom-4 inset-x-0 mx-auto z-[60] w-[calc(100%-2rem)] sm:w-max sm:max-w-[calc(100%-2rem)]"
           >
             {/* Invisible mirror (always both buttons) — measures whether the
                 "Get the app" label wraps to > 1 line at the current width. */}
