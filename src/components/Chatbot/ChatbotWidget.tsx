@@ -11,7 +11,11 @@ interface Message {
   content: string;
 }
 
-export const ChatbotWidget: React.FC = () => {
+export interface ChatbotWidgetProps {
+  isVisible?: boolean;
+}
+
+export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -51,6 +55,20 @@ export const ChatbotWidget: React.FC = () => {
       setIsFullScreen(false);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isFullScreen) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehaviorY = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.overscrollBehaviorY = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.overscrollBehaviorY = '';
+    };
+  }, [isFullScreen]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -126,7 +144,7 @@ export const ChatbotWidget: React.FC = () => {
   return (
     <div 
       ref={containerRef}
-      className={`chatbot-widget-container ${isOpen ? 'open' : 'closed'} ${isHovered ? 'hovered' : ''} ${isFullScreen ? 'fullscreen' : ''} transition-all duration-500 opacity-100 translate-y-0`}
+      className={`chatbot-widget-container ${isOpen ? 'open' : 'closed'} ${isHovered ? 'hovered' : ''} ${isFullScreen ? 'fullscreen' : ''} transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

@@ -327,6 +327,7 @@ export function Landing() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [openerIndex, setOpenerIndex] = useState(0);
   const [showStickyCta, setShowStickyCta] = useState(false);
+  const [showChatbot, setShowChatbot] = useState(false);
 
   // Mascot explainer video shown inside the "Under the hood" section.
   const [showMascotVideo, setShowMascotVideo] = useState(false);
@@ -481,6 +482,13 @@ export function Landing() {
         : false;
 
       const chatbotOpen = !!document.querySelector('.chatbot-window');
+      
+      const philosophy = document.getElementById('philosophy');
+      const showChatbotMascot = philosophy
+        ? (philosophy.getBoundingClientRect().top) < window.innerHeight * 0.9
+        : false;
+      
+      setShowChatbot(showChatbotMascot);
 
       if (chatbotOpen || footerVisible || !pastHero) {
         setShowStickyCta(false);
@@ -676,14 +684,14 @@ export function Landing() {
 
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-border">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <BrandWordmark
-            className="font-bold tracking-tighter uppercase"
+            className="font-bold tracking-tighter uppercase shrink-0"
             imageClassName="h-10 w-auto sm:h-10"
             textClassName="hidden sm:inline text-2xl"
           />
           <div className="flex items-center gap-3 sm:gap-6">
-            <div className="relative md:hidden">
+            <div className="relative lg:hidden">
               <button
                 onClick={() => setIsMobileNavOpen((prev) => !prev)}
                 className="inline-flex items-center gap-1 px-3 py-2 border border-border text-[10px] font-black uppercase tracking-[0.2em]"
@@ -711,7 +719,7 @@ export function Landing() {
                     How it works
                   </button>
                   <button
-                    onClick={() => scrollToSection('mascot')}
+                    onClick={() => scrollToSection('under-the-hood')}
                     className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
                   >
                     Mr.OneHook
@@ -726,34 +734,34 @@ export function Landing() {
               )}
             </div>
 
-            <div className="hidden md:flex items-center gap-8">
+            <div className="hidden lg:flex items-center gap-4 xl:gap-8">
               <button
                 onClick={() => scrollToSection('philosophy')}
-                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity"
+                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
               >
                 Philosophy
               </button>
               <button
                 onClick={() => scrollToSection('features')}
-                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity"
+                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
               >
                 How it works
               </button>
               <button
                 onClick={() => scrollToSection('under-the-hood')}
-                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity"
+                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
               >
                 Mr.OneHook
               </button>
               <button
                 onClick={() => scrollToSection('get-app')}
-                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity"
+                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
               >
                 Get the app
               </button>
               <button
                 onClick={() => navigate('/login')}
-                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity"
+                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
               >
                 Sign in
               </button>
@@ -761,14 +769,14 @@ export function Landing() {
 
             <button
               onClick={() => navigate('/login')}
-              className="md:hidden px-3 sm:px-4 py-2 border border-border text-[10px] font-bold uppercase tracking-[0.22em] hover:bg-bg transition-colors"
+              className="lg:hidden px-3 sm:px-4 py-2 border border-border text-[10px] font-bold uppercase tracking-[0.22em] hover:bg-bg transition-colors whitespace-nowrap"
             >
               Sign in
             </button>
 
             <button
               onClick={goRedeemInvite}
-              className="px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity"
+              className="px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
             >
               <span className="sm:hidden">Sign up</span>
               <span className="hidden sm:inline">Redeem Invite</span>
@@ -1902,7 +1910,7 @@ export function Landing() {
             exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.3 }}
             id="sticky-cta"
-            className="fixed bottom-4 inset-x-0 mx-auto z-[60] w-[calc(100%-2rem)] sm:w-max sm:max-w-[calc(100%-2rem)]"
+            className="fixed bottom-4 inset-x-0 mx-auto z-[70] w-[calc(100%-2rem)] sm:w-max sm:max-w-[calc(100%-2rem)]"
           >
             {/* Invisible mirror (always both buttons) — measures whether the
                 "Get the app" label wraps to > 1 line at the current width. */}
@@ -1952,7 +1960,7 @@ export function Landing() {
         )}
       </AnimatePresence>
 
-      <ChatbotWidget />
+      <ChatbotWidget isVisible={showChatbot} />
     </div>
   );
 }
