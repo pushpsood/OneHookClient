@@ -22,6 +22,10 @@ import {
   Target,
   Radar,
   Zap,
+  ArrowDown,
+  Twitter,
+  Instagram,
+  Youtube,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { BrandWordmark } from './common/BrandWordmark';
@@ -194,7 +198,7 @@ export function Landing() {
   useEffect(() => {
     const updateStroke = () => {
       const convo = convoRef.current;
-      const mascot = document.getElementById('mascot-container'); // Need to add this ID to mascot wrapper
+      const mascot = document.getElementById('mascot-core'); // Targets the 260x260 container
       const container = pageContainerRef.current;
       const features = document.getElementById('features');
       if (!convo || !mascot || !container || !features) return;
@@ -211,21 +215,32 @@ export function Landing() {
       }
 
       setStrokeCoords({
-        startY: convoRect.top - containerRect.top + convoRect.height * 0.2, // Start 20% down the convo section
-        endY: mascotRect.top - containerRect.top + mascotRect.height * 0.5, // End at mascot center Y
-        endX: mascotRect.left - containerRect.left + 50, // End near mascot center X (adjusting for padding)
+        startY: convoRect.top - containerRect.top + convoRect.height * 0.2,
+        endY: mascotRect.top - containerRect.top + mascotRect.height * 0.11, // Tip of the mascot's pen Y
+        endX: mascotRect.left - containerRect.left + mascotRect.width * 0.92, // Tip of the mascot's pen X
         winW: containerRect.width,
         midY: featuresRect.top - containerRect.top,
       });
     };
 
     updateStroke();
-    // A small delay to ensure layout is done
-    const to = setTimeout(updateStroke, 500);
+    
+    const resizeObserver = new ResizeObserver(() => {
+      // Debounce slightly or just call directly since it's cheap (just getBoundingClientRect)
+      updateStroke();
+    });
+    
+    if (pageContainerRef.current) {
+      resizeObserver.observe(pageContainerRef.current);
+    }
+
+    // A small delay to ensure layout is done just in case
+    const to = setTimeout(updateStroke, 1000);
     window.addEventListener('resize', updateStroke);
     return () => {
       clearTimeout(to);
       window.removeEventListener('resize', updateStroke);
+      resizeObserver.disconnect();
     };
   }, []);
 
@@ -248,6 +263,7 @@ export function Landing() {
       return;
     }
     
+    let maxConverge = 0;
     let raf = 0;
     const update = () => {
       const rect = el.getBoundingClientRect();
@@ -256,11 +272,14 @@ export function Landing() {
       const distance = Math.abs(sectionCenter - viewportH / 2);
       const maxDistance = viewportH / 2 + rect.height / 2;
       const t = Math.min(distance / maxDistance, 1); // 0 = centered, 1 = far away
-      // Natural layout is the default (at the edges); as the section centers,
-      // the two columns drift closer together (up to just short of overlapping).
+      
       const converge = 56 * (1 - t);
-      appLeftX.set(converge); // text drifts toward center
-      appRightX.set(-converge); // phone drifts toward center
+      if (converge > maxConverge) {
+        maxConverge = converge;
+      }
+      
+      appLeftX.set(maxConverge); // text drifts toward center
+      appRightX.set(-maxConverge); // phone drifts toward center
     };
     const onScroll = () => {
       cancelAnimationFrame(raf);
@@ -474,12 +493,7 @@ export function Landing() {
     onScroll();
 
     const onChatbotToggle = (e: Event) => {
-      const isOpen = (e as CustomEvent).detail;
-      if (isOpen) {
-        setShowStickyCta(false);
-      } else {
-        onScroll();
-      }
+      onScroll();
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -586,6 +600,13 @@ export function Landing() {
           }}
           xmlns="http://www.w3.org/2000/svg"
         >
+          <defs>
+            <linearGradient id="pinkFade" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#ff69b4" stopOpacity="1" />
+              <stop offset="96%" stopColor="#ff69b4" stopOpacity="1" />
+              <stop offset="100%" stopColor="#ff69b4" stopOpacity="0" />
+            </linearGradient>
+          </defs>
           {(() => {
             const w = strokeCoords.winW;
             const startY = strokeCoords.startY;
@@ -605,7 +626,7 @@ export function Landing() {
                 <path
                   d={path}
                   fill="none"
-                  stroke="#ff69b4"
+                  stroke="url(#pinkFade)"
                   strokeWidth="8"
                   strokeLinecap="round"
                   opacity="0.6"
@@ -614,7 +635,7 @@ export function Landing() {
                 <path
                   d={path}
                   fill="none"
-                  stroke="#ff69b4"
+                  stroke="url(#pinkFade)"
                   strokeWidth="12"
                   strokeLinecap="round"
                   opacity="0.8"
@@ -623,7 +644,7 @@ export function Landing() {
                 <path
                   d={path}
                   fill="none"
-                  stroke="#ff69b4"
+                  stroke="url(#pinkFade)"
                   strokeWidth="16"
                   strokeLinecap="round"
                   opacity="1"
@@ -632,7 +653,7 @@ export function Landing() {
                 <path
                   d={path}
                   fill="none"
-                  stroke="#ff69b4"
+                  stroke="url(#pinkFade)"
                   strokeWidth="10"
                   strokeLinecap="round"
                   opacity="0.7"
@@ -641,7 +662,7 @@ export function Landing() {
                 <path
                   d={path}
                   fill="none"
-                  stroke="#ff69b4"
+                  stroke="url(#pinkFade)"
                   strokeWidth="14"
                   strokeLinecap="round"
                   opacity="0.5"
@@ -690,6 +711,12 @@ export function Landing() {
                     How it works
                   </button>
                   <button
+                    onClick={() => scrollToSection('mascot')}
+                    className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
+                  >
+                    Mascot
+                  </button>
+                  <button
                     onClick={() => scrollToSection('get-app')}
                     className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
                   >
@@ -711,6 +738,12 @@ export function Landing() {
                 className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity"
               >
                 How it works
+              </button>
+              <button
+                onClick={() => scrollToSection('mascot')}
+                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity"
+              >
+                Mascot
               </button>
               <button
                 onClick={() => scrollToSection('get-app')}
@@ -772,7 +805,7 @@ export function Landing() {
           <div className="inline-flex items-center gap-2 px-4 py-2 mb-8 border border-white/25 rounded-full backdrop-blur-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-status-hooked animate-pulse" />
             <span className="text-[10px] sm:text-xs font-black uppercase tracking-[0.28em] text-white/85">
-              Invite-only · Slow dating, done right
+              Slow dating, done right
             </span>
           </div>
 
@@ -843,7 +876,7 @@ export function Landing() {
       {/* Conversation Starter — the pattern interrupt */}
       <section
         ref={convoRef}
-        className="py-24 pb-32 px-6 bg-accent text-white relative overflow-hidden z-40"
+        className="py-12 pb-16 px-6 bg-accent text-white relative overflow-hidden z-40"
         style={{
           // Convex "parabola" bottom edge instead of a flat line, with a soft
           // black shadow cast downward onto the section below for depth.
@@ -896,12 +929,12 @@ export function Landing() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
-            className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-8"
+            className="text-[11px] uppercase tracking-[1px] text-white/50 mb-3"
           >
             Every hook starts with a sentence
           </motion.p>
 
-          <div className="min-h-[160px] md:min-h-[180px] flex items-center justify-center">
+          <div className="min-h-[80px] md:min-h-[90px] flex items-center justify-center">
             <AnimatePresence mode="wait">
               <motion.blockquote
                 key={openerIndex}
@@ -909,14 +942,15 @@ export function Landing() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -18 }}
                 transition={{ duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
-                className="text-3xl md:text-5xl font-serif italic leading-tight max-w-3xl"
+                style={{ willChange: 'transform, opacity' }}
+                className="text-3xl md:text-5xl font-serif italic leading-tight max-w-3xl transform-gpu"
               >
                 &ldquo;{OPENERS[openerIndex]}&rdquo;
               </motion.blockquote>
             </AnimatePresence>
           </div>
 
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-4">
             <button
               onClick={shuffleOpener}
               className="inline-flex items-center gap-2 px-6 py-3 border border-white/30 text-[11px] font-black uppercase tracking-[0.24em] hover:bg-white hover:text-accent transition-colors rounded-full"
@@ -931,7 +965,7 @@ export function Landing() {
             </button>
           </div>
 
-          <p className="mt-8 text-xs text-white/50 italic max-w-md mx-auto">
+          <p className="mt-4 text-xs text-white/50 italic max-w-md mx-auto">
             On OneHook you get one conversation at a time. Make the first line count.
           </p>
         </div>
@@ -1009,7 +1043,7 @@ export function Landing() {
             transition={{ duration: 0.7 }}
             className="mt-20 lg:mt-28 grid md:grid-cols-2 rounded-3xl overflow-hidden border border-border"
           >
-            <div className="p-8 sm:p-10 lg:p-12 bg-white">
+            <div className="p-8 sm:p-10 lg:p-12 bg-white md:text-right">
               <p className="text-[11px] uppercase tracking-[0.3em] opacity-40 mb-8">The old way</p>
               <ul className="space-y-4">
                 {[
@@ -1018,7 +1052,7 @@ export function Landing() {
                   'A countdown timer just to say hi',
                   'Pay to unblur who already likes you',
                 ].map((item) => (
-                  <li key={item} className="flex items-center gap-3 text-lg opacity-50">
+                  <li key={item} className="flex items-center md:flex-row-reverse gap-3 text-lg opacity-50">
                     <span className="inline-flex w-6 h-6 rounded-full border border-border items-center justify-center shrink-0">
                       <X className="w-3 h-3" />
                     </span>
@@ -1124,7 +1158,7 @@ export function Landing() {
       </div>
 
       {/* Features Section */}
-      <section id="features" className="py-24 px-6 bg-bg relative">
+      <section id="features" className="pt-24 pb-0 px-6 bg-bg relative">
         <div className="max-w-6xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1139,7 +1173,7 @@ export function Landing() {
             </h2>
             <p className="text-lg opacity-70 leading-relaxed max-w-2xl mx-auto">
               {relationshipMode === 'single'
-                ? 'The product should feel like the product itself: focused, intentional, impossible to rush. Move through the flow to feel how OneHook narrows attention instead of fragmenting it.'
+                ? 'The experience should feel like OneHook itself: focused, intentional, impossible to rush. Move through the flow to feel how OneHook narrows attention instead of fragmenting it.'
                 : 'Already seeing someone? Use OneHook as a priority-notification messenger \u2014 so the one person who matters always reaches you first, without the noise of another inbox.'}
             </p>
 
@@ -1361,14 +1395,6 @@ export function Landing() {
               }}
             />
 
-            {/* Parabolic curve bottom */}
-            <div
-              className="absolute bottom-0 left-0 right-0 h-12 sm:h-16 lg:h-20 bg-accent translate-y-full z-0"
-              style={{
-                clipPath: 'ellipse(100% 100% at 50% 0%)',
-              }}
-            />
-
             <motion.div
               initial={{ opacity: 0, y: 28 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -1385,8 +1411,8 @@ export function Landing() {
 
               {/* Content wrapper to maintain centered layout */}
               <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
-                <div className="relative py-14 lg:py-20">
-                  <div className="max-w-3xl relative">
+                <section id="under-the-hood" className="relative pb-16 lg:pb-20 pt-10">
+                  <div className="max-w-3xl relative mx-auto text-center">
                     <p className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-5 inline-flex items-center gap-3">
                       <Sparkles className="w-3.5 h-3.5" /> Under the hood
                     </p>
@@ -1399,185 +1425,74 @@ export function Landing() {
                       reads meaning, not keywords, and optimizes for a two-way spark &mdash; not
                       just whether you&rsquo;d swipe right.
                     </p>
-                    {/* Pipeline strip: Signals → Scoring → Stable match (stacks vertically when > 2 lines) */}
-                    <AdaptiveFlow
-                      className="mt-12 text-[10px] font-black uppercase tracking-[0.24em]"
-                      rowClass="flex flex-wrap items-center gap-3"
-                      colClass="flex flex-col items-center gap-3"
-                      parts={[
-                        {
-                          key: 'signals',
-                          content: (
-                            <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
-                              Signals
-                            </span>
-                          ),
-                        },
-                        {
-                          key: 'a1',
-                          rotateWhenStacked: true,
-                          content: <ArrowRight className="w-4 h-4 text-white/40" />,
-                        },
-                        {
-                          key: 'scoring',
-                          content: (
-                            <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
-                              Reciprocal scoring
-                            </span>
-                          ),
-                        },
-                        {
-                          key: 'a2',
-                          rotateWhenStacked: true,
-                          content: <ArrowRight className="w-4 h-4 text-white/40" />,
-                        },
-                        {
-                          key: 'stable',
-                          content: (
-                            <span className="px-4 py-2 rounded-full border border-white/20 bg-white/5">
-                              Stable match
-                            </span>
-                          ),
-                        },
-                      ]}
-                    />
-
-                    {/* Mascot — spans the copy + pipeline block, sitting just right of it.
-                  Hovering makes it excited; clicking plays the explainer video in
-                  the capability grid below. */}
-                    <div
-                      id="mascot-container"
-                      ref={mascotRef}
-                      className="hidden xl:flex absolute right-0 top-0 bottom-0 translate-x-full pl-10 z-10 items-center"
-                    >
-                      <AlienScanner
-                        className="w-[260px] h-[260px] shrink-0"
-                        primaryColor="#ff69b4"
-                        scanColor="#0052CC"
-                        onClick={() => setShowMascotVideo((open) => !open)}
-                        forceExcited={showMascotVideo}
-                        hoverLabel={
-                          showMascotVideo
-                            ? 'Click to know how onehook.club finds matches'
-                            : 'Click to watch me explain more about onehook.club'
-                        }
-                      />
-                    </div>
                   </div>
 
-                  {/* Capability grid — swapped for the mascot's explainer video when clicked.
-                  Plain conditional render (no AnimatePresence): these are large
-                  subtrees and exit-coordination left both mounted, so the outgoing
-                  block is unmounted immediately and the incoming one fades in. */}
-                  {showMascotVideo ? (
-                    <motion.div
-                      key="hood-video"
-                      ref={mascotVideoRef}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.28, ease: 'easeOut' }}
-                      className="mt-10"
-                    >
-                      <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black shadow-2xl">
-                        <div className="aspect-video w-full">
-                          <iframe
-                            src={MASCOT_VIDEO_EMBED_URL}
-                            title="OneHook explained"
-                            loading="lazy"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                            allowFullScreen
-                            referrerPolicy="strict-origin-when-cross-origin"
-                            className="h-full w-full border-0"
-                          />
-                        </div>
-
-                        {/* Close the player and return to the feature grid */}
-                        <button
-                          type="button"
-                          onClick={() => setShowMascotVideo(false)}
-                          aria-label="Close video"
-                          title="Close video (Esc)"
-                          className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-white hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowMascotVideo(false)}
-                        className="mt-5 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-white/60 transition-colors hover:text-white"
+                  {/* Capability grid — Always visible */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                    className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/10 rounded-2xl overflow-hidden"
+                  >
+                    {[
+                      {
+                        icon: MapPin,
+                        title: 'Geospatial discovery',
+                        text: 'PostGIS proximity search surfaces people genuinely within reach — never a random global feed.',
+                      },
+                      {
+                        icon: Sparkles,
+                        title: 'Semantic embeddings',
+                        text: 'Profiles become 1,536-dimension vectors, so we match on meaning and vibe — not keywords.',
+                      },
+                      {
+                        icon: HeartHandshake,
+                        title: 'Reciprocal compatibility',
+                        text: 'A learned model scores two-way fit: how likely you are to click, not just to be liked.',
+                      },
+                      {
+                        icon: Scale,
+                        title: 'Stable matching',
+                        text: 'A Gale–Shapley bilateral algorithm keeps everyone from chasing the same few profiles.',
+                      },
+                      {
+                        icon: Gauge,
+                        title: 'Engagement-aware',
+                        text: 'Dwell time, photos viewed and prompts read quietly sharpen your ranking over time.',
+                      },
+                      {
+                        icon: Target,
+                        title: 'Intent-aware',
+                        text: 'We read serious vs. casual intent, so a mismatch never outranks a genuine one.',
+                      },
+                      {
+                        icon: Radar,
+                        title: 'Fair by design',
+                        text: 'An explore/exploit balance gives newer profiles real, daily-rotating visibility.',
+                      },
+                      {
+                        icon: Zap,
+                        title: 'No cold starts',
+                        text: 'A freshness boost gives new members early exposure from their very first day.',
+                      },
+                    ].map((f, i) => (
+                      <motion.div
+                        key={f.title}
+                        initial={{ opacity: 0, y: 16 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.5, delay: i * 0.05 }}
+                        className="group bg-accent p-6 hover:bg-white/[0.03] transition-colors"
                       >
-                        <ArrowLeft className="h-3.5 w-3.5" /> Back to the features
-                      </button>
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="hood-grid"
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.28, ease: 'easeOut' }}
-                      className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px bg-white/10 rounded-2xl overflow-hidden"
-                    >
-                      {[
-                        {
-                          icon: MapPin,
-                          title: 'Geospatial discovery',
-                          text: 'PostGIS proximity search surfaces people genuinely within reach — never a random global feed.',
-                        },
-                        {
-                          icon: Sparkles,
-                          title: 'Semantic embeddings',
-                          text: 'Profiles become 1,536-dimension vectors, so we match on meaning and vibe — not keywords.',
-                        },
-                        {
-                          icon: HeartHandshake,
-                          title: 'Reciprocal compatibility',
-                          text: 'A learned model scores two-way fit: how likely you are to click, not just to be liked.',
-                        },
-                        {
-                          icon: Scale,
-                          title: 'Stable matching',
-                          text: 'A Gale–Shapley bilateral algorithm keeps everyone from chasing the same few profiles.',
-                        },
-                        {
-                          icon: Gauge,
-                          title: 'Engagement-aware',
-                          text: 'Dwell time, photos viewed and prompts read quietly sharpen your ranking over time.',
-                        },
-                        {
-                          icon: Target,
-                          title: 'Intent-aware',
-                          text: 'We read serious vs. casual intent, so a mismatch never outranks a genuine one.',
-                        },
-                        {
-                          icon: Radar,
-                          title: 'Fair by design',
-                          text: 'An explore/exploit balance gives newer profiles real, daily-rotating visibility.',
-                        },
-                        {
-                          icon: Zap,
-                          title: 'No cold starts',
-                          text: 'A freshness boost gives new members early exposure from their very first day.',
-                        },
-                      ].map((f, i) => (
-                        <motion.div
-                          key={f.title}
-                          initial={{ opacity: 0, y: 16 }}
-                          whileInView={{ opacity: 1, y: 0 }}
-                          viewport={{ once: true }}
-                          transition={{ duration: 0.5, delay: i * 0.05 }}
-                          className="group bg-accent p-6 hover:bg-white/[0.03] transition-colors"
-                        >
-                          <f.icon className="w-5 h-5 text-white/70 group-hover:text-white transition-colors" />
-                          <h4 className="mt-4 text-sm font-black uppercase tracking-[0.18em]">
-                            {f.title}
-                          </h4>
-                          <p className="mt-2 text-[13px] leading-relaxed text-white/55">{f.text}</p>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  )}
+                        <f.icon className="w-5 h-5 text-white/70 group-hover:text-white transition-colors" />
+                        <h4 className="mt-4 text-sm font-black uppercase tracking-[0.18em]">
+                          {f.title}
+                        </h4>
+                        <p className="mt-2 text-[13px] leading-relaxed text-white/55">{f.text}</p>
+                      </motion.div>
+                    ))}
+                  </motion.div>
 
                   {/* Weighted blend — the honest formula, centered; hidden entirely when it wraps to multiple lines */}
                   <AdaptiveFlow
@@ -1625,42 +1540,118 @@ export function Landing() {
                       },
                     ]}
                   />
-                </div>
+                </section>
               </div>
             </motion.div>
+
+            {/* Custom 1px repeated gradient fade into transparent */}
+            <div
+              className="absolute top-[calc(100%-1px)] left-0 w-full z-0 h-[100px] sm:h-[150px] lg:h-[200px]"
+              style={{
+                backgroundImage: 'url(/gradient-fade.png?v=3)',
+                backgroundRepeat: 'repeat-x',
+                backgroundSize: '1px 100%',
+              }}
+            />
           </div>
         </div>
       </section>
 
-      {/* Principles (honest, on-brand figures instead of vanity metrics) */}
-      <section className="py-24 px-6 bg-white">
+      {/* Mascot Section */}
+      <section id="mascot" className="py-24 px-6 bg-white relative">
         <div className="max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="grid grid-cols-2 md:grid-cols-4 gap-y-12 gap-x-8 text-center"
-          >
-            {[
-              { number: '1', label: 'Connection at a time' },
-              { number: '0', label: 'Ads & dark patterns' },
-              { number: '100%', label: 'End-to-end encrypted' },
-              { number: 'Invite', label: 'Members only, by referral' },
-            ].map((stat, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, scale: 0.9 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: idx * 0.1 }}
-              >
-                <div className="text-4xl md:text-6xl font-serif italic text-accent mb-3">
-                  {stat.number}
+          {showMascotVideo ? (
+            <motion.div
+              key="hood-video"
+              ref={mascotVideoRef}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.28, ease: 'easeOut' }}
+              className="w-full max-w-4xl mx-auto"
+            >
+              <div className="relative overflow-hidden rounded-2xl border border-accent/15 bg-black shadow-2xl">
+                <div className="aspect-video w-full">
+                  <iframe
+                    src={MASCOT_VIDEO_EMBED_URL}
+                    title="OneHook explained"
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    className="h-full w-full border-0"
+                  />
                 </div>
-                <p className="text-xs uppercase tracking-[0.24em] opacity-50">{stat.label}</p>
-              </motion.div>
-            ))}
-          </motion.div>
+
+                {/* Close the player */}
+                <button
+                  type="button"
+                  onClick={() => setShowMascotVideo(false)}
+                  aria-label="Close video"
+                  title="Close video (Esc)"
+                  className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm transition-colors hover:bg-white hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div 
+              key="hood-content"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.28, ease: 'easeOut' }}
+              className="flex flex-col items-center justify-center max-w-4xl mx-auto"
+            >
+              <div 
+                className="relative flex flex-col items-center justify-center gap-6 mx-auto z-10 w-full" 
+                id="mascot-container"
+              >
+                {/* Message Above Mascot */}
+                <div className="rounded-2xl border-2 border-accent bg-white px-6 py-4 text-center text-[11px] font-black uppercase leading-relaxed tracking-[0.14em] text-accent shadow-2xl">
+                  Click to watch me explain more about onehook.club
+                </div>
+
+                {/* The Mascot */}
+                <div 
+                  id="mascot-core"
+                  className="relative w-[260px] h-[260px] flex items-center justify-center shrink-0"
+                  ref={mascotRef}
+                >
+                  <AlienScanner
+                    className="w-[260px] h-[260px] shrink-0"
+                    primaryColor="#ff69b4"
+                    scanColor="#0052CC"
+                    onClick={() => setShowMascotVideo((open) => !open)}
+                    forceExcited={true}
+                    hideTooltips={true}
+                  />
+                </div>
+
+                {/* Social Links Below Mascot */}
+                <div className="flex w-max items-center justify-center gap-2 rounded-xl border border-accent bg-white/90 backdrop-blur-sm px-5 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-accent shadow-lg">
+                  MR.ONEHOOK'S SOCIALS:
+                  <a
+                    href="https://www.instagram.com/mr.onehook"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:opacity-60 transition-opacity pointer-events-auto"
+                    aria-label="Instagram"
+                  >
+                    <Instagram className="w-4 h-4" />
+                  </a>
+                  <a
+                    href="https://www.youtube.com/@mr.onehook"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:opacity-60 transition-opacity flex items-center justify-center pointer-events-auto"
+                    aria-label="YouTube"
+                  >
+                    <Youtube className="w-5 h-5" />
+                  </a>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </div>
       </section>
 
@@ -1908,49 +1899,49 @@ export function Landing() {
             exit={{ opacity: 0, y: 24 }}
             transition={{ duration: 0.3 }}
             id="sticky-cta"
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] sm:w-auto"
+            className="fixed bottom-4 inset-x-0 mx-auto z-40 w-[calc(100%-2rem)] sm:w-max sm:max-w-[calc(100%-2rem)]"
           >
             {/* Invisible mirror (always both buttons) — measures whether the
                 "Get the app" label wraps to > 1 line at the current width. */}
             <div
               ref={ctaMirrorRef}
               aria-hidden="true"
-              className="pointer-events-none invisible absolute inset-0 flex items-center gap-3 sm:gap-5 p-2 rounded-full border border-white/10"
+              className="pointer-events-none invisible absolute inset-0 flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-full border border-white/10"
             >
-              <span className="hidden sm:block portrait:hidden pl-3 text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
+              <span className="hidden md:block portrait:hidden whitespace-nowrap pl-4 pr-2 text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
                 One connection. Zero distractions.
               </span>
-              <span className="flex-1 sm:flex-none block text-center px-5 py-3 border border-white/40 text-[11px] font-black uppercase tracking-[0.24em] rounded-full">
-                <Smartphone className="inline w-4 h-4 mr-2 align-middle" />
+              <span className="flex-1 sm:flex-none block text-center px-4 py-2.5 sm:px-6 sm:py-3.5 border border-white/30 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] rounded-full">
+                <Smartphone className="inline w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 align-middle" />
                 <span ref={ctaAppTextRef} className="align-middle">
                   Get the app
                 </span>
               </span>
-              <span className="flex-1 sm:flex-none px-5 py-3 text-[11px] font-black uppercase tracking-[0.24em] rounded-full inline-flex items-center justify-center gap-2">
+              <span className="flex-1 sm:flex-none px-4 py-2.5 sm:px-6 sm:py-3.5 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] rounded-full inline-flex items-center justify-center gap-1.5 sm:gap-2">
                 <span className="hidden sm:inline">Redeem invite</span>
                 <span className="sm:hidden">Redeem</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
               </span>
             </div>
 
-            <div className="flex items-center gap-3 sm:gap-5 bg-accent text-white p-2 rounded-full shadow-2xl border border-white/10">
-              <span className="hidden sm:block portrait:hidden pl-3 text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
+            <div className="flex items-center gap-2 sm:gap-3 bg-accent text-white p-2 sm:p-3 rounded-full shadow-2xl border border-white/10">
+              <span className="hidden md:block portrait:hidden whitespace-nowrap pl-4 pr-2 text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
                 One connection. Zero distractions.
               </span>
               <button
                 onClick={() => scrollToSection('get-app')}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-5 py-3 border border-white/40 text-white text-[11px] font-black uppercase tracking-[0.24em] rounded-full hover:bg-white/10 transition-colors"
+                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2.5 sm:px-6 sm:py-3.5 border border-white/30 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] rounded-full hover:bg-white/10 transition-colors"
               >
-                <Smartphone className="w-4 h-4" /> Get the app
+                <Smartphone className="w-3 h-3 sm:w-4 sm:h-4" /> Get the app
               </button>
               {!hideStickyRedeem && (
                 <button
                   onClick={goRedeemInvite}
-                  className="flex-1 sm:flex-none px-5 py-3 bg-white text-accent text-[11px] font-black uppercase tracking-[0.24em] rounded-full hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2"
+                  className="flex-1 sm:flex-none px-4 py-2.5 sm:px-6 sm:py-3.5 bg-white text-accent text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] rounded-full hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-1.5 sm:gap-2"
                 >
                   <span className="hidden sm:inline">Redeem invite</span>
                   <span className="sm:hidden">Redeem</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
                 </button>
               )}
             </div>

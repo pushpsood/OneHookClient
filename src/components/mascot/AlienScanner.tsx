@@ -39,6 +39,8 @@ interface AlienScannerProps {
    * message) for as long as that view is in use.
    */
   forceExcited?: boolean;
+  /** Hides the built-in tooltips so they can be rendered elsewhere */
+  hideTooltips?: boolean;
 }
 
 export const AlienScanner: React.FC<AlienScannerProps> = ({
@@ -50,6 +52,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
   onClick,
   hoverLabel = 'Click to watch me explain more about onehook.club',
   forceExcited = false,
+  hideTooltips = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const pointerFocusRef = useRef(false);
@@ -277,7 +280,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
     >
       {/* Excited hover tooltip (plain conditional: exit-coordination could leave
           a stale tooltip mounted, so it simply fades in and unmounts at once) */}
-      {excited && (
+      {excited && !hideTooltips && (
         <motion.div
           initial={{ opacity: 0, y: 6, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -294,7 +297,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
         </motion.div>
       )}
 
-      {isHovered && (
+      {isHovered && !hideTooltips && (
         <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 z-30">
           <motion.div
             initial={{ opacity: 0, y: -4 }}

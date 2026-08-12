@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mascot } from './Mascot';
 import { chatbotUrl } from '../../utils/env.config';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 import './ChatbotWidget.css'; // Add a little standard CSS or use tailwind
 
 type Mood = 'Happy' | 'Neutral' | 'Thinking' | 'Sad' | 'Excited';
@@ -13,6 +14,7 @@ interface Message {
 export const ChatbotWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   
   const [setupComplete, setSetupComplete] = useState(false);
   const [gender, setGender] = useState('man');
@@ -22,25 +24,26 @@ export const ChatbotWidget: React.FC = () => {
   const [input, setInput] = useState('');
   const [mood, setMood] = useState<Mood>('Happy');
   const [loading, setLoading] = useState(false);
+  // error is true if last response failed
+  const [hasError, setHasError] = useState(false);
   const [isOverDark, setIsOverDark] = useState(false);
   const [isInPageMascotVisible, setIsInPageMascotVisible] = useState(false);
-  const [isHiddenByOverlap, setIsHiddenByOverlap] = useState(false);
-  const [isScrollingUp, setIsScrollingUp] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const lastScrollY = useRef(0);
 
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
+      // Don't close on click outside if we are in full screen
+      if (isFullScreen) return;
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, isFullScreen]);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('chatbotToggle', { detail: isOpen }));
@@ -66,30 +69,6 @@ export const ChatbotWidget: React.FC = () => {
         setIsInPageMascotVisible(false);
       }
 
-      // Overlap with sticky CTA
-      const stickyCta = document.getElementById('sticky-cta');
-      if (stickyCta && containerRef.current) {
-        const ctaRect = stickyCta.getBoundingClientRect();
-        const chatRect = containerRef.current.getBoundingClientRect();
-        const isOverlapping = !(
-          ctaRect.right < chatRect.left ||
-          ctaRect.left > chatRect.right ||
-          ctaRect.bottom < chatRect.top ||
-          ctaRect.top > chatRect.bottom
-        );
-        setIsHiddenByOverlap(isOverlapping);
-      } else {
-        setIsHiddenByOverlap(false);
-      }
-
-      // Check scroll direction
-      const currentY = window.scrollY;
-      if (currentY < lastScrollY.current - 5) {
-        setIsScrollingUp(true);
-      } else if (currentY > lastScrollY.current + 5) {
-        setIsScrollingUp(false);
-      }
-      lastScrollY.current = currentY;
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     // Run once on mount after a small delay
@@ -126,37 +105,30 @@ export const ChatbotWidget: React.FC = () => {
         const data = await response.json();
         setMessages([...newMessages, { role: 'assistant', content: data.reply }]);
         setMood(data.mood as Mood);
+        setHasError(false);
       } else {
         setMessages([...newMessages, { role: 'assistant', content: "Oops! I encountered an error. It might be rate limiting." }]);
         setMood('Sad');
+        setHasError(true);
       }
     } catch (e) {
       setMessages([...newMessages, { role: 'assistant', content: "Oops! I couldn't reach the server." }]);
       setMood('Sad');
+      setHasError(true);
     } finally {
       setLoading(false);
     }
   };
 
-  const hidePartially = isScrollingUp && !isOpen && !isHovered;
-
   return (
     <div 
       ref={containerRef}
-      className={`chatbot-widget-container ${isOpen ? 'open' : 'closed'} ${isHovered ? 'hovered' : ''} transition-all duration-500 ${
-        isHiddenByOverlap 
-          ? 'opacity-0 pointer-events-none translate-y-full' 
-          : hidePartially 
-            ? 'translate-y-16 opacity-70'
-            : 'opacity-100 translate-y-0'
-      }`}
+      className={`chatbot-widget-container ${isOpen ? 'open' : 'closed'} ${isHovered ? 'hovered' : ''} ${isFullScreen ? 'fullscreen' : ''} transition-all duration-500 opacity-100 translate-y-0`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {!isOpen && (
         <div className="chatbot-trigger" onClick={() => setIsOpen(true)}>
-          {/* Invisible hit area to maintain hover state when translated down */}
-          <div className="absolute -top-24 -left-8 -right-8 h-40 bg-transparent" />
           <div className="interactive-text bg-white text-black text-xs font-bold px-3 py-1 rounded-full shadow-lg absolute -top-4 left-1/2 whitespace-nowrap animate-float-thought pointer-events-none z-10">
             {isInPageMascotVisible ? "He painted the wall" : "Talk to our mascot!"}
           </div>
@@ -167,20 +139,36 @@ export const ChatbotWidget: React.FC = () => {
       )}
 
       {isOpen && (
-        <div className="chatbot-window bg-white/95 backdrop-blur-md shadow-2xl rounded-2xl overflow-hidden flex flex-row">
+        <div className="chatbot-window bg-white/95 backdrop-blur-md shadow-2xl rounded-2xl overflow-hidden flex flex-row w-full h-full">
           {/* Chat Side */}
-          <div className="flex flex-col w-[350px]">
+          <div className={`flex flex-col ${isFullScreen ? 'w-full' : 'w-[350px]'}`}>
             <div className="bg-pink-600 text-white p-3 flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <Mascot mood={mood} className="w-8 h-8" />
-                <span className="font-bold">OneHook AI</span>
+                <div className="relative">
+                  <Mascot mood={mood} className="w-8 h-8" />
+                  <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-pink-600 ${hasError ? 'bg-orange-500' : 'bg-green-500'}`}></div>
+                </div>
+                <span className="font-bold">Mr. OneHook</span>
                 <a href="https://onehook.club/app" target="_blank" rel="noreferrer" className="ml-2 px-2 py-1 bg-white text-pink-600 text-[10px] font-bold rounded-md hover:bg-pink-50 transition-colors uppercase tracking-wider">
                   Download App
                 </a>
               </div>
-              <button onClick={() => setIsOpen(false)} className="text-white hover:text-gray-200">
-                ✕
-              </button>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setIsFullScreen(!isFullScreen)} 
+                  className="text-white hover:text-gray-200 transition-colors"
+                  title={isFullScreen ? "Minimize" : "Full screen"}
+                >
+                  {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                </button>
+                <button 
+                  onClick={() => setIsOpen(false)} 
+                  className="text-white hover:text-gray-200 transition-colors"
+                  title="Close"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
@@ -200,7 +188,7 @@ export const ChatbotWidget: React.FC = () => {
               ) : (
                 <>
                   {messages.length === 0 && (
-                    <div className="text-center text-gray-400 text-sm mt-4">Ask me anything about OneHook business context!</div>
+                    <div className="text-center text-gray-400 text-sm mt-4">Feel free to share how you're feeling, ask about the OneHook platform, or just chat in general!</div>
                   )}
                   {messages.map((m, i) => (
                     <div key={i} className={`p-2 rounded-xl max-w-[85%] text-sm ${m.role === 'user' ? 'bg-pink-100 text-pink-900 self-end' : 'bg-gray-100 text-gray-800 self-start'}`}>

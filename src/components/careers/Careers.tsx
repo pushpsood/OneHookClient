@@ -99,7 +99,7 @@ const ROLES: RoleDef[] = [
     tagline: 'Tell a story worth one yes',
     icon: Megaphone,
     blurb:
-      'Grow a brand that stands against endless swiping. Own positioning, campaigns, and community for a product with a point of view.',
+      'Grow a brand that stands against endless swiping. Own positioning, campaigns, and community for OneHook.',
     skills: ['Brand & content', 'Growth / performance', 'Community', 'Analytics & storytelling'],
     comp: '\u20B913\u201326 LPA CTC',
     roleQuestion:
@@ -127,7 +127,7 @@ const ROLES: RoleDef[] = [
     tagline: 'Shape what we build and why',
     icon: PenTool,
     blurb:
-      'Own the roadmap and the craft — from user insight to pixel-perfect flows — for a product that respects people\u2019s time.',
+      'Own the roadmap and the craft — from user insight to pixel-perfect flows — for OneHook, which respects people\u2019s time.',
     skills: ['Product strategy', 'UX / UI design', 'User research', 'Design systems'],
     comp: '\u20B921\u201342 LPA CTC',
     roleQuestion:
@@ -180,7 +180,7 @@ const ROLES: RoleDef[] = [
   {
     id: 'security',
     title: 'Security Engineer',
-    tagline: 'Trust as the product',
+    tagline: 'Trust as our foundation',
     icon: ShieldCheck,
     blurb:
       'Protect sensitive personal data and our E2EE guarantees — from threat modeling to secure-by-default engineering.',
@@ -210,8 +210,8 @@ const ROLES: RoleDef[] = [
 const PERKS = [
   { icon: Globe, title: 'Remote-first', text: 'Work from wherever you do your best thinking.' },
   { icon: Zap, title: 'Real ownership', text: 'Small team, high trust, visible impact from day one.' },
-  { icon: Heart, title: 'Product with a soul', text: 'Build something that respects people\u2019s time and attention.' },
-  { icon: ShieldCheck, title: 'Privacy by design', text: 'We treat user trust as the product, not an afterthought.' },
+  { icon: Heart, title: 'OneHook has a soul', text: 'Build something that respects people\u2019s time and attention.' },
+  { icon: ShieldCheck, title: 'Privacy by design', text: 'We treat user trust as OneHook\u2019s foundation, not an afterthought.' },
 ];
 
 const initialForm = {
