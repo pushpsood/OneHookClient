@@ -14,6 +14,25 @@ const INTERESTED_IN_OPTIONS = ['M', 'F', 'NB'];
 
 type Step = 'basics' | 'preferences' | 'optional';
 
+const OPTION_LABELS: Record<string, string> = {
+  M: 'Man',
+  F: 'Woman',
+  NB: 'Non-binary',
+  CASUAL: 'Casual dating',
+  SERIOUS: 'A serious relationship',
+  FRIENDSHIP: 'Friendship',
+  YES: 'Yes',
+  NO: 'No',
+  OPEN: 'Open to it',
+  NEVER: 'Never',
+  SOCIALLY: 'Socially',
+  REGULARLY: 'Regularly',
+};
+
+function formatOptionLabel(value: string): string {
+  return OPTION_LABELS[value] ?? value;
+}
+
 export function OnboardingWizard() {
   const navigate = useNavigate();
   const { currentUser, setCurrentUser } = useAppStore();
@@ -48,11 +67,11 @@ export function OnboardingWizard() {
 
   const saveBasics = async () => {
     if (!displayName.trim() || !gender || interestedInGenders.length === 0) {
-      showToast('Name, gender, and who you are interested in are required.', 'error');
+      showToast('Please add your name, gender, and who you’d like to meet.', 'error');
       return;
     }
     if (age < 18) {
-      showToast('You must be at least 18.', 'error');
+      showToast('You need to be at least 18 to join OneHook.', 'error');
       return;
     }
     setStep('preferences');
@@ -79,7 +98,10 @@ export function OnboardingWizard() {
         if (smoking) profilePayload.smokingStatus = smoking;
         if (drinking) profilePayload.drinkingStatus = drinking;
         if (interests.trim()) {
-          profilePayload.interests = interests.split(',').map((s) => s.trim()).filter(Boolean);
+          profilePayload.interests = interests
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
         }
       }
 
@@ -106,10 +128,13 @@ export function OnboardingWizard() {
         });
       }
 
-      showToast('Profile ready. Happy matching!', 'success');
+      showToast('Your profile is ready. Let’s find your next Hook!', 'success');
       navigate('/app', { replace: true });
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not save profile.', 'error');
+      showToast(
+        err instanceof Error ? err.message : 'We couldn’t save your profile. Please try again.',
+        'error'
+      );
     } finally {
       setSaving(false);
     }
@@ -132,16 +157,16 @@ export function OnboardingWizard() {
           </p>
           <h1 className="text-4xl font-serif italic uppercase tracking-tighter">
             {step === 'basics' && 'Your Profile'}
-            {step === 'preferences' && 'Match Filters'}
-            {step === 'optional' && 'Refine Matching'}
+            {step === 'preferences' && 'Your Preferences'}
+            {step === 'optional' && 'A Little More About You'}
           </h1>
           <p className="text-xs opacity-60 italic leading-relaxed">
             {step === 'basics' &&
-              'Tell us the essentials so we can show you relevant people.'}
+              'Share the basics so we can introduce you to people who fit what you’re looking for.'}
             {step === 'preferences' &&
-              'Set your search radius and age range. Distance comes from your preferences, not hard-coded limits.'}
+              'Choose how far you’d like to look and the age range you’re comfortable with.'}
             {step === 'optional' &&
-              'Optional details improve soft-signal matching. You can add these later in Membership settings.'}
+              'A few extra details can help us suggest better matches. You can always add them later in Membership.'}
           </p>
         </div>
 
@@ -152,7 +177,7 @@ export function OnboardingWizard() {
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 className="w-full border-b border-border py-2 outline-none text-sm"
-                placeholder="How you appear to others"
+                placeholder="The name people will see"
               />
             </Field>
             <Field label="Age *">
@@ -181,7 +206,7 @@ export function OnboardingWizard() {
                 onChange={(e) => setBio(e.target.value)}
                 rows={3}
                 className="w-full border border-border p-3 outline-none text-sm resize-none"
-                placeholder="A few words about you"
+                placeholder="Share a little about yourself"
               />
             </Field>
             <button
@@ -247,36 +272,40 @@ export function OnboardingWizard() {
 
         {step === 'optional' && (
           <div className="space-y-5">
-            <Field label="Relationship type">
+            <Field label="What are you looking for?">
               <OptionRow
                 options={['CASUAL', 'SERIOUS', 'FRIENDSHIP']}
                 value={relationshipType}
                 onChange={setRelationshipType}
               />
             </Field>
-            <Field label="Wants kids">
-              <OptionRow options={['YES', 'NO', 'OPEN']} value={wantsKids} onChange={setWantsKids} />
+            <Field label="How do you feel about kids?">
+              <OptionRow
+                options={['YES', 'NO', 'OPEN']}
+                value={wantsKids}
+                onChange={setWantsKids}
+              />
             </Field>
-            <Field label="Smoking preference">
+            <Field label="Smoking">
               <OptionRow
                 options={['NEVER', 'SOCIALLY', 'REGULARLY']}
                 value={smoking}
                 onChange={setSmoking}
               />
             </Field>
-            <Field label="Drinking preference">
+            <Field label="Drinking">
               <OptionRow
                 options={['NEVER', 'SOCIALLY', 'REGULARLY']}
                 value={drinking}
                 onChange={setDrinking}
               />
             </Field>
-            <Field label="Interests (comma-separated)">
+            <Field label="Your interests (separate with commas)">
               <input
                 value={interests}
                 onChange={(e) => setInterests(e.target.value)}
                 className="w-full border-b border-border py-2 outline-none text-sm"
-                placeholder="Hiking, Jazz, Design"
+                placeholder="Hiking, jazz, design"
               />
             </Field>
             <div className="flex gap-3">
@@ -329,7 +358,7 @@ function OptionRow({
             value === opt ? 'border-accent bg-accent text-white' : 'border-border opacity-60'
           }`}
         >
-          {opt}
+          {formatOptionLabel(opt)}
         </button>
       ))}
     </div>
@@ -353,10 +382,12 @@ function MultiOptionRow({
           type="button"
           onClick={() => onToggle(opt)}
           className={`px-3 py-1 border text-[10px] uppercase tracking-widest font-bold ${
-            selected.includes(opt) ? 'border-accent bg-accent text-white' : 'border-border opacity-60'
+            selected.includes(opt)
+              ? 'border-accent bg-accent text-white'
+              : 'border-border opacity-60'
           }`}
         >
-          {opt}
+          {formatOptionLabel(opt)}
         </button>
       ))}
     </div>

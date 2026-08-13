@@ -17,15 +17,6 @@ React frontend application for the OneHook platform. Built with Vite, React 19, 
 
 - Node.js >= 20.0.0
 - npm >= 10.0.0
-- **The generated API SDK.** `onehook-api-client` is a `file:` link into the sibling
-  `OneHookBackend` repo's generated Smithy output. It is a hard requirement — there is deliberately
-  **no stub or mock fallback**, so a missing SDK fails the build loudly instead of silently shipping
-  fake API behaviour:
-
-  ```bash
-  cd ../OneHookBackend/packages/api-models && mvn -q exec:java   # generate
-  cd ../../../OneHookClient && npm install                       # re-link
-  ```
 
 ## Quick Start
 
@@ -56,8 +47,7 @@ app at a real backend by creating your own `.env` (git-ignored — only `.env.ex
 cp .env.example .env   # then fill in the values for the backend you're developing against
 ```
 
-Run against a deployed environment, or stand up the backend locally (see `OneHookBackend`'s
-`scripts/local-dev.sh` for LocalStack) — whichever you prefer. Because the choice is personal, keep
+Run against a deployed environment. Because the choice is personal, keep
 it in your own untracked files; never add it to the repo.
 
 ## Environment Configuration
@@ -103,14 +93,13 @@ What this forbids:
 | `if (useMockApi) { ... }` style branches inside `src/` | The fake path ships in the bundle; one misconfigured variable silently serves fake data |
 | Stub/fallback modules substituted at build time | A failed SDK/codegen step then produces a build that *looks* healthy but isn't |
 | `import.meta.env.DEV` short-circuits that fake success | Especially dangerous in auth: swallowing a Cognito error and returning "signed in" hides real failures |
-| Committing personal `.env` / LocalStack wiring | Local setup is per-developer; committed copies drift and leak environment details |
+| Committing personal `.env` wiring | Local setup is per-developer; committed copies drift and leak environment details |
 
 What this requires instead:
 
 - **Fail loudly.** Missing prerequisites (e.g. the generated SDK) must break the build with an
   actionable message — never degrade to a stub.
-- **Real backends for real behaviour.** Develop against a deployed environment or your own local
-  stack; keep that wiring in untracked files.
+- **Real backends for real behaviour.** Develop against a deployed environment; keep that wiring in untracked files.
 - **Tests stay, mocks go.** Unit/integration tests under `src/tests` are *not* shipped (Vitest files
   are never bundled) and remain first-class. What is banned is test-support code living in the
   application's runtime path.

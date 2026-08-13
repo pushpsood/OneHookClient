@@ -109,9 +109,12 @@ export function AuthSetupWizard() {
                 <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center border border-accent/20 mx-auto">
                   <Mail className="w-8 h-8 text-accent" />
                 </div>
-                <h2 className="text-3xl font-serif italic uppercase tracking-tighter">Secure Your Account</h2>
+                <h2 className="text-3xl font-serif italic uppercase tracking-tighter">
+                  Keep Your Account Safe
+                </h2>
                 <p className="text-xs opacity-60 leading-relaxed italic">
-                  Add an email address to enable account recovery in case you lose access to your phone.
+                  Add an email so you can get back into your account if you ever lose access to your
+                  phone.
                 </p>
               </div>
 
@@ -165,9 +168,11 @@ export function AuthSetupWizard() {
                 <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center border border-accent/20 mx-auto">
                   <ShieldCheck className="w-8 h-8 text-accent" />
                 </div>
-                <h2 className="text-3xl font-serif italic uppercase tracking-tighter">Verify Email</h2>
+                <h2 className="text-3xl font-serif italic uppercase tracking-tighter">
+                  Verify Your Email
+                </h2>
                 <p className="text-xs opacity-60 leading-relaxed italic">
-                  We've sent a verification code to {email}.
+                  We sent a verification code to {email}.
                 </p>
               </div>
 
@@ -191,7 +196,10 @@ export function AuthSetupWizard() {
                 <div className="flex gap-4 pt-4">
                   <button
                     type="button"
-                    onClick={() => { setStep('EMAIL_PROMPT'); setError(null); }}
+                    onClick={() => {
+                      setStep('EMAIL_PROMPT');
+                      setError(null);
+                    }}
                     disabled={loading}
                     className="flex-1 py-4 border border-border text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-bg transition-colors"
                   >
@@ -221,9 +229,12 @@ export function AuthSetupWizard() {
                 <div className="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center border border-accent/20 mx-auto">
                   <Fingerprint className="w-8 h-8 text-accent" />
                 </div>
-                <h2 className="text-3xl font-serif italic uppercase tracking-tighter">Fast Sign-In</h2>
+                <h2 className="text-3xl font-serif italic uppercase tracking-tighter">
+                  Fast Sign-In
+                </h2>
                 <p className="text-xs opacity-60 leading-relaxed italic">
-                  Create a passkey using Touch ID, Face ID, or Windows Hello for instant, passwordless logins next time.
+                  Create a passkey with Touch ID, Face ID, or Windows Hello to sign in quickly next
+                  time.
                 </p>
               </div>
 

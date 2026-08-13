@@ -85,8 +85,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 Something Went Wrong
               </h2>
               <p className="text-xs opacity-60 leading-relaxed italic">
-                We encountered an unexpected error. Please try refreshing the page or contact
-                support if the problem persists.
+                Something unexpected happened. Try again, or head home and come back in a moment. If
+                it keeps happening, please contact support.
               </p>
             </div>
 
@@ -115,7 +115,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 onClick={this.handleGoHome}
                 className="flex-1 py-4 bg-accent text-white text-[10px] font-bold uppercase tracking-[0.3em] hover:opacity-90 transition-opacity"
               >
-                Go Home
+                Back to Home
               </button>
             </div>
           </div>

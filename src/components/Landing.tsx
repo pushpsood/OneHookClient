@@ -83,9 +83,7 @@ function AdaptiveFlow({
       // Using offsetTop alone is wrong here: with `items-center`, short parts
       // (the "+" and "Final rank =" text) sit at a different offsetTop than the
       // taller pill chips, which made a single row look like several.
-      const centres = kids
-        .map((k) => k.offsetTop + k.offsetHeight / 2)
-        .sort((a, b) => a - b);
+      const centres = kids.map((k) => k.offsetTop + k.offsetHeight / 2).sort((a, b) => a - b);
       let lines = 1;
       for (let i = 1; i < centres.length; i += 1) {
         if (centres[i] - centres[i - 1] > 6) lines += 1;
@@ -123,7 +121,9 @@ function AdaptiveFlow({
       </div>
 
       {!hidden && (
-        <div className={stacked ? colClass : `${rowClass}${centerHorizontal ? ' justify-center' : ''}`}>
+        <div
+          className={stacked ? colClass : `${rowClass}${centerHorizontal ? ' justify-center' : ''}`}
+        >
           {renderParts(stacked)}
         </div>
       )}
@@ -193,7 +193,12 @@ export function Landing() {
   const convoRef = useRef<HTMLElement>(null);
   const [watermarkSize, setWatermarkSize] = useState(0);
 
-  const [strokeCoords, setStrokeCoords] = useState<{ startY: number; endY: number; endX: number; winW: number } | null>(null);
+  const [strokeCoords, setStrokeCoords] = useState<{
+    startY: number;
+    endY: number;
+    endX: number;
+    winW: number;
+  } | null>(null);
 
   useEffect(() => {
     const updateStroke = () => {
@@ -224,12 +229,12 @@ export function Landing() {
     };
 
     updateStroke();
-    
+
     const resizeObserver = new ResizeObserver(() => {
       // Debounce slightly or just call directly since it's cheap (just getBoundingClientRect)
       updateStroke();
     });
-    
+
     if (pageContainerRef.current) {
       resizeObserver.observe(pageContainerRef.current);
     }
@@ -254,7 +259,7 @@ export function Landing() {
   useEffect(() => {
     const el = getAppRef.current;
     if (!el) return;
-    
+
     // Disable animation on mobile devices
     const isMobile = window.innerWidth < 768; // md breakpoint
     if (isMobile) {
@@ -262,7 +267,7 @@ export function Landing() {
       appRightX.set(0);
       return;
     }
-    
+
     let maxConverge = 0;
     let raf = 0;
     const update = () => {
@@ -272,12 +277,12 @@ export function Landing() {
       const distance = Math.abs(sectionCenter - viewportH / 2);
       const maxDistance = viewportH / 2 + rect.height / 2;
       const t = Math.min(distance / maxDistance, 1); // 0 = centered, 1 = far away
-      
+
       const converge = 56 * (1 - t);
       if (converge > maxConverge) {
         maxConverge = converge;
       }
-      
+
       appLeftX.set(maxConverge); // text drifts toward center
       appRightX.set(-maxConverge); // phone drifts toward center
     };
@@ -312,8 +317,7 @@ export function Landing() {
   useEffect(() => {
     const el = convoRef.current;
     if (!el) return;
-    const measure = () =>
-      setWatermarkSize(Math.ceil(Math.hypot(el.offsetWidth, el.offsetHeight)));
+    const measure = () => setWatermarkSize(Math.ceil(Math.hypot(el.offsetWidth, el.offsetHeight)));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -482,12 +486,12 @@ export function Landing() {
         : false;
 
       const chatbotOpen = !!document.querySelector('.chatbot-window');
-      
+
       const philosophy = document.getElementById('philosophy');
       const showChatbotMascot = philosophy
-        ? (philosophy.getBoundingClientRect().top) < window.innerHeight * 0.9
+        ? philosophy.getBoundingClientRect().top < window.innerHeight * 0.9
         : false;
-      
+
       setShowChatbot(showChatbotMascot);
 
       if (chatbotOpen || footerVisible || !pastHero) {
@@ -849,7 +853,7 @@ export function Landing() {
           </motion.div>
 
           <p className="mt-5 text-[11px] sm:text-xs text-white/60 italic">
-            Have an invite code? Redeem it in seconds. Don&rsquo;t have one yet? Ask a member.
+            Have an invite code? Redeem it in seconds. Not yet? Ask a member to bring you in.
           </p>
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-white/70">
@@ -1184,7 +1188,7 @@ export function Landing() {
             </h2>
             <p className="text-lg opacity-70 leading-relaxed max-w-2xl mx-auto">
               {relationshipMode === 'single'
-                ? 'The experience should feel like OneHook itself: focused, intentional, impossible to rush. Move through the flow to feel how OneHook narrows attention instead of fragmenting it.'
+                ? 'OneHook is designed to feel focused and intentional — never rushed. Follow the steps to see how it keeps your attention on one promising connection at a time.'
                 : 'Already seeing someone? Use OneHook as a priority-notification messenger \u2014 so the one person who matters always reaches you first, without the noise of another inbox.'}
             </p>
 
@@ -1397,7 +1401,10 @@ export function Landing() {
           </p>
 
           {/* Matching intelligence — the science behind a single good match */}
-          <div className="relative mt-20 lg:mt-28 bg-accent text-white overflow-visible w-screen -ml-[50vw] left-[50%] z-10">
+          <div
+            id="under-the-hood"
+            className="scroll-mt-24 lg:scroll-mt-28 relative mt-20 lg:mt-28 bg-accent text-white overflow-visible w-screen -ml-[50vw] left-[50%] z-10"
+          >
             {/* Parabolic curve top */}
             <div
               className="absolute top-0 left-0 right-0 h-12 sm:h-16 lg:h-20 bg-accent -translate-y-full z-0"
@@ -1422,7 +1429,7 @@ export function Landing() {
 
               {/* Content wrapper to maintain centered layout */}
               <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
-                <section id="under-the-hood" className="relative pb-16 lg:pb-20 pt-10">
+                <section className="relative pb-16 lg:pb-20 pt-10">
                   <div className="max-w-3xl relative mx-auto text-center">
                     <p className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-5 inline-flex items-center gap-3">
                       <Sparkles className="w-3.5 h-3.5" /> Under the hood: Mr.OneHook
@@ -1432,9 +1439,9 @@ export function Landing() {
                       The science of one good match.
                     </h3>
                     <p className="mt-6 text-base md:text-lg text-white/70 leading-relaxed">
-                      Behind the calm interface is a matching engine built like infrastructure. It
-                      reads meaning, not keywords, and optimizes for a two-way spark &mdash; not
-                      just whether you&rsquo;d swipe right.
+                      Behind the calm experience is thoughtful matching technology. It reads
+                      meaning, not just keywords, and looks for a genuine two-way spark &mdash; not
+                      only whether you&rsquo;d swipe right.
                     </p>
                   </div>
 
@@ -1871,7 +1878,7 @@ export function Landing() {
           </h2>
 
           <p className="text-lg md:text-xl opacity-60 italic mb-12 max-w-2xl mx-auto">
-            Trade a thousand maybes for one yes. Bring an invite code and meet the person actually
+            Trade a thousand maybes for one real possibility. Bring an invite code and meet someone
             worth your attention.
           </p>
 

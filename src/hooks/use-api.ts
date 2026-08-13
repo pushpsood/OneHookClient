@@ -91,10 +91,7 @@ export function useProfile(userId?: string) {
   const { currentUser, setCurrentUser } = useAppStore();
   const uid = userId || currentUser?.id || 'me';
 
-  const { data, loading, error, refetch } = useAsync<UserProfile>(
-    () => ProfileApi.get(uid),
-    [uid]
-  );
+  const { data, loading, error, refetch } = useAsync<UserProfile>(() => ProfileApi.get(uid), [uid]);
 
   useEffect(() => {
     if (data && !userId) {
@@ -173,7 +170,9 @@ export function useCandidates() {
   };
 }
 
-function toDiscoveryCandidate(candidate: DiscoverResponse['candidates'][number]): DiscoveryCandidate {
+function toDiscoveryCandidate(
+  candidate: DiscoverResponse['candidates'][number]
+): DiscoveryCandidate {
   const id = candidate.userId;
   return {
     id,
@@ -181,7 +180,7 @@ function toDiscoveryCandidate(candidate: DiscoverResponse['candidates'][number])
     name: id,
     age: 0,
     location: candidate.distanceKm == null ? 'Nearby' : `${candidate.distanceKm.toFixed(1)} km`,
-    bio: `Match score ${Math.round((candidate.score ?? 0) * 100)}%. Add optional profile details to improve future ranking precision.`,
+    bio: `${Math.round((candidate.score ?? 0) * 100)}% match based on what you’ve shared. Add more to your profile to help us fine-tune future suggestions.`,
     distance: candidate.distanceKm,
     distanceKm: candidate.distanceKm,
     score: candidate.score,
@@ -226,10 +225,7 @@ export function useChatMessages(matchId: string, recipientId?: string) {
 
   const myId = currentUser?.id;
 
-  const encryptionManager = useMemo(
-    () => (myId ? new ChatEncryptionManager(myId) : null),
-    [myId]
-  );
+  const encryptionManager = useMemo(() => (myId ? new ChatEncryptionManager(myId) : null), [myId]);
 
   useEffect(() => {
     if (encryptionManager) {
@@ -344,7 +340,12 @@ export function useChatMessages(matchId: string, recipientId?: string) {
         setMessages((prev) =>
           prev.map((m) =>
             m.messageId === messageId
-              ? { ...m, messageId: sent.messageId, timestamp: sent.timestamp, status: MessageStatus.Sent }
+              ? {
+                  ...m,
+                  messageId: sent.messageId,
+                  timestamp: sent.timestamp,
+                  status: MessageStatus.Sent,
+                }
               : m
           )
         );
@@ -368,7 +369,9 @@ export function useChatMessages(matchId: string, recipientId?: string) {
         await ChatMessagingApi.markAsDelivered(matchId, message.timestamp, messageId, myId || 'me');
         setMessages((prev) =>
           prev.map((m) =>
-            m.messageId === messageId ? { ...m, status: MessageStatus.Delivered, deliveredAt: Date.now() } : m
+            m.messageId === messageId
+              ? { ...m, status: MessageStatus.Delivered, deliveredAt: Date.now() }
+              : m
           )
         );
       } catch (err) {
