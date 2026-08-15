@@ -124,7 +124,7 @@ export class FrontendPipelineStack extends Stack {
 
     const sourceArtifact = new Artifact('Source');
     const sourceRole = new Role(this, 'SourceActionRole', {
-      assumedBy: new ServicePrincipal('codepipeline.amazonaws.com'),
+      assumedBy: pipeline.role,
       description: 'Fetches only pushpsood/OneHookClient main through the CDK-managed connection',
     });
 

@@ -80,6 +80,15 @@ describe('AWS-native frontend deployment pipeline', () => {
     expect(JSON.stringify(sourcePolicy)).toContain('codeconnections:BranchName');
     expect(JSON.stringify(sourcePolicy)).toContain('codeconnections:ProviderAction');
     expect(JSON.stringify(sourcePolicy)).toContain('read_only');
+
+    const sourceRole = resourcesOf(template, 'AWS::IAM::Role').find(([id]) =>
+      id.includes('SourceActionRole')
+    )?.[1];
+    const sourceTrust = JSON.stringify(
+      (sourceRole?.Properties as Record<string, unknown>)?.AssumeRolePolicyDocument
+    );
+    expect(sourceTrust).toContain('PipelineRole');
+    expect(sourceTrust).not.toContain('codepipeline.amazonaws.com');
   });
 
   it('limits build and deployment projects to their exact CDK bootstrap roles', () => {
