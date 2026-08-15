@@ -39,23 +39,31 @@ interface CognitoUser {
 
 class CognitoAuthService {
   constructor(config: CognitoConfig) {
+    const loginWith: Record<string, unknown> = {
+      phone: true,
+      email: true,
+    };
+    if (
+      config.cognitoDomain &&
+      config.cognitoRedirectSignIn &&
+      config.cognitoRedirectSignOut
+    ) {
+      loginWith.oauth = {
+        responseType: 'code',
+        scopes: ['phone', 'email', 'openid', 'profile', 'aws.cognito.signin.user.admin'],
+        redirectSignIn: [config.cognitoRedirectSignIn],
+        redirectSignOut: [config.cognitoRedirectSignOut],
+        domain: config.cognitoDomain,
+      };
+    }
+
     // Built as a loose object because Amplify's Auth config is a discriminated
-    // union that doesn't accept a conditionally-spread identityPoolId cleanly.
+    // union that doesn't accept conditionally-spread Identity Pool/OAuth values cleanly.
     const cognito: Record<string, unknown> = {
       userPoolId: config.userPoolId,
       userPoolClientId: config.clientId,
       userPoolEndpoint: config.endpoint,
-      loginWith: {
-        phone: true,
-        email: true,
-        oauth: {
-          responseType: 'code',
-          scopes: ['phone', 'email', 'openid', 'profile', 'aws.cognito.signin.user.admin'],
-          redirectSignIn: [config.cognitoRedirectSignIn],
-          redirectSignOut: [config.cognitoRedirectSignOut],
-          domain: config.cognitoDomain,
-        },
-      },
+      loginWith,
     };
 
     // Identity Pool provides temporary AWS credentials for services like

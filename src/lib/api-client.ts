@@ -94,11 +94,16 @@ async function refreshToken(): Promise<string | null> {
   }
 }
 
+/**
+ * Route a raw endpoint path to the unified REST base URL. All services are served behind a single
+ * API domain (VITE_API_BASE_URL, e.g. https://api.onehook.club), so no per-service routing exists.
+ */
 export async function apiRequest<T>(endpoint: string, options: RequestConfig = {}): Promise<T> {
   const { retry = true, retries = 0, ...fetchOptions } = options;
 
   const token = await getAuthToken();
-  let url = `${apiBaseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  let url = `${apiBaseUrl}${path}`;
 
   const headers = mergeHeaders({ 'Content-Type': 'application/json' }, fetchOptions.headers);
 

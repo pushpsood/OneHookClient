@@ -39,46 +39,39 @@ npm run build
 
 ## Local Development Setup
 
-**Local development scaffolding is each developer's own responsibility and is not committed to this
-repository.** There is no mock server, no mock scenarios, and no fixture data in the tree. Point the
-app at a real backend by creating your own `.env` (git-ignored — only `.env.example` is tracked):
+The application defaults to the real Gamma backend through the public, checked-in configuration in
+`src/config/deployment.config.ts`. No `.env` is required for normal development:
 
 ```bash
-cp .env.example .env   # then fill in the values for the backend you're developing against
+npm run dev
 ```
 
-Run against a deployed environment. Because the choice is personal, keep
-it in your own untracked files; never add it to the repo.
+If you need to point your local browser at different real infrastructure, copy `.env.example` to the
+git-ignored `.env` and set only the overrides you need. Local scaffolding remains each developer's
+responsibility: there is no mock server, mock scenario, or fixture data in the runtime tree.
 
-## Environment Configuration
+## Runtime Configuration
 
-Copy `.env.example` to `.env` and fill in the values:
+Public browser configuration is source-controlled in `src/config/deployment.config.ts`. Both the
+Gamma and production-site artifacts currently select its `gamma` entry, which contains the unified
+REST URL, AppSync GraphQL URL, Cognito public identifiers, chatbot URL, feature defaults, timeout,
+and log level. Vite bundles these values into browser JavaScript, so this file must never contain a
+secret.
 
-```bash
-cp .env.example .env
-```
+No GitHub `VITE_*` variables or local `.env` are required. The Gamma and production CodeBuild
+projects set only the non-secret selector `VITE_BACKEND_STAGE=gamma`; an unknown selector fails the
+build. Developers may copy `.env.example` to ignored `.env` and override individual values for local
+work. Explicit boolean, timeout, and log-level overrides are validated, while blank values use
+source defaults. The unused `VITE_WS_URL` setting has been removed.
 
-Key variables:
-- `VITE_API_BASE_URL` — Backend API Gateway URL (from OneHookBackend deployment)
-- `VITE_COGNITO_USER_POOL_ID` — Cognito User Pool ID (from OneHookBackend deployment)
-- `VITE_COGNITO_CLIENT_ID` — Cognito App Client ID (from OneHookBackend deployment)
+Gamma Cognito is in `ap-south-1`. Its IDP endpoint is derived from that region. User Pool, app-client
+and Identity Pool IDs are public routing identifiers rather than credentials. Redirects default to
+the browser origin, but Amplify Hosted UI OAuth is enabled only when domain, sign-in redirect, and
+sign-out redirect are all non-empty; direct Cognito authentication remains available without it.
 
-### Architecture Notes: Cognito Authentication
-
-This application uses standard `.env` variables (`VITE_COGNITO_USER_POOL_ID`, `VITE_COGNITO_CLIENT_ID`) for AWS Cognito integration, injected by Vite at build time. 
-
-#### Why are these values hardcoded at build time?
-- **Not Sensitive:** User Pool IDs and Client IDs are public identifiers used for routing, not secret keys.
-- **Simplicity:** This allows frontend libraries like AWS Amplify to work seamlessly in the browser out-of-the-box.
-- **Low Churn:** Cognito User Pools are typically created once per environment (Dev/Staging/Prod) and rarely change. If a pool is recreated, a simple frontend redeployment is sufficient to point the app to the new pool.
-
-#### Decoupling vs. Simplicity (BFF Pattern)
-While it is possible to completely decouple the frontend from Cognito by using a Backend-For-Frontend (BFF) proxy (where the frontend only talks to a custom backend, and the backend talks to Cognito), this introduces significant complexity. This BFF approach is generally only recommended when:
-1. Strict security audits prohibit storing JWTs in `localStorage` (requiring HTTP-only cookies).
-2. The application requires dynamic multi-tenancy (each client has their own User Pool).
-3. There are imminent plans to migrate away from AWS Cognito to another Identity Provider.
-
-For this project's current needs, the `.env` approach remains the most efficient and standard practice.
+When the production backend has been deployed and validated, add a source-controlled `prod` entry,
+then change only the production build's `VITE_BACKEND_STAGE` selector. Do not switch production URLs
+independently in pipeline settings.
 
 ## Engineering Policy: No Test Code in Production (strict)
 
@@ -111,19 +104,23 @@ Anything test-related that must exist locally belongs in your own untracked work
 
 ### Deployments are gated on tests
 
-`.github/workflows/deploy-frontend.yml` runs a **`verify` job (`npm run lint` + `npm test`) that the
-`deploy` job depends on** (`needs: verify`). Nothing is deployed unless type-checking and the test
-suite pass on the exact commit being deployed, and because the gate is a separate job, a failing
-build never reaches the AWS credential step — a red commit cannot assume the deploy role.
+`.github/workflows/ci.yml` remains a pull-request-only GitHub check. Deployment is independently
+gated inside the AWS pipeline because pull-request and `main` push events are separate: the
+CodePipeline `Verify` stage runs `npm run lint` and `npm test` against the exact CodeConnections
+source revision before any deployment-capable CodeBuild project runs.
 
-This is deliberately duplicated from `ci.yml` rather than relying on it: `push` and `pull_request`
-are **independent triggers**, so PR checks alone do not gate a direct push to `main` or a manual
-`workflow_dispatch` run.
+After Gamma deploys and passes its public smoke test, `BuildProduction` repeats type checking and
+tests, builds the production bundle, verifies its promoted endpoints, and synthesizes a complete
+CDK cloud assembly. Only that immutable pipeline artifact reaches AWS manual approval. The
+post-approval project deploys the stored assembly with `--app cdk.out.prod`; it never runs Vite or
+CDK synthesis again.
 
-> **Remaining manual step (GitHub setting, not in this repo):** mark `lint-and-test` a **required
-> status check** for `main` under *Settings → Branches → Branch protection*, so a red PR cannot be
-> merged in the first place. The in-workflow gate above stops a bad deploy; branch protection stops
-> a bad merge.
+A failed check, build, synth, deployment, or Gamma smoke test therefore cannot reach production
+approval.
+
+> **Repository setting:** keep `lint-and-test` as a required GitHub status check for `main`, so a
+> failing pull request cannot merge. CodePipeline then independently verifies the merged commit
+> before deployment.
 
 ## Rendering Model & Tier Personalization (SSR tradeoffs)
 
@@ -182,47 +179,186 @@ Real blockers found while scoping; they apply regardless of which option:
 
 ## Deployment
 
-This project uses **GitHub Actions** for automated CI/CD. When you push to the `main` branch, it automatically deploys to AWS (Mumbai `ap-south-1` region) using AWS CDK.
+A push to protected `main` is delivered directly to AWS through the CDK-managed GitHub
+CodeConnection. A queued CodePipeline V2 execution then deploys both stages into frontend account
+`851725215059`; GitHub Actions and GitHub OIDC are not in the deployment path. Both frontends live
+in Mumbai (`ap-south-1`). Backend account `627367419734` owns **only** the API zones
+(`api.gamma.onehook.club`, `api.onehook.club`); the pipeline never deploys backend resources.
 
-### Initial AWS Setup (OIDC)
+| Stage | AWS account | Site | Runtime backend used by current artifact | Hosted zone | CloudFront certificate |
+|---|---|---|---|---|---|
+| **gamma** | `851725215059` | `gamma.onehook.club` | REST `https://api.gamma.onehook.club`; GraphQL `https://graphql.api.gamma.onehook.club/graphql` | **new CDK-managed** `gamma.onehook.club` zone in the frontend account | reuses the frontend-account wildcard `*.onehook.club` cert (`us-east-1`) — no new cert, no separate stack |
+| **production** | `851725215059` (owns the `onehook.club` zone) | `onehook.club` (+ `www`) | **temporarily the same Gamma REST/GraphQL backend**; switch to `api.onehook.club` / `graphql.api.onehook.club` only after backend production promotion | existing `onehook.club` zone | dedicated `OneHook-Certificate-prod` stack in `us-east-1` (ownership preserved) |
 
-For GitHub Actions to securely deploy to AWS without using long-lived static access keys, we use **OpenID Connect (OIDC)**. 
+The pipeline is strictly sequential:
 
-If you are setting this up for the first time, run the provided script on your local machine (ensure you have AWS CLI installed and configured):
-
-```bash
-chmod +x setup-aws-oidc.sh
-./setup-aws-oidc.sh
+```text
+Source (exact main commit)
+→ Verify
+→ Build + deploy Gamma
+→ Smoke-test Gamma
+→ Build/test/check + synthesize production cloud assembly
+→ AWS manual approval
+→ Deploy the exact approved assembly without rebuilding or re-synthesizing
+→ Smoke-test production
 ```
 
-This script creates an OIDC Identity Provider and an IAM Role (`GitHubActionsDeployRole`) with least-privilege permissions, ensuring that only this specific GitHub repository can assume the role to deploy the CDK stacks.
+CodePipeline stores source and build outputs in its encrypted, private, versioned S3 artifact
+bucket. `BuildProduction` has only pipeline-required artifact-bucket and build-log access; it has no
+infrastructure API or role-assumption permission. The stable public `onehook.club` hosted-zone ID is
+source-controlled, so synthesis is deterministic and lookup-free.
+`DeployProduction` receives only the immutable assembly artifact and can assume only the four exact
+deploy and file-publishing bootstrap roles in `ap-south-1` and `us-east-1`. No project can assume
+lookup or image-publishing roles, wildcard `cdk-*` roles, or roles in backend account
+`627367419734`.
 
-### GitHub Secrets
+For now, both artifacts deliberately select the checked-in Gamma backend entry. Production backend
+promotion is a separate backend-repository operation; once it has been tested and deployed, add a
+`prod` entry to `src/config/deployment.config.ts` and change only the production build's
+`VITE_BACKEND_STAGE` selector. Both frontend stacks still create **A and AAAA** aliases in account
+`851725215059`, and the app rejects a deploy attempted with credentials from any other account.
 
-To enable the automated deployment, add the following to your GitHub Repository **Settings -> Secrets and variables -> Actions**:
+### Gamma DNS: frontend-owned zone, backend-owned API (no cross-account writes)
 
-- `AWS_ROLE_ARN`: The ARN output by the `setup-aws-oidc.sh` script (e.g., `arn:aws:iam::123456789012:role/GitHubActionsDeployRole`)
-- `FRONTEND_DOMAIN`: The custom domain for your frontend (e.g., `onehook.club`)
+Gamma's `gamma.onehook.club` zone now lives in the frontend account and is fully CloudFormation-
+owned (created, delegated and deletable — no stale resources). Because the backend account still
+owns `api.gamma.onehook.club`, the gamma stack wires the delegation **without ever writing into the
+backend account**:
+
+1. A deterministic-name Lambda execution role in `851725215059`
+   (`OneHook-Gamma-ApiDnsReader`) assumes a **read-only** backend role
+   (`arn:aws:iam::627367419734:role/OneHook-ApiDnsReader-gamma-Role`, gated by an `ExternalId`) and
+   discovers the exact `api.gamma.onehook.club` zone by name before calling `route53:GetHostedZone`
+   to read its delegation nameservers.
+2. It creates the `api.gamma.onehook.club` **NS** record in the local gamma zone from those
+   nameservers.
+3. Only **after** that, an idempotent `AwsCustomResource` **UPSERT**s the parent `onehook.club`
+   zone's `gamma.onehook.club` NS record to point at the new local gamma zone (with a clean
+   **DELETE** on teardown), completing the migration off the previously backend-owned gamma zone.
+
+The backend role ARN and `ExternalId` have matching deterministic defaults in
+`infra/stacks/constants.ts` and may be intentionally re-pointed with
+`--context backendDnsReaderRoleArn=…` or `--context dnsDelegationExternalId=…`. The API zone is
+found by its exact code-owned DNS name, so no generated hosted-zone ID or manual workflow context is
+required.
+
+### AWS pipeline infrastructure
+
+The delivery plane is defined in `infra/pipeline/frontend-pipeline-stack.ts` and its source-controlled
+buildspecs. It provisions:
+
+- A GitHub `AWS::CodeConnections::Connection` scoped by IAM guardrails to
+  `pushpsood/OneHookClient` branch `main` and read-only provider operations.
+- A queued CodePipeline V2 pipeline named `OneHook-Frontend`.
+- Separate CodeBuild projects and service roles for verification, Gamma deployment, smoke tests,
+  production build/synth and production deployment.
+- A private, encrypted, versioned S3 artifact bucket with lifecycle cleanup.
+- CloudWatch build logs retained for one month.
+- An SNS production-approval topic.
+- An unattached managed policy granting only the exact production `PutApprovalResult` action; attach
+  it to the designated AWS IAM Identity Center permission set or approver role.
+
+The pipeline is not self-mutating. Pipeline-infrastructure changes are intentionally reviewed and
+bootstrapped with frontend-account administrator credentials:
+
+```bash
+AWS_PROFILE=pushp-sde-aws npm run synth:pipeline
+AWS_PROFILE=pushp-sde-aws npm run diff:pipeline
+AWS_PROFILE=pushp-sde-aws npm run deploy:pipeline
+```
+
+If this CDK CLI reports that no credentials are configured even though the SSO profile is valid,
+export that profile's temporary credentials into the current shell without writing them to disk,
+then rerun the commands:
+
+```bash
+eval "$(aws configure export-credentials --profile pushp-sde-aws --format env)"
+npm run diff:pipeline
+npm run deploy:pipeline
+```
+
+Deploying this stack is a high-impact infrastructure change and must be explicitly approved after
+reviewing `diff:pipeline`. The stack has termination protection enabled.
+
+### One-time CodeConnections authorization
+
+A connection created by CloudFormation always starts in `PENDING`; there is no API-only way to
+complete GitHub OAuth. After the initial pipeline-stack deployment:
+
+1. Open AWS Console in frontend account `851725215059`, region `ap-south-1`.
+2. Go to **Developer Tools → Settings → Connections**.
+3. Select `OneHookClient-GitHub` and choose **Update pending connection**.
+4. Install/select the AWS Connector for GitHub App with access to only
+   `pushpsood/OneHookClient`, then complete **Connect**.
+5. Verify the status is `AVAILABLE` before pushing the cutover commit.
+
+The connection fetches the exact commit directly. GitHub does not send AWS credentials and no
+GitHub Actions OIDC role is involved.
+
+### Production approval authority
+
+The pipeline outputs `ProductionApprovalPolicyArn`. Attach that managed policy only to the
+designated AWS approver identity. It grants `codepipeline:PutApprovalResult` only for
+`OneHook-Frontend/ApproveProduction/ApproveTestedArtifact`. Subscribe the desired release
+notification destination to the output `ApprovalTopicArn`; an email subscription requires explicit
+recipient confirmation.
+
+### Safe cutover from GitHub Actions
+
+There is no GitHub deployment workflow, deployment environment, `AWS_ROLE_ARN` secret or GitHub
+`VITE_*` configuration in the new path. `.github/workflows/ci.yml` remains PR-only.
+
+Do not delete the existing live GitHub OIDC roles until this migration succeeds end to end. Cut over
+in this order:
+
+1. Deploy the backend Gamma prepare state (`retainLegacyGammaZone: true`).
+2. Deploy the pipeline stack manually and authorize its PENDING connection.
+3. Attach the generated production-approval policy to the designated AWS approver.
+4. Push the frontend cutover commit and observe CodePipeline deploy/smoke-test Gamma.
+5. Approve and verify the exact production assembly and production smoke test.
+6. Only then remove GitHub environment secrets and the old
+   `GitHubActionsDeployRole-gamma`, `GitHubActionsDeployRole-production`, and broad
+   `GitHubActionsDeployRole` in a separately reviewed cleanup.
+7. After DNS propagation is confirmed, deploy the backend Gamma final state with
+   `retainLegacyGammaZone: false`.
+
+`setup-aws-oidc.sh` is retained temporarily as a guarded rollback utility and refuses to run unless
+`ALLOW_LEGACY_GITHUB_OIDC=1` is explicitly set.
 
 ### Domain and DNS Setup
 
-If you are using a custom domain (like GoDaddy), you must point your DNS to AWS Route 53 to utilize the automated SSL generation:
-
-1. **Create a Hosted Zone** in AWS Route 53 for your domain (e.g., `onehook.club`).
-2. Copy your existing DNS records (MX for Apple Mail, TXT, CNAMEs) into your new Route 53 Hosted Zone.
-3. Update the **Nameservers** in your domain registrar (e.g., GoDaddy) to the 4 AWS Nameservers provided by Route 53.
-
-During deployment, the CDK script will automatically request a wildcard SSL certificate (`*.onehook.club`) in `us-east-1` (required by CloudFront), validate it via your Route 53 zone, and attach it to your CloudFront distribution securely.
+The frontend account `851725215059` hosts the Route53 zones for **both** site domains: the existing
+`onehook.club` zone and a **new CDK-managed** `gamma.onehook.club` zone (created by the gamma
+stack). The backend account keeps only the `api.gamma.onehook.club` / `api.onehook.club` API zones.
+If you are migrating a domain, point the registrar's nameservers at the corresponding Route53 hosted
+zone. During deployment CDK provisions the CloudFront certificate in `us-east-1` for production
+(dedicated `OneHook-Certificate-prod` stack, DNS-validated in the `onehook.club` zone), while gamma
+reuses the frontend-account wildcard `*.onehook.club` certificate (no new cert). Gamma also creates
+its `gamma.onehook.club` NS delegation in the parent `onehook.club` zone and an
+`api.gamma.onehook.club` NS delegation pointing back at the backend API zone — all read-only toward
+the backend account (see "Gamma DNS" above).
 
 ## Infrastructure
 
-The frontend is deployed as a static site via:
+Each stage is deployed as a static site via:
 - **S3 (ap-south-1)** — Hosts the built assets
 - **CloudFront (Global)** — CDN with HTTPS, caching, and security headers
-- **Route53** — Automatically manages DNS alias records for CloudFront
-- **AWS Certificate Manager (us-east-1)** — Automatically provisions and validates SSL certificates
+- **Route53** — A + AAAA alias records for CloudFront, in the frontend account's zone for the stage
+  (`gamma.onehook.club` for gamma, `onehook.club` for production); gamma also owns the
+  `gamma.onehook.club` and `api.gamma.onehook.club` NS delegations
+- **AWS Certificate Manager (us-east-1)** — CloudFront TLS cert; a dedicated `OneHook-Certificate-prod`
+  stack for production (ownership preserved) and the reused frontend-account wildcard
+  `*.onehook.club` certificate for gamma
+- **Lambda + custom resources** — gamma only: a deterministic-name reader Lambda reads the
+  backend API zone's nameservers (read-only cross-account assume-role with `ExternalId`), and an
+  `AwsCustomResource` UPSERTs the parent zone's gamma delegation
 
-Infrastructure is defined in `infra/stacks/frontend-app.ts` using AWS CDK.
+Stage infrastructure is defined in `infra/stacks/frontend-app.ts` and
+`infra/stacks/frontend-stack.ts`; delivery infrastructure is defined separately in
+`infra/pipeline/pipeline-app.ts` and `infra/pipeline/frontend-pipeline-stack.ts`. Synthesize stages
+with `npm run synth:gamma` / `npm run synth:prod` and the pipeline with
+`AWS_PROFILE=pushp-sde-aws npm run synth:pipeline`. Direct stage deploy scripts remain available for
+break-glass recovery, not the normal release path.
 
 ## Related Repositories
 

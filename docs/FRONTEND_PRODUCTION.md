@@ -286,39 +286,43 @@ Graceful error UI
 
 ## 🧪 Testing
 
-### **Mock Mode** (Development)
+### **Local frontend against a deployed backend**
+
+Local development uses the real Gamma backend by default; mock and LocalStack runtime paths are
+intentionally not shipped. The public REST, GraphQL and Cognito values are checked into
+`src/config/deployment.config.ts`, so normal development requires no `.env`:
 
 ```bash
-# No API URL needed
-npm run dev
-
-# Uses mock data automatically
-# Perfect for UI development
-```
-
-### **Real API** (Integration Testing)
-
-```bash
-# Set API URL
-VITE_API_BASE_URL=http://localhost:4566
-
-# Start LocalStack
-npm run local:start
-
-# Start frontend
 npm run dev
 ```
 
-### **Production**
+Copy `.env.example` to ignored `.env` only when you need a local override. After the production
+backend is deployed and validated, add its configuration as a source-controlled `prod` entry rather
+than maintaining independent URL values in deployment settings.
 
-```bash
-# Build with production API
-VITE_API_BASE_URL=https://api.onehook.club/v1
-npm run build:client
+### **Stage builds and deployment**
 
-# Deploy
-./scripts/deploy.sh prod all
+AWS CodeConnections sends the exact protected-`main` revision to a queued CodePipeline V2
+execution. AWS then deploys Gamma first and proves the immutable production cloud assembly before
+requesting release approval:
+
+```text
+source → verify → build/deploy Gamma → smoke-test Gamma → production lint/test/build/synth
+       → AWS manual approval → deploy exact cloud assembly → smoke-test production
 ```
+
+The production artifact deliberately selects the checked-in Gamma REST, GraphQL and Cognito config
+while the backend production rollout is pending. `BuildProduction` has only pipeline-required
+artifact-bucket and build-log access; it has no infrastructure API or role-assumption permission.
+The stable public production hosted-zone ID is checked in, making synthesis lookup-free. It stores
+`cdk.out.prod` as the pipeline artifact. After approval,
+`DeployProduction` receives only that assembly and invokes `cdk deploy --app cdk.out.prod`; it does
+not run Vite, tests or CDK synthesis again.
+
+The pipeline stack must be deployed once with `AWS_PROFILE=pushp-sde-aws npm run deploy:pipeline`,
+and its `OneHookClient-GitHub` connection must then be authorized in the AWS console. Attach the
+output production-approval managed policy only to the designated AWS approver. See the root README
+for exact bootstrap and cutover ordering.
 
 ---
 
@@ -350,10 +354,9 @@ npm run build:client
 
 ### **Immediate**
 
-1. Deploy backend services
-2. Configure `VITE_API_BASE_URL`
-3. Test with real API
-4. Deploy frontend
+1. Complete and validate the Gamma backend rollout
+2. Run the frontend against the checked-in Gamma configuration
+3. Deploy Gamma, then approve the tested production artifact
 
 ### **Future Enhancements**
 

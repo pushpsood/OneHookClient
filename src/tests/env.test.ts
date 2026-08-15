@@ -6,47 +6,93 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * Blank every supported local override so a developer's ignored `.env` cannot influence these
+ * committed tests. Blank overrides intentionally fall back to the checked-in deployment config.
+ */
+function stubBlankOverrides(): void {
+  for (const key of [
+    'VITE_BACKEND_STAGE',
+    'VITE_API_BASE_URL',
+    'VITE_GRAPHQL_URL',
+    'VITE_CHATBOT_URL',
+    'VITE_COGNITO_REGION',
+    'VITE_COGNITO_USER_POOL_ID',
+    'VITE_COGNITO_CLIENT_ID',
+    'VITE_COGNITO_IDENTITY_POOL_ID',
+    'VITE_COGNITO_ENDPOINT',
+    'VITE_COGNITO_DOMAIN',
+    'VITE_COGNITO_REDIRECT_SIGN_IN',
+    'VITE_COGNITO_REDIRECT_SIGN_OUT',
+    'VITE_ENABLE_ANALYTICS',
+    'VITE_ENABLE_DEBUG',
+    'VITE_API_TIMEOUT_MS',
+    'VITE_LOG_LEVEL',
+  ]) {
+    vi.stubEnv(key, '');
+  }
+}
+
 describe('env config', () => {
-  it('uses the development defaults when no overrides are supplied', () => {
-    // Hermetic: a developer's local .env must never influence a committed test, so every
-    // variable this assertion depends on is stubbed explicitly.
-    vi.stubEnv('VITE_API_BASE_URL', '');
-    vi.stubEnv('VITE_API_TIMEOUT_MS', '');
-    vi.stubEnv('VITE_LOG_LEVEL', '');
-
-    const config = createEnvConfig('development');
-
-    expect(config.isDevelopment).toBe(true);
-    expect(config.apiBaseUrl).toBe('/api/localstack');
-    expect(config.requestTimeoutMs).toBe(30000);
-    expect(config.logLevel).toBe('debug');
-  });
-
-  it('normalizes production overrides and strips trailing slashes', () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://example.com/v1/');
-    vi.stubEnv('VITE_WS_URL', 'wss://ws.example.com/');
-    vi.stubEnv('VITE_ENABLE_ANALYTICS', 'false');
-    vi.stubEnv('VITE_ENABLE_DEBUG', 'true');
-    vi.stubEnv('VITE_LOG_LEVEL', 'warn');
+  it('uses the checked-in Gamma backend config when no local overrides are present', () => {
+    stubBlankOverrides();
 
     const config = createEnvConfig('production');
 
-    expect(config.apiBaseUrl).toBe('https://example.com/v1');
-    expect(config.wsUrl).toBe('wss://ws.example.com');
+    expect(config.backendStage).toBe('gamma');
+    expect(config.apiBaseUrl).toBe('https://api.gamma.onehook.club');
+    expect(config.graphqlUrl).toBe('https://graphql.api.gamma.onehook.club/graphql');
+    expect(config.cognitoRegion).toBe('ap-south-1');
+    expect(config.cognitoUserPoolId).toBe('ap-south-1_pN10ldNoo');
+    expect(config.cognitoClientId).toBe('2rt0v69jq2acjaboom84cinign');
+    expect(config.cognitoIdentityPoolId).toBe(
+      'ap-south-1:8bfabd43-a446-4b8d-9201-b250cf3b62ef'
+    );
+    expect(config.cognitoEndpoint).toBe('https://cognito-idp.ap-south-1.amazonaws.com');
     expect(config.enableAnalytics).toBe(false);
-    expect(config.enableDebug).toBe(true);
-    expect(config.logLevel).toBe('warn');
+    expect(config.enableDebug).toBe(false);
+    expect(config.requestTimeoutMs).toBe(30_000);
+    expect(config.logLevel).toBe('error');
     expect(config.isProduction).toBe(true);
+    expect(config).not.toHaveProperty('wsUrl');
   });
 
-  it('detects staging from the current hostname when no explicit env is set', () => {
-    vi.stubEnv('VITE_APP_ENV', '');
-    vi.stubEnv('MODE', 'test');
-    vi.stubGlobal('window', {
-      location: { hostname: 'app-staging.onehook.club' },
-    } as unknown as Window & typeof globalThis);
+  it('accepts explicit local overrides and strips trailing URL slashes', () => {
+    stubBlankOverrides();
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.local.example/');
+    vi.stubEnv('VITE_GRAPHQL_URL', 'https://graphql.local.example/graphql/');
+    vi.stubEnv('VITE_ENABLE_ANALYTICS', 'true');
+    vi.stubEnv('VITE_ENABLE_DEBUG', 'true');
+    vi.stubEnv('VITE_API_TIMEOUT_MS', '45000');
+    vi.stubEnv('VITE_LOG_LEVEL', 'warn');
 
-    expect(detectEnvironment()).toBe('staging');
+    const config = createEnvConfig('development');
+
+    expect(config.apiBaseUrl).toBe('https://api.local.example');
+    expect(config.graphqlUrl).toBe('https://graphql.local.example/graphql');
+    expect(config.enableAnalytics).toBe(true);
+    expect(config.enableDebug).toBe(true);
+    expect(config.requestTimeoutMs).toBe(45_000);
+    expect(config.logLevel).toBe('warn');
+    expect(config.isDevelopment).toBe(true);
+  });
+
+  it('fails loudly for an unknown checked-in backend stage', () => {
+    stubBlankOverrides();
+    vi.stubEnv('VITE_BACKEND_STAGE', 'production');
+
+    expect(() => createEnvConfig('production')).toThrow(
+      'Unknown frontend backend stage "production". Available stages: gamma.'
+    );
+  });
+
+  it('fails loudly for an invalid explicit local override', () => {
+    stubBlankOverrides();
+    vi.stubEnv('VITE_ENABLE_DEBUG', 'sometimes');
+
+    expect(() => createEnvConfig('development')).toThrow(
+      'Invalid boolean value for VITE_ENABLE_DEBUG: sometimes'
+    );
   });
 
   it('detects development from localhost hostnames', () => {

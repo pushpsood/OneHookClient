@@ -1,0 +1,19 @@
+version: 0.2
+
+phases:
+  build:
+    commands:
+      - |
+        set -euo pipefail
+        echo "Smoke-testing ${SITE_URL} ..."
+        for attempt in $(seq 1 10); do
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${SITE_URL}/" || true)
+          echo "Attempt ${attempt}: HTTP ${code}"
+          if [ "${code}" = "200" ]; then
+            echo "${SITE_URL} is serving successfully."
+            exit 0
+          fi
+          sleep 15
+        done
+        echo "Smoke test failed: ${SITE_URL} never returned HTTP 200." >&2
+        exit 1

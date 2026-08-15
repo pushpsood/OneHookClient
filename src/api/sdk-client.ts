@@ -1,25 +1,24 @@
 import { OneHookService } from 'onehook-api-client';
-import { config, apiBaseUrl } from '../utils/env.config';
+import { apiBaseUrl } from '../utils/env.config';
+import { FetchHttpHandler } from '@smithy/fetch-http-handler';
 
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
   try {
     const { fetchAuthSession } = await import('aws-amplify/auth');
     const session = await fetchAuthSession();
-    return session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || 'dev-id-token';
-  } catch (error) {
-    return 'dev-id-token';
+    return session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
+  } catch {
+    return null;
   }
 }
 
 /**
- * The Smithy client parses the endpoint with `new URL(...)` at construction
- * time, so it MUST be a valid absolute URL. In local dev / mock mode
- * `apiBaseUrl` is empty, which would throw "Failed to construct 'URL'" and
- * crash the whole app before it renders. Fall back to the current origin (or a
- * localhost default during SSR/tests) so construction always succeeds; real
- * calls are still routed to `apiBaseUrl` in deployed environments and are
- * intercepted by the mock server in dev.
+ * The Smithy client parses the endpoint with `new URL(...)` at construction time, so it MUST be a
+ * valid absolute URL. All services are served behind a single REST domain (`VITE_API_BASE_URL`,
+ * e.g. https://api.onehook.club), so there is exactly one endpoint and no per-service routing.
+ * Fall back to the current origin (or a localhost default during SSR/tests) so construction always
+ * succeeds even when `apiBaseUrl` is not an absolute URL.
  */
 function resolveEndpoint(): string {
   if (apiBaseUrl) {
@@ -35,8 +34,6 @@ function resolveEndpoint(): string {
   return 'http://localhost:3000';
 }
 
-import { FetchHttpHandler } from '@smithy/fetch-http-handler';
-
 export const sdkClient = new OneHookService({
   endpoint: resolveEndpoint(),
   requestHandler: new FetchHttpHandler(),
@@ -44,15 +41,6 @@ export const sdkClient = new OneHookService({
 
 sdkClient.middlewareStack.add(
   (next) => async (args) => {
-    const currentEndpoint = resolveEndpoint();
-    try {
-      const url = new URL(currentEndpoint);
-      (args.request as any).protocol = url.protocol;
-      (args.request as any).hostname = url.hostname;
-      (args.request as any).port = url.port ? Number.parseInt(url.port, 10) : undefined;
-    } catch {
-      // Ignore URL parse error
-    }
     const token = await getAuthToken();
     if (token) {
       if (!(args.request as any).headers) {
@@ -64,5 +52,3 @@ sdkClient.middlewareStack.add(
   },
   { step: 'build', name: 'authMiddleware', override: true }
 );
-// Force reload
-if (typeof window !== 'undefined') { (window as any).sdkClient = sdkClient; }

@@ -55,62 +55,28 @@ Added Cognito configuration variables:
 - Routing setup for `/login`, `/redeem`, and `/`
 - Cognito initialization on app startup
 
-## Environment Configuration
+## Cognito Runtime Configuration
 
-### Development values in `.env`:
+The current Gamma Cognito identifiers are public browser configuration and are checked into
+`src/config/deployment.config.ts`:
+
+```text
+Region: ap-south-1
+User Pool: ap-south-1_pN10ldNoo
+App client: 2rt0v69jq2acjaboom84cinign
+Identity Pool: ap-south-1:8bfabd43-a446-4b8d-9201-b250cf3b62ef
+```
+
+No `.env` or GitHub variable is required. `src/utils/env.config.ts` derives the Cognito IDP endpoint
+from the region. Local developers may copy `.env.example` to ignored `.env` for temporary overrides.
+
+There is currently no Cognito Hosted UI domain. Amplify therefore omits OAuth unless a domain,
+sign-in redirect and sign-out redirect are all supplied; direct Cognito password, OTP and WebAuthn
+flows remain available. When backend deployment outputs change, update the matching
+source-controlled stage entry and rebuild the frontend:
 
 ```bash
-VITE_COGNITO_REGION=us-east-1
-VITE_COGNITO_USER_POOL_ID=us-east-1_local_dev
-VITE_COGNITO_CLIENT_ID=local_client_id
-```
-
-### Staging values in `.env` (auto-detected by hostname or mode):
-
-```bash
-VITE_COGNITO_REGION=us-east-1
-VITE_COGNITO_USER_POOL_ID=<YOUR_STAGING_USER_POOL_ID>
-VITE_COGNITO_CLIENT_ID=<YOUR_STAGING_CLIENT_ID>
-```
-
-### Production values in `.env` (auto-detected by hostname or mode):
-
-```bash
-VITE_COGNITO_REGION=us-east-1
-VITE_COGNITO_USER_POOL_ID=<YOUR_PROD_USER_POOL_ID>
-VITE_COGNITO_CLIENT_ID=<YOUR_PROD_CLIENT_ID>
-```
-
-## How to Get Cognito Credentials
-
-### Step 1: Get User Pool ID and Client ID
-
-After deployment, run:
-
-```bash
-npx cdk deploy --all --context env=prod
-```
-
-The output will show:
-
-```
-OneHook-Shared-prod.UserPoolId = us-east-1_ABC123
-OneHook-Shared-prod.UserPoolClientId = xyz789
-```
-
-### Step 2: Update Environment Variables
-
-Add these values to your `.env` files:
-
-```bash
-VITE_COGNITO_USER_POOL_ID=us-east-1_ABC123
-VITE_COGNITO_CLIENT_ID=xyz789
-```
-
-### Step 3: Rebuild Frontend
-
-```bash
-npm run build:client
+npm run build:prod
 ```
 
 ## User Flow
@@ -172,42 +138,32 @@ Tokens are stored in `localStorage`:
 
 ## Testing the Login Page
 
-### 1. With Mock API
-
-Development mode will use mock data:
+Development mode uses the real checked-in Gamma configuration; there is no mock API runtime path:
 
 ```bash
 npm run dev
 ```
 
-Navigate to: `http://localhost:3000/login`
-
-### 2. Against Real Cognito
-
-Create a test user in AWS Cognito console:
+Navigate to `http://localhost:3000/login`. To test password login, create an authorized test user in
+the Gamma Cognito pool (using backend-account credentials):
 
 ```bash
 aws cognito-idp admin-create-user \
-  --user-pool-id us-east-1_ABC123 \
+  --region ap-south-1 \
+  --user-pool-id ap-south-1_pN10ldNoo \
   --username test@example.com \
   --message-action SUPPRESS \
-  --temporary-password TempPassword123!
-```
+  --temporary-password 'TempPassword123!'
 
-Then set permanent password:
-
-```bash
 aws cognito-idp admin-set-user-password \
-  --user-pool-id us-east-1_ABC123 \
+  --region ap-south-1 \
+  --user-pool-id ap-south-1_pN10ldNoo \
   --username test@example.com \
-  --password Password123456! \
+  --password 'Password123456!' \
   --permanent
 ```
 
-Login with:
-
-- Email: `test@example.com`
-- Password: `Password123456!`
+Use synthetic test identities only; never put production PII in setup documentation or fixtures.
 
 ## Next Steps
 

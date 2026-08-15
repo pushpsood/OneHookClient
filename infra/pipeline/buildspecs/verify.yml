@@ -1,0 +1,19 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+    commands:
+      - node --version
+      - npm --version
+      - npm ci
+  build:
+    commands:
+      - echo "Verifying commit ${SOURCE_COMMIT}"
+      - npm run lint
+      - npm test
+
+cache:
+  paths:
+    - '/root/.npm/**/*'

@@ -5,10 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --mode development",
-    "dev:staging": "vite --port=3000 --mode staging",
     "build": "vite build --mode production",
     "build:dev": "vite build --mode development",
-    "build:staging": "vite build --mode staging",
     "build:prod": "vite build --mode production",
     "preview": "vite preview",
     "clean": "rm -rf dist node_modules package-lock.json",
@@ -24,9 +22,13 @@
     "generate": "graphql-codegen",
     "validate": "npm run lint && npm test",
     "cdk:synth": "npx tsx infra/stacks/frontend-app.ts",
+    "synth:gamma": "npx cdk synth --context env=gamma",
+    "synth:prod": "npx cdk synth --context env=prod",
+    "synth:pipeline": "npx cdk synth --app 'npx tsx infra/pipeline/pipeline-app.ts'",
+    "diff:pipeline": "npx cdk diff OneHook-Frontend-Pipeline --app 'npx tsx infra/pipeline/pipeline-app.ts'",
+    "deploy:pipeline": "npx cdk deploy OneHook-Frontend-Pipeline --app 'npx tsx infra/pipeline/pipeline-app.ts' --require-approval broadening",
     "cdk:deploy": "npm run build && npx cdk deploy --all --app 'npx tsx infra/stacks/frontend-app.ts' --require-approval never",
-    "deploy:dev": "npm run cdk:deploy -- --context env=dev",
-    "deploy:staging": "npm run cdk:deploy -- --context env=staging",
+    "deploy:gamma": "npm run cdk:deploy -- --context env=gamma",
     "deploy:prod": "npm run cdk:deploy -- --context env=prod --require-approval broadening"
   },
   "dependencies": {

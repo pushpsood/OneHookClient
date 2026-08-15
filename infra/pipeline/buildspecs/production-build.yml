@@ -1,0 +1,42 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+    commands:
+      - npm ci
+  build:
+    commands:
+      - |
+        set -euo pipefail
+        echo "Building immutable production assembly for commit ${SOURCE_COMMIT}"
+        npm run lint
+        npm test
+        npm run build:prod
+        test -s dist/index.html
+        grep -R -F -q 'https://api.gamma.onehook.club' dist
+        grep -R -F -q 'https://graphql.api.gamma.onehook.club/graphql' dist
+        if grep -R -F -q 'https://api.onehook.club' dist; then
+          echo 'Production API URL was unexpectedly bundled before backend promotion.' >&2
+          exit 1
+        fi
+        rm -rf cdk.out.prod
+        npx cdk synth \
+          --context env=prod \
+          --output cdk.out.prod
+        test -s cdk.out.prod/manifest.json
+        test -s cdk.out.prod/OneHook-Frontend-prod.template.json
+        test -s cdk.out.prod/OneHook-Certificate-prod.template.json
+
+artifacts:
+  files:
+    - 'cdk.out.prod/**/*'
+    - 'package.json'
+    - 'package-lock.json'
+    - 'infra/pipeline/buildspecs/production-deploy.yml'
+  discard-paths: no
+
+cache:
+  paths:
+    - '/root/.npm/**/*'

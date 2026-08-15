@@ -1,0 +1,21 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+    commands:
+      - npm ci --ignore-scripts
+  build:
+    commands:
+      - |
+        set -euo pipefail
+        test -s cdk.out.prod/manifest.json
+        test -s cdk.out.prod/OneHook-Frontend-prod.template.json
+        test -s cdk.out.prod/OneHook-Certificate-prod.template.json
+        npx cdk deploy \
+          OneHook-Certificate-prod \
+          OneHook-Frontend-prod \
+          --app cdk.out.prod \
+          --require-approval never \
+          --outputs-file production-outputs.json

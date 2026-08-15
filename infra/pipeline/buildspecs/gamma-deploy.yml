@@ -1,0 +1,29 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 22
+    commands:
+      - npm ci
+  build:
+    commands:
+      - |
+        set -euo pipefail
+        echo "Building and deploying Gamma for commit ${SOURCE_COMMIT}"
+        npm run build:prod
+        test -s dist/index.html
+        grep -R -F -q 'https://api.gamma.onehook.club' dist
+        grep -R -F -q 'https://graphql.api.gamma.onehook.club/graphql' dist
+        if grep -R -F -q 'https://api.onehook.club' dist; then
+          echo 'Production backend URL was unexpectedly bundled in Gamma.' >&2
+          exit 1
+        fi
+        npx cdk deploy OneHook-Frontend-gamma \
+          --context env=gamma \
+          --require-approval never \
+          --outputs-file gamma-outputs.json
+
+cache:
+  paths:
+    - '/root/.npm/**/*'
