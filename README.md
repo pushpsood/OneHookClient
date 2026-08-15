@@ -247,8 +247,9 @@ required.
 The delivery plane is defined in `infra/pipeline/frontend-pipeline-stack.ts` and its source-controlled
 buildspecs. It provisions:
 
-- A GitHub `AWS::CodeConnections::Connection` scoped by IAM guardrails to
-  `pushpsood/OneHookClient` branch `main` and read-only provider operations.
+- A GitHub `AWS::CodeConnections::Connection`; IAM permits `UseConnection` only on its exact ARN,
+  the source action fixes `pushpsood/OneHookClient` branch `main`, and the GitHub App installation
+  is granted access only to that repository.
 - A queued CodePipeline V2 pipeline named `OneHook-Frontend`.
 - Separate CodeBuild projects and service roles for verification, Gamma deployment, smoke tests,
   production build/synth and production deployment.

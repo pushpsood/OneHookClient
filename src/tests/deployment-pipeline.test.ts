@@ -76,10 +76,12 @@ describe('AWS-native frontend deployment pipeline', () => {
 
     const policies = resourcesOf(template, 'AWS::IAM::Policy');
     const sourcePolicy = policies.find(([id]) => id.includes('SourceActionRoleDefaultPolicy'))?.[1];
-    expect(JSON.stringify(sourcePolicy)).toContain('codeconnections:FullRepositoryId');
-    expect(JSON.stringify(sourcePolicy)).toContain('codeconnections:BranchName');
-    expect(JSON.stringify(sourcePolicy)).toContain('codeconnections:ProviderAction');
-    expect(JSON.stringify(sourcePolicy)).toContain('read_only');
+    const sourcePolicyJson = JSON.stringify(sourcePolicy);
+    expect(sourcePolicyJson).toContain('codeconnections:UseConnection');
+    expect(sourcePolicyJson).toContain('codestar-connections:UseConnection');
+    expect(sourcePolicyJson).toContain('GitHubConnection');
+    expect(sourcePolicyJson).not.toContain('"Effect":"Deny"');
+    expect(sourcePolicyJson).not.toContain('"Resource":"*"');
 
     const sourceRole = resourcesOf(template, 'AWS::IAM::Role').find(([id]) =>
       id.includes('SourceActionRole')

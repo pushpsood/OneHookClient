@@ -28,7 +28,6 @@ import {
   ManualApprovalAction,
 } from 'aws-cdk-lib/aws-codepipeline-actions';
 import {
-  Effect,
   ManagedPolicy,
   PolicyStatement,
   Role,
@@ -50,7 +49,6 @@ const CDK_QUALIFIER = 'hnb659fds';
 const GITHUB_OWNER = 'pushpsood';
 const GITHUB_REPOSITORY = 'OneHookClient';
 const GITHUB_BRANCH = 'main';
-const FULL_REPOSITORY_ID = `${GITHUB_OWNER}/${GITHUB_REPOSITORY}`;
 
 const BUILDSPEC = {
   verify: 'infra/pipeline/buildspecs/verify.yml',
@@ -128,50 +126,18 @@ export class FrontendPipelineStack extends Stack {
       description: 'Fetches only pushpsood/OneHookClient main through the CDK-managed connection',
     });
 
-    // The CDK source action currently adds a resource-scoped legacy-prefix Allow. Explicit Deny
-    // guardrails below make that grant unusable for another repository, branch, missing provider
-    // action, or write-capable provider request. The additional new-prefix Allow supports
-    // CodeConnections resources created after the service rename.
-    const connectionActions = [
-      'codeconnections:UseConnection',
-      'codestar-connections:UseConnection',
-    ];
+    // CodePipeline performs several provider actions whose UseConnection condition contexts differ,
+    // so a single statement cannot require repository, branch and provider-action keys together.
+    // IAM is therefore restricted to this exact CloudFormation-managed connection ARN; repository
+    // and branch are fixed in the source action below, and the GitHub App installation is restricted
+    // to pushpsood/OneHookClient.
     sourceRole.addToPolicy(
       new PolicyStatement({
-        actions: connectionActions,
+        actions: [
+          'codeconnections:UseConnection',
+          'codestar-connections:UseConnection',
+        ],
         resources: [connection.attrConnectionArn],
-        conditions: {
-          StringEquals: {
-            'codeconnections:FullRepositoryId': FULL_REPOSITORY_ID,
-            'codeconnections:BranchName': GITHUB_BRANCH,
-            'codeconnections:ProviderPermissionsRequired': 'read_only',
-          },
-          Null: {
-            'codeconnections:ProviderAction': 'false',
-          },
-        },
-      })
-    );
-    for (const [conditionKey, expectedValue] of Object.entries({
-      'codeconnections:FullRepositoryId': FULL_REPOSITORY_ID,
-      'codeconnections:BranchName': GITHUB_BRANCH,
-      'codeconnections:ProviderPermissionsRequired': 'read_only',
-    })) {
-      sourceRole.addToPolicy(
-        new PolicyStatement({
-          effect: Effect.DENY,
-          actions: connectionActions,
-          resources: [connection.attrConnectionArn],
-          conditions: { StringNotEquals: { [conditionKey]: expectedValue } },
-        })
-      );
-    }
-    sourceRole.addToPolicy(
-      new PolicyStatement({
-        effect: Effect.DENY,
-        actions: connectionActions,
-        resources: [connection.attrConnectionArn],
-        conditions: { Null: { 'codeconnections:ProviderAction': 'true' } },
       })
     );
 
