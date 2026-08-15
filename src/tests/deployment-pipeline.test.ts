@@ -5,6 +5,14 @@ import { describe, expect, it } from 'vitest';
 import { FrontendPipelineStack } from '../../infra/pipeline/frontend-pipeline-stack';
 
 const root = new URL('../../', import.meta.url);
+const gammaDeploy = readFileSync(
+  new URL('infra/pipeline/buildspecs/gamma-deploy.yml', root),
+  'utf8'
+);
+const smoke = readFileSync(
+  new URL('infra/pipeline/buildspecs/smoke.yml', root),
+  'utf8'
+);
 const productionBuild = readFileSync(
   new URL('infra/pipeline/buildspecs/production-build.yml', root),
   'utf8'
@@ -125,6 +133,11 @@ describe('AWS-native frontend deployment pipeline', () => {
   }, 15_000);
 
   it('builds and synthesizes before approval, then deploys the exact assembly without rebuilding', () => {
+    for (const strictBuildspec of [gammaDeploy, smoke, productionBuild, productionDeploy]) {
+      expect(strictBuildspec).toContain('shell: bash');
+      expect(strictBuildspec).toContain('set -euo pipefail');
+    }
+
     expect(sourceConfig).toContain("apiBaseUrl: 'https://api.gamma.onehook.club'");
     expect(sourceConfig).toContain(
       "graphqlUrl: 'https://graphql.api.gamma.onehook.club/graphql'"
