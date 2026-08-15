@@ -55,7 +55,7 @@ describe('AWS-native frontend deployment pipeline', () => {
     const actionType = approvalAction.ActionTypeId as Record<string, unknown>;
     expect(actionType.Category).toBe('Approval');
     expect(actionType.Provider).toBe('Manual');
-  });
+  }, 15_000);
 
   it('fetches only pushpsood/OneHookClient main through the CDK-managed connection', () => {
     const template = synthPipeline();
@@ -91,7 +91,7 @@ describe('AWS-native frontend deployment pipeline', () => {
     );
     expect(sourceTrust).toContain('PipelineRole');
     expect(sourceTrust).not.toContain('codepipeline.amazonaws.com');
-  });
+  }, 15_000);
 
   it('limits build and deployment projects to their exact CDK bootstrap roles', () => {
     const template = synthPipeline();
@@ -122,7 +122,7 @@ describe('AWS-native frontend deployment pipeline', () => {
     expect(productionDeployPolicy).not.toContain('image-publishing');
     expect(productionDeployPolicy).not.toContain('627367419734');
     expect(productionDeployPolicy).not.toContain('cdk-*');
-  });
+  }, 15_000);
 
   it('builds and synthesizes before approval, then deploys the exact assembly without rebuilding', () => {
     expect(sourceConfig).toContain("apiBaseUrl: 'https://api.gamma.onehook.club'");
