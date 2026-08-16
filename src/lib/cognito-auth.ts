@@ -192,10 +192,6 @@ class CognitoAuthService {
     }
   }
 
-  isAuthenticated(): boolean {
-    return true; // We will check properly on app load using fetchAuthSession in the store or component.
-  }
-
   async getCurrentUser(): Promise<CognitoUser | null> {
     try {
       const session = await fetchAuthSession();

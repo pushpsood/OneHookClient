@@ -19,9 +19,6 @@ type Phase = 'idle' | 'preparing' | 'streaming' | 'submitted' | 'error';
  * the video is submitted, we tell the user analysis is under way — EVERYTHING
  * ELSE IS HANDLED BY THE BACKEND, which sets the profile's `verified` flag when
  * approved. The client does not poll; the badge appears on the next profile load.
- *
- * In mock mode the detector + streaming are skipped and the submit state is
- * simulated so the flow is testable without a camera or Identity Pool.
  */
 export function LivenessVerification({
   verified,

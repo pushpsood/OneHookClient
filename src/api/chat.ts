@@ -133,8 +133,8 @@ async function graphql<T>(query: string, variables: Record<string, unknown>): Pr
 }
 
 /**
- * AppSync GraphQL messaging API. In mock mode these degrade gracefully so the
- * local dev experience does not require a live AppSync endpoint.
+ * AppSync GraphQL messaging API. Message bodies are encrypted on the device before they are sent
+ * (see lib/chat-encryption.ts), so every value crossing this boundary is ciphertext.
  */
 export const ChatMessagingApi = {
   getMessages: async (matchId: string, after?: number): Promise<ChatMessage[]> => {

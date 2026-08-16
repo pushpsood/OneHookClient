@@ -242,16 +242,17 @@ export function useChatMessages(matchId: string, recipientId?: string) {
 
   const decryptInbound = useCallback(
     async (senderId: string, ciphertext: string): Promise<string> => {
-      const isMe = senderId === myId;
-      if (isMe) return '[Sent Message]';
-      if (!encryptionManager) return ciphertext;
+      // The conversation key is derived against the OTHER member of the match, so a message this
+      // device sent is decrypted with the same peer key as one it received.
+      const peerId = senderId === myId ? recipientId : senderId;
+      if (!encryptionManager || !peerId) return '[Unable to decrypt]';
       try {
-        return await encryptionManager.decryptMessage(senderId, matchId, ciphertext);
+        return await encryptionManager.decryptMessage(peerId, matchId, ciphertext);
       } catch {
-        return '[Decryption Error]';
+        return '[Unable to decrypt]';
       }
     },
-    [encryptionManager, matchId, myId]
+    [encryptionManager, matchId, myId, recipientId]
   );
 
   const fetchMessages = useCallback(async () => {

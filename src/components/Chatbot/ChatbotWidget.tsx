@@ -160,7 +160,6 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
     setMood('Thinking');
 
     try {
-      // Point this to the deployed backend URL in production
       const response = await fetch(`${chatbotUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

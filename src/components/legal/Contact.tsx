@@ -24,7 +24,12 @@ export function Contact() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // In production, this would send to a backend endpoint
+    // There is no contact API. Rather than pretend the message was filed, hand the composed
+    // message to the member's mail client so it genuinely reaches support.
+    const body = `${formData.message}\n\n—\nFrom: ${formData.name} <${formData.email}>`;
+    window.location.href = `mailto:support@onehook.club?subject=${encodeURIComponent(
+      formData.subject
+    )}&body=${encodeURIComponent(body)}`;
     setSubmitted(true);
     setTimeout(() => {
       setFormData({ name: '', email: '', subject: '', message: '' });
