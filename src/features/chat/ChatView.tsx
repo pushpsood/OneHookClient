@@ -1,37 +1,63 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { MessageStatus } from 'onehook-api-client/graphql';
+import { ArrowLeft, ShieldCheck, MapPin, Briefcase } from 'lucide-react';
 import type { ChatMessageDTO, UserProfile } from '../../types';
 import { StateApi } from '../../api/state';
+import { ProfileApi } from '../../api/profile';
 import { useChatMessages } from '../../hooks/use-api';
 import { ApiError } from '../../lib/api-client';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { useToast } from '../../components/common/Toast';
 import { FALLBACK_PROFILE_IMAGE } from '../../utils/profile-image';
+import { MediaImage } from '../../components/common/MediaImage';
 
 export function ChatView({
   currentUser,
   matchId,
+  onNavigateToMatches,
+  onNavigateToDiscovery,
 }: {
   key?: string;
   currentUser: UserProfile;
   matchId: string | null;
+  onNavigateToMatches?: () => void;
+  onNavigateToDiscovery?: () => void;
 }) {
   const [recipientId, setRecipientId] = useState<string | undefined>(undefined);
+  const [peerProfile, setPeerProfile] = useState<UserProfile | null>(null);
 
   // Resolve the peer (the other participant) from the match record so we can
   // establish an E2EE session with them when sending messages.
   useEffect(() => {
     if (!matchId) {
       setRecipientId(undefined);
+      setPeerProfile(null);
       return;
     }
     let active = true;
     StateApi.getMatch(matchId)
-      .then((match) => {
+      .then(async (match) => {
         if (!active) return;
         const peer = match.userA === currentUser.id ? match.userB : match.userA;
         setRecipientId(peer ?? undefined);
+
+        if (peer) {
+          try {
+            const profile: any = await ProfileApi.get(peer);
+            if (active && profile) {
+              profile.id = profile.userId || peer;
+              profile.name = profile.displayName || profile.name || 'Your Match';
+              profile.photos =
+                profile.pictures && profile.pictures.length > 0
+                  ? profile.pictures
+                  : profile.photos || [];
+              setPeerProfile(profile);
+            }
+          } catch {
+            // Profile fetch is best effort
+          }
+        }
       })
       .catch(() => {
         /* peer resolution is best-effort; sending stays disabled until known */
@@ -112,11 +138,29 @@ export function ChatView({
         exit={{ opacity: 0 }}
         className="flex-1 flex items-center justify-center bg-[#F9F9F9] p-12"
       >
-        <div className="max-w-md w-full bg-white border border-border p-12 text-center space-y-8">
-          <h2 className="text-4xl font-serif italic uppercase tracking-tighter">No Match Yet</h2>
+        <div className="max-w-md w-full bg-white border border-border p-12 text-center space-y-8 shadow-sm">
+          <h2 className="text-4xl font-serif italic uppercase tracking-tighter">No Active Chat</h2>
           <p className="text-xs opacity-60 leading-relaxed italic">
-            Head to Discovery when you&rsquo;re ready to find someone new.
+            Select an active match to start conversing or explore Discovery for new connections.
           </p>
+          <div className="flex flex-col gap-3">
+            {onNavigateToMatches && (
+              <button
+                onClick={onNavigateToMatches}
+                className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity"
+              >
+                View Matches
+              </button>
+            )}
+            {onNavigateToDiscovery && (
+              <button
+                onClick={onNavigateToDiscovery}
+                className="w-full py-4 border border-border text-accent text-[10px] uppercase tracking-[0.3em] font-black hover:bg-bg transition-colors"
+              >
+                Go to Discovery
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
     );
@@ -153,6 +197,9 @@ export function ChatView({
     );
   }
 
+  const peerName = peerProfile?.displayName || peerProfile?.name || 'Your Match';
+  const peerPhoto = peerProfile?.photos?.[0] || FALLBACK_PROFILE_IMAGE;
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -164,14 +211,14 @@ export function ChatView({
       <section className="w-[420px] border-r border-border flex flex-col bg-bg">
         <div className="p-10 flex-1 overflow-y-auto">
           <div className="relative mb-8">
-            <div className="aspect-[3/4] w-full bg-border overflow-hidden grayscale grayscale-hover">
-              <img
-                src={currentUser.photos?.[0] || FALLBACK_PROFILE_IMAGE}
-                alt="Profile"
+            <div className="aspect-[3/4] w-full bg-border overflow-hidden grayscale grayscale-hover border border-border">
+              <MediaImage
+                src={peerPhoto}
+                alt={peerName}
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="absolute -bottom-4 -right-4 bg-white p-5 border border-accent">
+            <div className="absolute -bottom-4 -right-4 bg-white p-5 border border-accent shadow-sm">
               <div className="text-[9px] uppercase tracking-widest opacity-40 mb-1 font-bold">
                 Connection Status
               </div>
@@ -184,10 +231,37 @@ export function ChatView({
 
           <div className="space-y-4">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-3xl font-serif italic">Match</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-3xl font-serif italic">{peerName}</h2>
+                {peerProfile?.age && (
+                  <span className="text-lg opacity-50 font-serif">, {peerProfile.age}</span>
+                )}
+                {peerProfile?.verified && <ShieldCheck className="w-4 h-4 text-accent" />}
+              </div>
               <span className="text-sm opacity-40 italic">Active</span>
             </div>
-            <p className="text-xs leading-relaxed opacity-60">
+
+            {peerProfile?.currentLocation && (
+              <div className="flex items-center gap-1.5 text-xs opacity-60">
+                <MapPin className="w-3.5 h-3.5" />
+                <span>{peerProfile.currentLocation}</span>
+              </div>
+            )}
+
+            {peerProfile?.work && (
+              <div className="flex items-center gap-1.5 text-xs opacity-60">
+                <Briefcase className="w-3.5 h-3.5" />
+                <span>{peerProfile.work}</span>
+              </div>
+            )}
+
+            {peerProfile?.bio && (
+              <p className="text-xs leading-relaxed opacity-70 italic border-t border-border pt-4">
+                &ldquo;{peerProfile.bio}&rdquo;
+              </p>
+            )}
+
+            <p className="text-xs leading-relaxed opacity-50 pt-2">
               Take your time, be yourself, and enjoy getting to know each other.
             </p>
           </div>
@@ -201,6 +275,15 @@ export function ChatView({
             Discovery is paused while you&rsquo;re connected, and your chat stays private with
             end-to-end encryption.
           </p>
+          {onNavigateToMatches && (
+            <button
+              onClick={onNavigateToMatches}
+              className="text-[10px] uppercase tracking-[0.2em] font-bold text-accent hover:underline flex items-center gap-1"
+            >
+              <ArrowLeft className="w-3 h-3" />
+              Back to Matches
+            </button>
+          )}
         </div>
       </section>
 
@@ -208,10 +291,23 @@ export function ChatView({
       <section className="flex-1 flex flex-col bg-white">
         {/* Chat Header */}
         <div className="px-10 py-8 border-b border-border flex items-center justify-between">
-          <div className="space-y-1">
-            <div className="text-xs font-black uppercase tracking-[0.2em]">Private Chat</div>
-            <div className="text-[9px] opacity-30 uppercase tracking-widest font-mono">
-              End-to-End Encrypted
+          <div className="flex items-center gap-4">
+            {onNavigateToMatches && (
+              <button
+                onClick={onNavigateToMatches}
+                className="p-2 border border-border hover:border-accent hover:bg-bg transition-colors md:hidden"
+                title="Back to Matches"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <div className="space-y-1">
+              <div className="text-xs font-black uppercase tracking-[0.2em]">
+                Private Chat with {peerName}
+              </div>
+              <div className="text-[9px] opacity-30 uppercase tracking-widest font-mono">
+                End-to-End Encrypted
+              </div>
             </div>
           </div>
           <div className="text-right space-y-1">
@@ -236,7 +332,7 @@ export function ChatView({
                     m.senderId === 'me' ? 'justify-end' : ''
                   }`}
                 >
-                  <span>{m.senderId === 'me' ? 'You' : 'Them'}</span>
+                  <span>{m.senderId === 'me' ? 'You' : peerName}</span>
                   {getMessageStatusIcon(m)}
                 </div>
                 <div

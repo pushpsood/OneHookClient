@@ -10,6 +10,13 @@
   --color-border: #EBEBEB;
   --color-accent: #1A1A1A;
   --color-status-hooked: #22C55E;
+
+  --animate-oh-flip: oh-flip 1.8s ease-in-out infinite;
+}
+
+@keyframes oh-flip {
+  from { transform: rotateY(0deg); }
+  to { transform: rotateY(360deg); }
 }
 
 html {

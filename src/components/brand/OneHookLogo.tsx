@@ -15,7 +15,7 @@
 import React from 'react';
 
 /** Public path to the canonical logo vector. */
-export const ONEHOOK_LOGO_SRC = '/media/onehook-logo.svg';
+export const ONEHOOK_LOGO_SRC = '/media/onehook.png';
 
 export interface OneHookLogoProps
   extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> {

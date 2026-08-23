@@ -21,6 +21,12 @@ export interface BackendDeploymentConfig {
   readonly cognitoClientId: string;
   readonly cognitoIdentityPoolId: string;
   readonly cognitoDomain: string;
+  /**
+   * Google OAuth 2.0 web client ID used to obtain an identity token for social sign-in. Public by
+   * design, and it MUST match the backend's `GOOGLE_CLIENT_ID`: the Cognito custom-auth trigger
+   * pins the token's `aud` to that value, so a mismatch is rejected.
+   */
+  readonly googleClientId: string;
   readonly enableAnalytics: boolean;
   readonly enableDebug: boolean;
   readonly requestTimeoutMs: number;
@@ -38,6 +44,8 @@ export const BACKEND_DEPLOYMENTS = {
     cognitoIdentityPoolId: 'ap-south-1:8bfabd43-a446-4b8d-9201-b250cf3b62ef',
     // No Cognito Hosted UI domain is provisioned yet; direct password/OTP/WebAuthn auth still works.
     cognitoDomain: '',
+    // Mirrors OneHookBackend infra/config/auth.ts (gamma).
+    googleClientId: '187849624492-jmmc973assosfgv3aaevh8fts2h0mtlr.apps.googleusercontent.com',
     enableAnalytics: false,
     enableDebug: false,
     requestTimeoutMs: 30_000,

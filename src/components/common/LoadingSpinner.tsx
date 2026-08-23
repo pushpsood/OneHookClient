@@ -23,9 +23,17 @@ export function LoadingSpinner({ size = 'md', fullScreen = false }: LoadingSpinn
   if (fullScreen) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
-        <div className="text-center space-y-4">
-          {spinner}
-          <p className="text-xs uppercase tracking-widest opacity-40">Loading...</p>
+        <div className="relative w-[124px] h-[124px]" style={{ perspective: '600px' }}>
+          <img
+            src="/media/LogoHeart.png"
+            alt=""
+            className="absolute inset-0 w-full h-full object-contain animate-oh-flip origin-center"
+          />
+          <img
+            src="/media/LogoOne.png"
+            alt=""
+            className="absolute inset-0 w-full h-full object-contain z-10"
+          />
         </div>
       </div>
     );

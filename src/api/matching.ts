@@ -17,11 +17,17 @@ export const MatchingApi = {
   },
 
   discover: async (userId: string, lat: number, lon: number) => {
-    return (await (sdkClient as any).discover({ userId, lat, lon })) as unknown as {
-      candidates: RankedCandidate[];
-      count: number;
-      algorithm: string;
-    };
+    const timeoutPromise = new Promise<{ candidates: RankedCandidate[]; count: number; algorithm: string }>((_, reject) =>
+      setTimeout(() => reject(new Error('Discover request timed out. Please check your connection and try again.')), 10000)
+    );
+    const discoverPromise = (async () => {
+      return (await (sdkClient as any).discover({ userId, lat, lon })) as unknown as {
+        candidates: RankedCandidate[];
+        count: number;
+        algorithm: string;
+      };
+    })();
+    return Promise.race([discoverPromise, timeoutPromise]);
   },
 
   swipe: async (
@@ -37,7 +43,7 @@ export const MatchingApi = {
     };
   },
 
-  removeFromIndex: async (userId: string, lat = 0, lon = 0) => {
+  removeFromIndex: async (userId?: string, lat = 0, lon = 0) => {
     return (sdkClient as any).removeLocation({ userId, lat, lon });
   },
 };

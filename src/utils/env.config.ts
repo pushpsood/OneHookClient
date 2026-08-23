@@ -28,6 +28,7 @@ interface RuntimeEnv extends ImportMetaEnv {
   readonly VITE_COGNITO_DOMAIN?: string;
   readonly VITE_COGNITO_REDIRECT_SIGN_IN?: string;
   readonly VITE_COGNITO_REDIRECT_SIGN_OUT?: string;
+  readonly VITE_GOOGLE_CLIENT_ID?: string;
   readonly VITE_ENABLE_ANALYTICS?: string;
   readonly VITE_ENABLE_DEBUG?: string;
   readonly VITE_API_TIMEOUT_MS?: string;
@@ -49,6 +50,7 @@ interface EnvConfig {
   cognitoDomain: string;
   cognitoRedirectSignIn: string;
   cognitoRedirectSignOut: string;
+  googleClientId: string;
   enableAnalytics: boolean;
   enableDebug: boolean;
   requestTimeoutMs: number;
@@ -135,7 +137,10 @@ export function createEnvConfig(envName: Environment = detectEnvironment()): Env
   return {
     backendStage,
     env: envName,
-    apiBaseUrl: normalizeUrl(env.VITE_API_BASE_URL, deployment.apiBaseUrl),
+    apiBaseUrl: normalizeUrl(
+      env.VITE_API_BASE_URL,
+      envName === 'development' ? '' : deployment.apiBaseUrl
+    ),
     chatbotUrl: normalizeUrl(env.VITE_CHATBOT_URL, deployment.chatbotUrl),
     graphqlUrl: normalizeUrl(env.VITE_GRAPHQL_URL, deployment.graphqlUrl),
     cognitoRegion,
@@ -151,6 +156,7 @@ export function createEnvConfig(envName: Environment = detectEnvironment()): Env
     cognitoDomain: normalizeUrl(env.VITE_COGNITO_DOMAIN, deployment.cognitoDomain),
     cognitoRedirectSignIn: normalizeUrl(env.VITE_COGNITO_REDIRECT_SIGN_IN, redirectOrigin),
     cognitoRedirectSignOut: normalizeUrl(env.VITE_COGNITO_REDIRECT_SIGN_OUT, redirectOrigin),
+    googleClientId: env.VITE_GOOGLE_CLIENT_ID?.trim() || deployment.googleClientId,
     enableAnalytics: parseBoolean(
       'VITE_ENABLE_ANALYTICS',
       env.VITE_ENABLE_ANALYTICS,
@@ -183,6 +189,7 @@ export const cognitoEndpoint = config.cognitoEndpoint;
 export const cognitoDomain = config.cognitoDomain;
 export const cognitoRedirectSignIn = config.cognitoRedirectSignIn;
 export const cognitoRedirectSignOut = config.cognitoRedirectSignOut;
+export const googleClientId = config.googleClientId;
 export const enableAnalytics = config.enableAnalytics;
 export const enableDebug = config.enableDebug;
 export const requestTimeoutMs = config.requestTimeoutMs;

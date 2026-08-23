@@ -12,6 +12,9 @@ import {
   resetPassword,
   confirmResetPassword,
 } from 'aws-amplify/auth';
+import { IdentityApi } from '../api/identity';
+import { requestGoogleIdToken } from './google-identity';
+import { googleClientId } from '../utils/env.config';
 
 interface CognitoConfig {
   userPoolId: string;
@@ -171,8 +174,42 @@ class CognitoAuthService {
     await associateWebAuthnCredential();
   }
 
-  async federatedSignInGoogle(): Promise<void> {
-    await signInWithRedirect({ provider: 'Google' });
+  /**
+   * Signs in with Google.
+   *
+   * The Cognito Hosted UI is intentionally not provisioned, so this does NOT use OAuth redirects.
+   * Instead it follows the backend's custom-auth design:
+   *
+   *   1. obtain a Google ID token in-page (Google Identity Services);
+   *   2. resolve the linked OneHook account — `POST /identity/auth/social` verifies the token
+   *      server-side (signature, issuer, pinned audience) and returns the userId whose
+   *      `custom:google_id` matches the token's `sub`;
+   *   3. start the Cognito CUSTOM_AUTH flow for that user, which issues a PROVIDE_SOCIAL_TOKEN
+   *      challenge;
+   *   4. answer the challenge with the same token. The trigger re-verifies it and matches `sub`
+   *      against `custom:google_id` before Cognito issues any session.
+   *
+   * The token is verified twice by the backend, and the account is never chosen by the client:
+   * `sub` decides it on both hops.
+   */
+  async signInWithGoogle(): Promise<void> {
+    const idToken = await requestGoogleIdToken(googleClientId);
+
+    const account = await IdentityApi.authSocial('GOOGLE', idToken);
+    const userId = account?.userId;
+    if (!userId) {
+      throw new Error(
+        'No OneHook account is linked to this Google account. Sign in with your phone number, then link Google from your profile.'
+      );
+    }
+
+    await signIn({ username: userId, options: { authFlowType: 'CUSTOM_WITHOUT_SRP' } });
+    return this.answerSocialChallenge('google', idToken);
+  }
+
+  /** Answers a PROVIDE_SOCIAL_TOKEN challenge; the trigger matches the token's `sub` server-side. */
+  private async answerSocialChallenge(provider: 'google' | 'apple', token: string): Promise<void> {
+    await confirmSignIn({ challengeResponse: JSON.stringify({ provider, token }) });
   }
 
   async federatedSignInApple(): Promise<void> {

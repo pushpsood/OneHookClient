@@ -24,6 +24,7 @@ function stubBlankOverrides(): void {
     'VITE_COGNITO_DOMAIN',
     'VITE_COGNITO_REDIRECT_SIGN_IN',
     'VITE_COGNITO_REDIRECT_SIGN_OUT',
+    'VITE_GOOGLE_CLIENT_ID',
     'VITE_ENABLE_ANALYTICS',
     'VITE_ENABLE_DEBUG',
     'VITE_API_TIMEOUT_MS',
@@ -49,6 +50,10 @@ describe('env config', () => {
       'ap-south-1:8bfabd43-a446-4b8d-9201-b250cf3b62ef'
     );
     expect(config.cognitoEndpoint).toBe('https://cognito-idp.ap-south-1.amazonaws.com');
+    // Must equal the backend's GOOGLE_CLIENT_ID: the custom-auth trigger pins it as the audience.
+    expect(config.googleClientId).toBe(
+      '187849624492-jmmc973assosfgv3aaevh8fts2h0mtlr.apps.googleusercontent.com'
+    );
     expect(config.enableAnalytics).toBe(false);
     expect(config.enableDebug).toBe(false);
     expect(config.requestTimeoutMs).toBe(30_000);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { AlertCircle, Loader } from 'lucide-react';
@@ -31,8 +31,18 @@ export function RedeemInvite() {
   const [displayName, setDisplayName] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(true);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const handleValidateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,12 +75,31 @@ export function RedeemInvite() {
       await IdentityApi.requestPhoneOtp(phone.trim());
       showToast('Verification code sent!', 'info');
       setStep('otp');
+      setResendCooldown(60);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not send verification code';
       setError(message);
       showToast(message, 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || resendLoading || !phone.trim()) return;
+    setError(null);
+    setResendLoading(true);
+    try {
+      await IdentityApi.requestPhoneOtp(phone.trim());
+      setOtp('');
+      setResendCooldown(60);
+      showToast('New verification code sent!', 'info');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not send verification code';
+      setError(message);
+      showToast(message, 'error');
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -215,7 +244,7 @@ export function RedeemInvite() {
               <div className="space-y-2">
                 <label
                   htmlFor="otp"
-                  className="block text-xs font-bold uppercase tracking-widest opacity-60"
+                  className="block text-center text-xs font-bold uppercase tracking-widest opacity-60"
                 >
                   Verification Code
                 </label>
@@ -225,10 +254,10 @@ export function RedeemInvite() {
                   placeholder="000000"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
-                  disabled={loading}
+                  disabled={loading || resendLoading}
                   className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed text-center tracking-widest text-lg"
                 />
-                <p className="text-xs opacity-40 italic">Sent to {phone}</p>
+                <p className="text-center text-xs opacity-40 italic">Sent to {phone}</p>
               </div>
             )}
 
@@ -238,7 +267,7 @@ export function RedeemInvite() {
                   type="checkbox"
                   checked={agreed}
                   onChange={(e) => setAgreed(e.target.checked)}
-                  disabled={loading}
+                  disabled={loading || resendLoading}
                   className="mt-0.5 h-4 w-4 accent-accent shrink-0"
                 />
                 <span>
@@ -269,6 +298,7 @@ export function RedeemInvite() {
               type="submit"
               disabled={
                 loading ||
+                resendLoading ||
                 (step === 'invite' && !inviteCode.trim()) ||
                 (step === 'phone' && !phone.trim()) ||
                 (step === 'otp' && (!otp.trim() || !agreed))
@@ -297,14 +327,36 @@ export function RedeemInvite() {
               )}
             </button>
 
+            {step === 'otp' && (
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={loading || resendLoading || resendCooldown > 0}
+                className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {resendLoading ? (
+                  <>
+                    <Loader className="w-3 h-3 animate-spin" />
+                    <span>Sending new code...</span>
+                  </>
+                ) : resendCooldown > 0 ? (
+                  <span>Resend code in {resendCooldown}s</span>
+                ) : (
+                  <span>Resend verification code</span>
+                )}
+              </button>
+            )}
+
             {step !== 'invite' && (
               <button
                 type="button"
                 onClick={() => {
                   setError(null);
+                  setOtp('');
+                  setResendCooldown(0);
                   setStep(step === 'otp' ? 'phone' : 'invite');
                 }}
-                disabled={loading}
+                disabled={loading || resendLoading}
                 className="w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors disabled:opacity-50"
               >
                 Back

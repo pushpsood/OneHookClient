@@ -3,9 +3,67 @@ export const FALLBACK_PROFILE_IMAGE =
 
 const PROFILE_IMAGE_WIDTH = 480;
 
+const inMemoryMediaCache = new Map<string, string>();
+
+/** Cache local media preview (DataURL / ObjectURL) for an S3 media key. */
+export function setCachedMediaPreview(key: string, url: string) {
+  if (!key) return;
+  inMemoryMediaCache.set(key, url);
+  try {
+    if (typeof window !== 'undefined' && url.startsWith('data:')) {
+      // Store smaller previews in sessionStorage for resilience across page reloads
+      if (url.length < 500_000) {
+        sessionStorage.setItem(`media_prev_${key}`, url);
+      }
+    }
+  } catch {
+    // Ignore storage quota limits
+  }
+}
+
+/** Retrieve cached preview for an S3 media key if available. */
+export function getCachedMediaPreview(key: string): string | undefined {
+  if (!key) return undefined;
+  if (inMemoryMediaCache.has(key)) {
+    return inMemoryMediaCache.get(key);
+  }
+  try {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem(`media_prev_${key}`);
+      if (stored) {
+        inMemoryMediaCache.set(key, stored);
+        return stored;
+      }
+    }
+  } catch {
+    // Ignore storage read issues
+  }
+  return undefined;
+}
+
+/** Convert a File or Blob to a Data URL string. */
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
 /** Normalizes supported remote image URLs without changing unknown providers. */
 export function getOptimizedProfileImageSrc(src?: string | null): string {
   if (!src) return FALLBACK_PROFILE_IMAGE;
+
+  if (src.startsWith('data:') || src.startsWith('blob:')) {
+    return src;
+  }
+
+  if (src.startsWith('media/')) {
+    const cached = getCachedMediaPreview(src);
+    if (cached) return cached;
+    return `https://onehook-profile-gamma-media.s3.ap-south-1.amazonaws.com/${src}`;
+  }
 
   try {
     const url = new URL(src);

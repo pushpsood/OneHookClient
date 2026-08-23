@@ -143,6 +143,22 @@ export class ChatEncryptionManager {
     );
   }
 
+  /**
+   * Ensures the E2E session for a match exists, claiming the peer's pre-key bundle if needed.
+   *
+   * <p>This must be called when a conversation is OPENED, not only when a message is
+   * encrypted/decrypted. Claiming the bundle is what initializes the chat server-side (it writes the
+   * ChatTable TAIL marker), and the AppSync `getMessages` resolver refuses to read a conversation
+   * whose TAIL is absent (`verifyMatch` → unauthorized). Because the lazy claim previously happened
+   * only inside encrypt/decrypt, a brand-new match deadlocked: `getMessages` failed, the UI rendered
+   * the error state instead of a composer, so no message could ever be sent to trigger the claim.
+   * Establishing the session up front breaks that cycle. Safe to call repeatedly — the derived key is
+   * cached per match+peer.
+   */
+  async ensureSession(peerId: string, matchId: string): Promise<void> {
+    await this.conversationKey(peerId, matchId);
+  }
+
   /** Encrypts one message for a peer inside a match. */
   async encryptMessage(peerId: string, matchId: string, plaintext: string): Promise<string> {
     const key = await this.conversationKey(peerId, matchId);

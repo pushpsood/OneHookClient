@@ -12,6 +12,7 @@ interface ImportMetaEnv {
   readonly VITE_COGNITO_IDENTITY_POOL_ID?: string;
   readonly VITE_COGNITO_ENDPOINT?: string;
   readonly VITE_COGNITO_DOMAIN?: string;
+  readonly VITE_GOOGLE_CLIENT_ID?: string;
   readonly VITE_COGNITO_REDIRECT_SIGN_IN?: string;
   readonly VITE_COGNITO_REDIRECT_SIGN_OUT?: string;
   readonly VITE_ENABLE_ANALYTICS?: string;

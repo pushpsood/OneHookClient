@@ -33,6 +33,8 @@ import { AppleIcon, AndroidIcon } from './common/BrandIcons';
 import { SiteFooter } from './common/SiteFooter';
 import { AlienScanner } from './mascot';
 import { ChatbotWidget } from './Chatbot/ChatbotWidget';
+import { useAppStore } from '../store/app-store';
+import { getCognitoAuth } from '../lib/cognito-auth';
 
 const focusIntentionImage = '/media/aerial-view-of-the-city-in-the-fog-5ZBZNUT-1600.jpg';
 const discoverProfilesImage =
@@ -182,6 +184,19 @@ const OPENERS = [
 export function Landing() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isAuthenticated = useAppStore((state) => state.isAuthenticated);
+  const storeLogout = useAppStore((state) => state.logout);
+
+  // Full sign-out: end the Amplify/Cognito session (so a page reload doesn't silently
+  // re-authenticate) and clear local app state. We're already on the landing page, so no navigate.
+  const handleLogout = async () => {
+    try {
+      await getCognitoAuth().logout();
+    } catch {
+      // Ignore — clear local state regardless so the UI reflects a signed-out session.
+    }
+    storeLogout();
+  };
   const videoRef = useRef<HTMLVideoElement>(null);
   const stepsRailRef = useRef<HTMLDivElement>(null);
 
@@ -764,27 +779,36 @@ export function Landing() {
                 Get the app
               </button>
               <button
-                onClick={() => navigate('/login')}
+                onClick={() => navigate(isAuthenticated ? '/app' : '/login')}
                 className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
               >
-                Sign in
+                {isAuthenticated ? 'Dashboard' : 'Sign in'}
               </button>
             </div>
 
             <button
-              onClick={() => navigate('/login')}
+              onClick={() => navigate(isAuthenticated ? '/app' : '/login')}
               className="lg:hidden px-3 sm:px-4 py-2 border border-border text-[10px] font-bold uppercase tracking-[0.22em] hover:bg-bg transition-colors whitespace-nowrap"
             >
-              Sign in
+              {isAuthenticated ? 'Dashboard' : 'Sign in'}
             </button>
 
-            <button
-              onClick={goRedeemInvite}
-              className="px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
-            >
-              <span className="sm:hidden">Sign up</span>
-              <span className="hidden sm:inline">Redeem Invite</span>
-            </button>
+            {isAuthenticated ? (
+              <button
+                onClick={handleLogout}
+                className="px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
+              >
+                Logout
+              </button>
+            ) : (
+              <button
+                onClick={goRedeemInvite}
+                className="px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
+              >
+                <span className="sm:hidden">Sign up</span>
+                <span className="hidden sm:inline">Redeem Invite</span>
+              </button>
+            )}
           </div>
         </div>
       </nav>

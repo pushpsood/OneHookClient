@@ -118,6 +118,31 @@ export default defineConfig(({ mode }) => {
         allow: [resolve(__dirname), resolve(__dirname, '..', 'OneHookBackend')],
       },
       proxy: {
+        '/profile': {
+          target: 'https://api.gamma.onehook.club',
+          changeOrigin: true,
+          secure: true,
+        },
+        '/state': {
+          target: 'https://api.gamma.onehook.club',
+          changeOrigin: true,
+          secure: true,
+        },
+        '/matching': {
+          target: 'https://api.gamma.onehook.club',
+          changeOrigin: true,
+          secure: true,
+        },
+        '/identity': {
+          target: 'https://api.gamma.onehook.club',
+          changeOrigin: true,
+          secure: true,
+        },
+        '/chat': {
+          target: 'https://api.gamma.onehook.club',
+          changeOrigin: true,
+          secure: true,
+        },
         '/api/localstack/chat': {
           target: 'https://hmlzbhd52r.execute-api.localhost.localstack.cloud:4566',
           changeOrigin: true,

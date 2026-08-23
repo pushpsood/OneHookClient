@@ -64,6 +64,8 @@ export type UserProfile = ProfileResponse & {
   birthDate?: string;
   photos: string[];
   location: { lat: number; lng: number; geohash: string };
+  moderationStatus?: 'APPROVED' | 'PENDING_REVIEW' | 'PENDING_MEDIA' | 'PENDING_TEXT' | 'REJECTED' | string;
+  fieldModerationStatus?: Record<string, 'APPROVED' | 'PENDING' | 'REJECTED' | string>;
   /**
    * Connection-state fields below are owned by the State service, not the profile read model.
    * They are optional here because a profile response never carries them — read them from
@@ -86,6 +88,9 @@ export type DiscoveryCandidate = CandidateDto & {
   age?: number;
   location?: string;
   bio?: string;
+  work?: string;
+  education?: string;
+  hometown?: string;
   interests?: string[];
 };
 

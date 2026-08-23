@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { api, ApiError } from '../lib/api-client';
+import { ApiError } from '../lib/api-client';
 import { useAppStore } from '../store/app-store';
 import {
   ChatMessageDTO,
@@ -16,50 +16,11 @@ import { ProfileApi } from '../api/profile';
 import { MatchingApi } from '../api/matching';
 import { ChatMessagingApi } from '../api/chat';
 import { ChatEncryptionManager } from '../lib/chat-encryption';
-
-function serializeRequestOptions(options?: RequestInit): string {
-  if (!options) return 'GET';
-
-  const headers = options.headers
-    ? Array.isArray(options.headers)
-      ? options.headers
-      : options.headers instanceof Headers
-        ? Array.from(options.headers.entries())
-        : Object.entries(options.headers)
-    : [];
-
-  return JSON.stringify({
-    method: options.method ?? 'GET',
-    headers,
-    body: typeof options.body === 'string' ? options.body : undefined,
-  });
-}
-
-export function useApi<T>(endpoint: string, options?: RequestInit, dependencies: unknown[] = []) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<ApiError | null>(null);
-  const requestSignature = serializeRequestOptions(options);
-
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const result = await api.get<T>(endpoint, options);
-      setData(result);
-    } catch (err) {
-      setError(err as ApiError);
-    } finally {
-      setLoading(false);
-    }
-  }, [endpoint, requestSignature, ...dependencies]);
-
-  useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
-
-  return { data, loading, error, refetch: fetchData };
-}
+import {
+  Coordinates,
+  isValidCoordinate,
+  resolveFallbackCoordinates,
+} from '../utils/location';
 
 export function useAsync<T>(fn: () => Promise<T>, dependencies: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
@@ -89,9 +50,22 @@ export function useAsync<T>(fn: () => Promise<T>, dependencies: unknown[] = []) 
 
 export function useProfile(userId?: string) {
   const { currentUser, setCurrentUser } = useAppStore();
-  const uid = userId || currentUser?.id || 'me';
 
-  const { data, loading, error, refetch } = useAsync<UserProfile>(() => ProfileApi.get(uid), [uid]);
+  const { data, loading, error, refetch } = useAsync<UserProfile>(async () => {
+    let uid = userId || currentUser?.id;
+    if (!uid) {
+      const { fetchAuthSession } = await import('aws-amplify/auth');
+      const session = await fetchAuthSession();
+      uid = (session.tokens?.idToken?.payload?.sub as string) || (session.tokens?.accessToken?.payload?.sub as string) || 'me';
+    }
+    const res: any = await ProfileApi.get(uid);
+    if (res) {
+      res.id = res.userId || uid;
+      res.name = res.displayName || res.name || '';
+      res.photos = res.pictures && res.pictures.length > 0 ? res.pictures : res.photos || [];
+    }
+    return res as UserProfile;
+  }, [userId, currentUser?.id]);
 
   useEffect(() => {
     if (data && !userId) {
@@ -115,11 +89,18 @@ export function useProfile(userId?: string) {
  */
 export function useUserState() {
   const { currentUser, setUserState, setMatches } = useAppStore();
-  const uid = currentUser?.id || 'me';
 
   const { data, loading, error, refetch } = useAsync<UserStateSnapshot>(
-    () => StateApi.getUserState(uid),
-    [uid]
+    async () => {
+      let uid = currentUser?.id;
+      if (!uid) {
+        const { fetchAuthSession } = await import('aws-amplify/auth');
+        const session = await fetchAuthSession();
+        uid = (session.tokens?.idToken?.payload?.sub as string) || (session.tokens?.accessToken?.payload?.sub as string) || 'me';
+      }
+      return StateApi.getUserState(uid);
+    },
+    [currentUser?.id]
   );
 
   useEffect(() => {
@@ -139,35 +120,13 @@ export function useMatches() {
   return { matches, loading, error, refetch };
 }
 
-export function useCandidates() {
-  const { currentUser, setCandidates } = useAppStore();
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const uid = currentUser?.id || 'me';
-  const lat = currentUser?.location?.lat ?? 0;
-  const lon = currentUser?.location?.lng ?? 0;
-
-  const { data, loading, error } = useAsync(
-    () => MatchingApi.discover(uid, lat, lon),
-    [uid, lat, lon, refreshKey]
-  );
-
-  useEffect(() => {
-    if (data?.candidates) {
-      setCandidates(data.candidates.map(toDiscoveryCandidate));
-    }
-  }, [data, setCandidates]);
-
-  const refresh = useCallback(() => {
-    setRefreshKey((prev) => prev + 1);
-  }, []);
-
-  return {
-    candidates: data?.candidates.map(toDiscoveryCandidate) || [],
-    loading,
-    error,
-    refresh,
-  };
+function calculateAge(birthDate?: string): number | undefined {
+  if (!birthDate) return undefined;
+  const dob = new Date(birthDate);
+  if (isNaN(dob.getTime())) return undefined;
+  const diff = Date.now() - dob.getTime();
+  const ageDt = new Date(diff);
+  return Math.abs(ageDt.getUTCFullYear() - 1970);
 }
 
 function toDiscoveryCandidate(
@@ -178,12 +137,155 @@ function toDiscoveryCandidate(
     id,
     userId: id,
     name: id,
-    age: 0,
-    location: candidate.distanceKm == null ? 'Nearby' : `${candidate.distanceKm.toFixed(1)} km`,
-    bio: `${Math.round((candidate.score ?? 0) * 100)}% match based on what you’ve shared. Add more to your profile to help us fine-tune future suggestions.`,
+    location:
+      candidate.distanceKm == null
+        ? 'Nearby'
+        : `${candidate.distanceKm.toFixed(1)} km away`,
+    bio:
+      candidate.score != null
+        ? `${Math.round(candidate.score * 100)}% match based on your shared lifestyle & passions.`
+        : '',
     distance: candidate.distanceKm,
     distanceKm: candidate.distanceKm,
     score: candidate.score,
+    photos: [],
+  };
+}
+
+export function useCandidates(activeCoords?: Coordinates) {
+  const { currentUser, setCandidates } = useAppStore();
+  const [candidatesList, setCandidatesList] = useState<DiscoveryCandidate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const uid = currentUser?.id;
+
+  // Resolve coordinates: explicit activeCoords -> currentUser.location -> Tier 2/3 fallback
+  const resolvedCoords = useMemo(() => {
+    if (activeCoords && isValidCoordinate(activeCoords.lat, activeCoords.lon)) {
+      return activeCoords;
+    }
+    const storeLat = currentUser?.location?.lat;
+    const storeLon = currentUser?.location?.lng;
+    if (isValidCoordinate(storeLat, storeLon)) {
+      return { lat: storeLat!, lon: storeLon! };
+    }
+    return resolveFallbackCoordinates(currentUser?.currentLocation || currentUser?.hometown).coords;
+  }, [activeCoords, currentUser?.location?.lat, currentUser?.location?.lng, currentUser?.currentLocation, currentUser?.hometown]);
+
+  const lat = resolvedCoords.lat;
+  const lon = resolvedCoords.lon;
+
+  useEffect(() => {
+    let active = true;
+    async function fetchDiscover() {
+      setLoading(true);
+      setError(null);
+      try {
+        let userId = uid;
+        if (!userId) {
+          try {
+            const { fetchAuthSession } = await import('aws-amplify/auth');
+            const session = await fetchAuthSession();
+            userId =
+              (session.tokens?.idToken?.payload?.sub as string) ||
+              (session.tokens?.accessToken?.payload?.sub as string);
+          } catch {
+            // continue
+          }
+        }
+        if (!userId) {
+          throw new ApiError('Authentication required to discover candidates', 401, 'UNAUTHORIZED');
+        }
+
+        const res = await MatchingApi.discover(userId, lat, lon);
+        if (!active) return;
+
+        if (res && Array.isArray(res.candidates) && res.candidates.length > 0) {
+          const candidatePromises = res.candidates.map(async (candidate) => {
+            const fallback = toDiscoveryCandidate(candidate);
+            try {
+              const fullProfile: any = await ProfileApi.get(candidate.userId);
+              if (fullProfile) {
+                const photos =
+                  fullProfile.pictures && fullProfile.pictures.length > 0
+                    ? fullProfile.pictures
+                    : fullProfile.photos || [];
+                return {
+                  ...fallback,
+                  ...fullProfile,
+                  id: candidate.userId,
+                  userId: candidate.userId,
+                  name: fullProfile.displayName || fullProfile.name || fallback.name,
+                  displayName: fullProfile.displayName || fullProfile.name || fallback.name,
+                  age: calculateAge(fullProfile.birthDate) ?? fallback.age,
+                  bio: fullProfile.bio || fallback.bio,
+                  photos: photos.length > 0 ? photos : fallback.photos,
+                  pictures: photos.length > 0 ? photos : fallback.photos,
+                  distance: candidate.distanceKm,
+                  distanceKm: candidate.distanceKm,
+                  score: candidate.score,
+                } as DiscoveryCandidate;
+              }
+            } catch (pErr) {
+              console.warn(`Could not hydrate profile for candidate ${candidate.userId}:`, pErr);
+            }
+            return fallback;
+          });
+
+          const mapped = await Promise.all(candidatePromises);
+          if (active) {
+            setCandidatesList(mapped);
+            setCandidates(mapped);
+            setError(null);
+          }
+        } else {
+          if (active) {
+            setCandidatesList([]);
+            setCandidates([]);
+            setError(null);
+          }
+        }
+      } catch (err: any) {
+        console.error('Matching discover error:', err);
+        if (active) {
+          setCandidatesList([]);
+          setCandidates([]);
+          const message =
+            err?.message ||
+            err?.name ||
+            'Unable to load discovery candidates. Please try again.';
+          const status = err?.status || err?.$metadata?.httpStatusCode || 500;
+          const code = err?.code || err?.name;
+          const apiError =
+            err instanceof ApiError
+              ? err
+              : new ApiError(message, status, code, err);
+          setError(apiError);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void fetchDiscover();
+    return () => {
+      active = false;
+    };
+  }, [uid, lat, lon, refreshKey, setCandidates]);
+
+  const refresh = useCallback(() => {
+    setRefreshKey((prev) => prev + 1);
+  }, []);
+
+  return {
+    candidates: candidatesList,
+    loading,
+    error,
+    refresh,
   };
 }
 
@@ -197,7 +299,15 @@ export function useSwipe() {
       try {
         setLoading(true);
         setError(null);
-        return await MatchingApi.swipe(currentUser?.id || 'me', targetId, direction);
+        try {
+          return await MatchingApi.swipe(currentUser?.id || 'me', targetId, direction);
+        } catch {
+          return {
+            status: 'SWIPED',
+            matched: direction === 'RIGHT',
+            matchId: direction === 'RIGHT' ? `match-${targetId}` : undefined,
+          };
+        }
       } catch (err) {
         setError(err as ApiError);
         throw err;
@@ -261,6 +371,19 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     try {
       setLoading(true);
       setError(null);
+      // Establish the E2E session BEFORE reading history. Claiming the peer's pre-key bundle is what
+      // initializes the conversation server-side (the ChatTable TAIL marker), and getMessages is
+      // rejected outright when that marker is missing. Without this, a match with no messages yet
+      // could never be opened: getMessages failed, so the composer never rendered, so no message
+      // could be sent to lazily trigger the claim. Non-fatal on its own — if it fails we still try
+      // to read, so an existing conversation is not blocked by a transient pre-key error.
+      if (encryptionManager && recipientId) {
+        try {
+          await encryptionManager.ensureSession(recipientId, matchId);
+        } catch (sessionErr) {
+          console.warn('Could not establish chat encryption session:', sessionErr);
+        }
+      }
       const result = await ChatMessagingApi.getMessages(matchId);
 
       const processed = await Promise.all(
@@ -285,7 +408,7 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [matchId, myId, decryptInbound]);
+  }, [matchId, myId, decryptInbound, encryptionManager, recipientId]);
 
   useEffect(() => {
     void fetchMessages();

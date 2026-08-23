@@ -5,19 +5,22 @@ import { Lock, LogOut } from 'lucide-react';
 import { UserState } from '../types';
 import { isPremium, useAppStore } from '../store/app-store';
 import { useCandidates, useProfile, useSwipe, useUserState } from '../hooks/use-api';
-import { ApiError, upgradeSubscription } from '../lib/api-client';
+import { useUserLocation } from '../hooks/use-user-location';
+import { ApiError } from '../lib/api-client';
+import { StateApi } from '../api/state';
 import { getCognitoAuth } from '../lib/cognito-auth';
 import { BrandWordmark } from '../components/common/BrandWordmark';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
-import { useToast } from '../components/common/Toast';
-import { getOptimizedProfileImageSrc } from '../utils/profile-image';
+import { useToast } from '../../src/components/common/Toast';
+import { MediaImage } from '../components/common/MediaImage';
 import { DiscoveryView } from '../features/discovery/DiscoveryView';
+import { MatchesView } from '../features/matches/MatchesView';
 import { ChatView } from '../features/chat/ChatView';
 import { ProfileView } from '../features/profile/ProfileView';
 
 export function AppContent() {
   const navigate = useNavigate();
-  const [appState, setAppState] = useState<'DISCOVERY' | 'CHAT' | 'PROFILE'>('DISCOVERY');
+  const [appState, setAppState] = useState<'DISCOVERY' | 'MATCHES' | 'CHAT' | 'PROFILE'>('DISCOVERY');
   const { currentUser, setCurrentUser, logout, userState } = useAppStore();
   const {
     profile,
@@ -30,12 +33,18 @@ export function AppContent() {
   const premium = useAppStore(isPremium);
   const [upgrading, setUpgrading] = useState(false);
 
+  // Proactively acquire high-accuracy GPS or fallback coordinates and index with backend
+  const { coords: userCoords } = useUserLocation(
+    currentUser?.id,
+    currentUser?.currentLocation || currentUser?.hometown
+  );
+
   const handleUpgrade = async () => {
     if (!currentUser) return;
     setUpgrading(true);
     try {
       // Body-less reconciliation; the response is the freshly reconciled authoritative state.
-      await upgradeSubscription();
+      await StateApi.reconcileEntitlements();
       // Refresh the token so the custom:subscriptionTier claim other services read catches up,
       // then re-read the authoritative state to update the UI.
       const auth = getCognitoAuth();
@@ -55,7 +64,7 @@ export function AppContent() {
     loading: candidatesLoading,
     error: candidatesError,
     refresh: refreshCandidates,
-  } = useCandidates();
+  } = useCandidates(userCoords);
   const { swipe, loading: swipeLoading } = useSwipe();
   const { showToast } = useToast();
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
@@ -67,16 +76,18 @@ export function AppContent() {
   }, [profile, setCurrentUser]);
 
   useEffect(() => {
-    if (userState?.state === UserState.ONBOARDING) {
+    if (!currentUser && (profileError || userState?.state === UserState.ONBOARDING)) {
       navigate('/onboarding', { replace: true });
     }
-  }, [userState?.state, navigate]);
+  }, [currentUser, profileError, userState?.state, navigate]);
 
   useEffect(() => {
     if (!activeMatchId && currentUser?.currentMatches?.length) {
       setActiveMatchId(currentUser.currentMatches[0]);
+    } else if (!activeMatchId && userState?.matchIds?.length) {
+      setActiveMatchId(userState.matchIds[0]);
     }
-  }, [activeMatchId, currentUser]);
+  }, [activeMatchId, currentUser, userState]);
 
   const handleSwipe = async (targetId: string, direction: 'LEFT' | 'RIGHT') => {
     try {
@@ -93,7 +104,6 @@ export function AppContent() {
         );
       }
 
-      refreshCandidates();
       return true;
     } catch (error) {
       if (error instanceof ApiError) {
@@ -106,13 +116,21 @@ export function AppContent() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await getCognitoAuth().logout();
+    } catch (e) {
+      console.error('Logout error', e);
+    }
     logout();
     showToast('You’re signed out.', 'info');
     navigate('/', { replace: true });
   };
 
-  if (profileLoading) {
+  if (
+    profileLoading ||
+    (!currentUser && (profileError || userState?.state === UserState.ONBOARDING))
+  ) {
     return <LoadingSpinner fullScreen />;
   }
 
@@ -128,7 +146,12 @@ export function AppContent() {
               {profileError.message || 'We couldn’t load your profile. Please try again.'}
             </p>
             <button
-              onClick={() => {
+              onClick={async () => {
+                try {
+                  await getCognitoAuth().logout();
+                } catch (e) {
+                  console.error(e);
+                }
                 logout();
                 navigate('/login');
               }}
@@ -177,16 +200,22 @@ export function AppContent() {
             Discovery
           </button>
           <button
+            onClick={() => setAppState('MATCHES')}
+            className={`hover:opacity-100 transition-opacity ${appState === 'MATCHES' ? 'opacity-100 border-b-2 border-accent pb-1' : 'opacity-40'}`}
+          >
+            Matches
+          </button>
+          <button
             onClick={() => setAppState('CHAT')}
             className={`hover:opacity-100 transition-opacity ${appState === 'CHAT' ? 'opacity-100 border-b-2 border-accent pb-1' : 'opacity-40'}`}
           >
-            Matches
+            Chat
           </button>
           <button
             onClick={() => setAppState('PROFILE')}
             className={`hover:opacity-100 transition-opacity ${appState === 'PROFILE' ? 'opacity-100 border-b-2 border-accent pb-1' : 'opacity-40'}`}
           >
-            Membership
+            Profile
           </button>
         </div>
         <div className="flex items-center gap-4">
@@ -200,15 +229,19 @@ export function AppContent() {
           <span className="text-[9px] font-mono opacity-30 uppercase tracking-widest">
             ID: {currentUser.id}
           </span>
-          <div className="w-8 h-8 rounded-full bg-border flex items-center justify-center border border-border overflow-hidden">
-            <img
-              src={getOptimizedProfileImageSrc(currentUser.photos?.[0])}
+          <button
+            onClick={() => setAppState('PROFILE')}
+            className="w-8 h-8 rounded-full bg-border flex items-center justify-center border border-border overflow-hidden cursor-pointer hover:ring-2 hover:ring-accent transition-all"
+            title="View Profile"
+          >
+            <MediaImage
+              src={currentUser.photos?.[0]}
               alt="Me"
               loading="eager"
               decoding="async"
-              className="w-full h-full object-cover grayscale"
+              className="w-full h-full object-cover"
             />
-          </div>
+          </button>
         </div>
       </nav>
 
@@ -219,14 +252,35 @@ export function AppContent() {
             <DiscoveryView
               key="discovery"
               candidates={candidates}
-              loading={candidatesLoading || swipeLoading}
+              loading={candidatesLoading}
               error={candidatesError}
               onSwipe={handleSwipe}
               onRetry={refreshCandidates}
             />
           )}
+          {appState === 'MATCHES' && (
+            <MatchesView
+              key="matches"
+              currentUser={currentUser}
+              userState={userState}
+              onOpenChat={(matchId) => {
+                setActiveMatchId(matchId);
+                setAppState('CHAT');
+              }}
+              onRefetchState={async () => {
+                await refetchUserState();
+              }}
+              onNavigateToDiscovery={() => setAppState('DISCOVERY')}
+            />
+          )}
           {appState === 'CHAT' && (
-            <ChatView key="chat" currentUser={currentUser} matchId={activeMatchId} />
+            <ChatView
+              key="chat"
+              currentUser={currentUser}
+              matchId={activeMatchId}
+              onNavigateToMatches={() => setAppState('MATCHES')}
+              onNavigateToDiscovery={() => setAppState('DISCOVERY')}
+            />
           )}
           {appState === 'PROFILE' && (
             <ProfileView
@@ -249,7 +303,7 @@ export function AppContent() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[60] bg-white/90 backdrop-blur-sm flex items-center justify-center p-8"
           >
-            <div className="max-w-md w-full border border-accent p-12 text-center space-y-8 bg-white">
+            <div className="max-w-md w-full border border-accent p-12 text-center space-y-8 bg-white shadow-2xl">
               <div className="w-16 h-16 border-2 border-accent rounded-full flex items-center justify-center mx-auto">
                 <Lock className="w-6 h-6" />
               </div>
@@ -262,12 +316,20 @@ export function AppContent() {
                   the person you&rsquo;re already getting to know.
                 </p>
               </div>
-              <button
-                onClick={() => setAppState('CHAT')}
-                className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity"
-              >
-                Go to Your Match
-              </button>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => setAppState('CHAT')}
+                  className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity"
+                >
+                  Go to Chat
+                </button>
+                <button
+                  onClick={() => setAppState('MATCHES')}
+                  className="w-full py-4 border border-border text-accent text-[10px] uppercase tracking-[0.3em] font-black hover:bg-bg transition-colors"
+                >
+                  View Matches
+                </button>
+              </div>
             </div>
           </motion.div>
         )}

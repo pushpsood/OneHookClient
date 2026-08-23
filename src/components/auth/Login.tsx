@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { AlertCircle, Loader } from 'lucide-react';
@@ -28,10 +28,20 @@ export function Login() {
   const [usePassword, setUsePassword] = useState(false);
   const [step, setStep] = useState<'IDENTIFIER' | 'OTP' | 'SET_PASSWORD'>('IDENTIFIER');
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const isEmail = identifier.includes('@');
   const identifierLabel = isEmail ? 'email' : 'phone';
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev <= 1 ? 0 : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const isSignedInStep = (res: { isSignedIn?: boolean; nextStep?: { signInStep?: string } }) =>
     res?.isSignedIn || res?.nextStep?.signInStep === 'DONE';
@@ -63,6 +73,7 @@ export function Login() {
         } else if (needsCodeStep(response)) {
           // e.g. an additional MFA/OTP challenge.
           setStep('OTP');
+          setResendCooldown(60);
           showToast('Enter the verification code to continue.', 'info');
         } else {
           setAuthenticated(true);
@@ -78,6 +89,7 @@ export function Login() {
         navigate('/auth/setup', { replace: true });
       } else {
         setStep('OTP');
+        setResendCooldown(60);
         showToast(`Verification code sent to your ${identifierLabel}!`, 'info');
       }
     } catch (err: any) {
@@ -109,9 +121,13 @@ export function Login() {
         throw new Error('Please enter the verification code');
       }
       const cognitoAuth = getCognitoAuth();
-      await cognitoAuth.confirmLogin(code);
-      setAuthenticated(true);
-      navigate('/auth/setup', { replace: true });
+      const response = await cognitoAuth.confirmLogin(code);
+      if (isSignedInStep(response)) {
+        setAuthenticated(true);
+        navigate('/auth/setup', { replace: true });
+      } else {
+        throw new Error('Invalid verification code. Please try again.');
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Verification failed. Please try again.';
       setError(message);
@@ -171,7 +187,9 @@ export function Login() {
     setLoading(true);
     setError(null);
     try {
-      await getCognitoAuth().federatedSignInGoogle();
+      await getCognitoAuth().signInWithGoogle();
+      setAuthenticated(true);
+      navigate('/auth/setup', { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Google sign-in failed.';
       setError(message);
@@ -195,10 +213,40 @@ export function Login() {
     }
   };
 
-  const resetToIdentifier = () => {
-    setStep('IDENTIFIER');
-    setCode('');
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || resendLoading || !identifier.trim()) return;
     setError(null);
+    setResendLoading(true);
+    try {
+      const cognitoAuth = getCognitoAuth();
+      await cognitoAuth.requestOtp(identifier.trim());
+      setCode('');
+      setResendCooldown(60);
+      showToast(`Verification code sent to your ${identifierLabel}!`, 'info');
+    } catch (err: any) {
+      console.error('Resend OTP error details:', err, JSON.stringify(err));
+      const message =
+        err instanceof Error ? err.message : 'Failed to resend verification code. Please try again.';
+      setError(message);
+      showToast(message, 'error');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const resetToIdentifier = async () => {
+    try {
+      await getCognitoAuth().logout();
+    } catch {
+      // Ignore if not logged in or during partial auth
+    }
+    setStep('IDENTIFIER');
+    setIdentifier('');
+    setPassword('');
+    setCode('');
+    setConfirmPassword('');
+    setError(null);
+    setResendCooldown(0);
   };
 
   return (
@@ -362,7 +410,7 @@ export function Login() {
                 <div className="space-y-2">
                   <label
                     htmlFor="code"
-                    className="block text-xs font-bold uppercase tracking-widest opacity-60"
+                    className="block text-center text-xs font-bold uppercase tracking-widest opacity-60"
                   >
                     Verification Code
                   </label>
@@ -374,14 +422,19 @@ export function Login() {
                     placeholder="000000"
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
-                    disabled={loading}
+                    disabled={loading || resendLoading}
                     className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-center tracking-widest text-lg"
                   />
+                  {identifier && (
+                    <p className="text-center text-xs opacity-40 italic">
+                      Sent to {identifier}
+                    </p>
+                  )}
                 </div>
 
                 <button
                   type="submit"
-                  disabled={loading || !code.trim()}
+                  disabled={loading || resendLoading || !code.trim()}
                   className="w-full py-4 bg-accent text-white text-xs font-black uppercase tracking-[0.3em] rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (
@@ -396,8 +449,27 @@ export function Login() {
 
                 <button
                   type="button"
+                  onClick={handleResendOtp}
+                  disabled={loading || resendLoading || resendCooldown > 0}
+                  className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {resendLoading ? (
+                    <>
+                      <Loader className="w-3 h-3 animate-spin" />
+                      <span>Sending new code...</span>
+                    </>
+                  ) : resendCooldown > 0 ? (
+                    <span>Resend code in {resendCooldown}s</span>
+                  ) : (
+                    <span>Resend verification code</span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
                   onClick={resetToIdentifier}
-                  className="w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors"
+                  disabled={loading || resendLoading}
+                  className="w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors disabled:opacity-50"
                 >
                   Use a different account
                 </button>
