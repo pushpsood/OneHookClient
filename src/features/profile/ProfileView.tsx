@@ -21,6 +21,7 @@ import type { UserProfile } from '../../types';
 import { ProfileApi } from '../../api/profile';
 import { SetPasswordCard } from '../../components/profile/SetPasswordCard';
 import { AccountSettingsCard } from '../../components/profile/AccountSettingsCard';
+import { DeviceManagementCard } from '../../components/profile/DeviceManagementCard';
 import { usePreferences } from '../../hooks/use-api';
 import { isPremium, useAppStore } from '../../store/app-store';
 import { useToast } from '../../components/common/Toast';
@@ -1489,6 +1490,7 @@ export function ProfileView({
         )}
 
         <AccountSettingsCard />
+        <DeviceManagementCard />
         <SetPasswordCard />
 
         <Suspense fallback={null}>

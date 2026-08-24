@@ -88,27 +88,25 @@ describe('Matches: State Service Extension', () => {
     expect(state.matchIds).toHaveLength(0);
   });
 
-  it('app state accommodates 4 distinct sections: DISCOVERY, MATCHES, CHAT, PROFILE', () => {
-    type AppSection = 'DISCOVERY' | 'MATCHES' | 'CHAT' | 'PROFILE';
-    const sections: AppSection[] = ['DISCOVERY', 'MATCHES', 'CHAT', 'PROFILE'];
+  it('app state accommodates unified sections: DISCOVERY, MATCHES (with integrated chat), PROFILE', () => {
+    type AppSection = 'DISCOVERY' | 'MATCHES' | 'PROFILE';
+    const sections: AppSection[] = ['DISCOVERY', 'MATCHES', 'PROFILE'];
 
     expect(sections).toContain('MATCHES');
-    expect(sections).toContain('CHAT');
-    expect(sections).toHaveLength(4);
+    expect(sections).toContain('DISCOVERY');
+    expect(sections).toContain('PROFILE');
+    expect(sections).toHaveLength(3);
   });
 
-  it('selecting a match from Matches navigates to Chat with the selected matchId', () => {
-    let currentSection: 'DISCOVERY' | 'MATCHES' | 'CHAT' | 'PROFILE' = 'MATCHES';
+  it('selecting a match within the unified MatchesView updates active match state directly', () => {
     let activeMatchId: string | null = null;
 
-    const onOpenChat = (matchId: string) => {
+    const onSelectMatch = (matchId: string | null) => {
       activeMatchId = matchId;
-      currentSection = 'CHAT';
     };
 
-    onOpenChat('match-abc-456');
+    onSelectMatch('match-abc-456');
 
-    expect(currentSection).toBe('CHAT');
     expect(activeMatchId).toBe('match-abc-456');
   });
 });

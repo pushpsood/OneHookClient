@@ -15,12 +15,11 @@ import { useToast } from '../../src/components/common/Toast';
 import { MediaImage } from '../components/common/MediaImage';
 import { DiscoveryView } from '../features/discovery/DiscoveryView';
 import { MatchesView } from '../features/matches/MatchesView';
-import { ChatView } from '../features/chat/ChatView';
 import { ProfileView } from '../features/profile/ProfileView';
 
 export function AppContent() {
   const navigate = useNavigate();
-  const [appState, setAppState] = useState<'DISCOVERY' | 'MATCHES' | 'CHAT' | 'PROFILE'>('DISCOVERY');
+  const [appState, setAppState] = useState<'DISCOVERY' | 'MATCHES' | 'PROFILE'>('DISCOVERY');
   const { currentUser, setCurrentUser, logout, userState } = useAppStore();
   const {
     profile,
@@ -96,7 +95,7 @@ export function AppContent() {
       if (result.matched) {
         showToast("It's a match! 🎉", 'success');
         setActiveMatchId(result.matchId || null);
-        setAppState('CHAT');
+        setAppState('MATCHES');
       } else if (direction === 'RIGHT') {
         showToast(
           'Your interest is on its way — we’ll let you know if they feel the same.',
@@ -175,9 +174,9 @@ export function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-bg text-text selection:bg-accent selection:text-white flex flex-col border-t-4 border-accent">
+    <div className="h-screen bg-bg text-text selection:bg-accent selection:text-white flex flex-col border-t-4 border-accent overflow-hidden">
       {(profileError || candidatesError) && (
-        <div className="px-10 py-3 bg-red-50 text-red-700 text-[10px] uppercase tracking-[0.2em] font-bold border-b border-red-100">
+        <div className="px-10 py-3 bg-red-50 text-red-700 text-[10px] uppercase tracking-[0.2em] font-bold border-b border-red-100 shrink-0">
           {profileError?.message ||
             candidatesError?.message ||
             'We’re having trouble loading the latest updates. Here’s what we have for now.'}
@@ -185,7 +184,7 @@ export function AppContent() {
       )}
 
       {/* Top Navigation Bar */}
-      <nav className="flex items-center justify-between px-10 h-20 border-b border-border bg-bg/80 backdrop-blur-md sticky top-0 z-50">
+      <nav className="flex items-center justify-between px-10 h-20 border-b border-border bg-bg/80 backdrop-blur-md sticky top-0 z-50 shrink-0">
         <div className="flex items-center gap-2">
           <BrandWordmark className="text-xl font-bold tracking-tighter uppercase" />
           <span className="text-[10px] px-2 py-0.5 bg-accent text-white rounded-full tracking-widest font-bold">
@@ -204,12 +203,6 @@ export function AppContent() {
             className={`hover:opacity-100 transition-opacity ${appState === 'MATCHES' ? 'opacity-100 border-b-2 border-accent pb-1' : 'opacity-40'}`}
           >
             Matches
-          </button>
-          <button
-            onClick={() => setAppState('CHAT')}
-            className={`hover:opacity-100 transition-opacity ${appState === 'CHAT' ? 'opacity-100 border-b-2 border-accent pb-1' : 'opacity-40'}`}
-          >
-            Chat
           </button>
           <button
             onClick={() => setAppState('PROFILE')}
@@ -246,7 +239,7 @@ export function AppContent() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex overflow-hidden min-h-0">
         <AnimatePresence mode="wait">
           {appState === 'DISCOVERY' && (
             <DiscoveryView
@@ -263,33 +256,24 @@ export function AppContent() {
               key="matches"
               currentUser={currentUser}
               userState={userState}
-              onOpenChat={(matchId) => {
-                setActiveMatchId(matchId);
-                setAppState('CHAT');
-              }}
+              activeMatchId={activeMatchId}
+              onSelectMatch={(matchId) => setActiveMatchId(matchId)}
               onRefetchState={async () => {
                 await refetchUserState();
               }}
               onNavigateToDiscovery={() => setAppState('DISCOVERY')}
             />
           )}
-          {appState === 'CHAT' && (
-            <ChatView
-              key="chat"
-              currentUser={currentUser}
-              matchId={activeMatchId}
-              onNavigateToMatches={() => setAppState('MATCHES')}
-              onNavigateToDiscovery={() => setAppState('DISCOVERY')}
-            />
-          )}
           {appState === 'PROFILE' && (
-            <ProfileView
-              key="profile"
-              user={currentUser}
-              onUpgrade={handleUpgrade}
-              upgrading={upgrading}
-              onVerified={refetchProfile}
-            />
+            <div className="flex-1 overflow-y-auto w-full h-full p-6 md:p-12">
+              <ProfileView
+                key="profile"
+                user={currentUser}
+                onUpgrade={handleUpgrade}
+                upgrading={upgrading}
+                onVerified={refetchProfile}
+              />
+            </div>
           )}
         </AnimatePresence>
       </main>
@@ -318,16 +302,10 @@ export function AppContent() {
               </div>
               <div className="flex flex-col gap-3">
                 <button
-                  onClick={() => setAppState('CHAT')}
+                  onClick={() => setAppState('MATCHES')}
                   className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity"
                 >
-                  Go to Chat
-                </button>
-                <button
-                  onClick={() => setAppState('MATCHES')}
-                  className="w-full py-4 border border-border text-accent text-[10px] uppercase tracking-[0.3em] font-black hover:bg-bg transition-colors"
-                >
-                  View Matches
+                  Go to Matches & Chat
                 </button>
               </div>
             </div>
