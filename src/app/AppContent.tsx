@@ -16,6 +16,7 @@ import { MediaImage } from '../components/common/MediaImage';
 import { DiscoveryView } from '../features/discovery/DiscoveryView';
 import { MatchesView } from '../features/matches/MatchesView';
 import { ProfileView } from '../features/profile/ProfileView';
+import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
 
 export function AppContent() {
   const navigate = useNavigate();
@@ -312,6 +313,14 @@ export function AppContent() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/*
+        Mounted app-wide (not inside the chat screens) because a history-transfer request must be
+        answerable from wherever the user happens to be — the device being asked is usually not the
+        one with a conversation open. It renders nothing unless a request arrives, and stays entirely
+        inert on devices that do not hold the history key.
+      */}
+      <KeyRecoveryResponder />
     </div>
   );
 }

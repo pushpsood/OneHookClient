@@ -3,6 +3,7 @@ import { ApiError } from '../lib/api-client';
 import { useAppStore } from '../store/app-store';
 import {
   ChatMessageDTO,
+  ChatMessageView,
   DiscoveryCandidate,
   UserPreferences,
   UserProfile,
@@ -16,6 +17,7 @@ import { ProfileApi } from '../api/profile';
 import { MatchingApi } from '../api/matching';
 import { ChatMessagingApi } from '../api/chat';
 import { ChatEncryptionManager } from '../lib/chat-encryption';
+import { isUndecryptableMessageError } from '../lib/chat-wire-v2';
 import {
   Coordinates,
   isValidCoordinate,
@@ -329,7 +331,7 @@ export function useSwipe() {
  */
 export function useChatMessages(matchId: string, recipientId?: string) {
   const { currentUser } = useAppStore();
-  const [messages, setMessages] = useState<ChatMessageDTO[]>([]);
+  const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -351,18 +353,27 @@ export function useChatMessages(matchId: string, recipientId?: string) {
   }, []);
 
   const decryptInbound = useCallback(
-    async (senderId: string, ciphertext: string): Promise<string> => {
-      // The conversation key is derived against the OTHER member of the match, so a message this
-      // device sent is decrypted with the same peer key as one it received.
-      const peerId = senderId === myId ? recipientId : senderId;
-      if (!encryptionManager || !peerId) return '[Unable to decrypt]';
+    async (ciphertext: string): Promise<{ text: string; undecryptable: boolean }> => {
+      // Wire v2 envelopes carry their own wrapped content key, so decryption needs neither the peer's
+      // identity nor a network round-trip — a message opens even before the peer profile resolves.
+      if (!encryptionManager) return { text: '[Unable to decrypt]', undecryptable: false };
       try {
-        return await encryptionManager.decryptMessage(peerId, matchId, ciphertext);
-      } catch {
-        return '[Unable to decrypt]';
+        return {
+          text: await encryptionManager.decryptMessage(matchId, ciphertext),
+          undecryptable: false,
+        };
+      } catch (err) {
+        // Only "no key on this device" is recoverable — that is history written before this device
+        // was registered, and history recovery fixes it. Everything else (transport, malformed
+        // envelope, retired format) stays a plain error so the UI does not promise a fix that cannot
+        // work.
+        if (isUndecryptableMessageError(err)) {
+          return { text: '', undecryptable: true };
+        }
+        return { text: '[Unable to decrypt]', undecryptable: false };
       }
     },
-    [encryptionManager, matchId, myId, recipientId]
+    [encryptionManager, matchId]
   );
 
   const fetchMessages = useCallback(async () => {
@@ -371,12 +382,12 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     try {
       setLoading(true);
       setError(null);
-      // Establish the E2E session BEFORE reading history. Claiming the peer's pre-key bundle is what
+      // Establish the E2E session BEFORE reading history. Reading the peer's device registry is what
       // initializes the conversation server-side (the ChatTable TAIL marker), and getMessages is
       // rejected outright when that marker is missing. Without this, a match with no messages yet
       // could never be opened: getMessages failed, so the composer never rendered, so no message
-      // could be sent to lazily trigger the claim. Non-fatal on its own — if it fails we still try
-      // to read, so an existing conversation is not blocked by a transient pre-key error.
+      // could be sent to lazily trigger initialization. Non-fatal on its own — if it fails we still
+      // try to read, so an existing conversation is not blocked by a transient registry error.
       if (encryptionManager && recipientId) {
         try {
           await encryptionManager.ensureSession(recipientId, matchId);
@@ -389,16 +400,17 @@ export function useChatMessages(matchId: string, recipientId?: string) {
       const processed = await Promise.all(
         result.map(async (message) => {
           const isMe = message.senderId === myId;
-          const content = await decryptInbound(message.senderId, message.ciphertext);
+          const decrypted = await decryptInbound(message.ciphertext);
           return {
             messageId: message.messageId,
             senderId: isMe ? 'me' : message.senderId,
-            ciphertext: content,
+            ciphertext: decrypted.text,
+            undecryptable: decrypted.undecryptable,
             timestamp: message.timestamp,
             status: message.status,
             deliveredAt: message.deliveredAt ?? undefined,
             readAt: message.readAt ?? undefined,
-          } as ChatMessageDTO;
+          } as ChatMessageView;
         })
       );
 
@@ -420,7 +432,7 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     const unsubscribe = ChatMessagingApi.subscribeToNewMessages(matchId, (m) => {
       void (async () => {
         const isMe = m.senderId === myId;
-        const content = await decryptInbound(m.senderId, m.ciphertext);
+        const decrypted = await decryptInbound(m.ciphertext);
         setMessages((prev) => {
           if (prev.some((p) => p.messageId === m.messageId)) return prev;
           return [
@@ -428,10 +440,11 @@ export function useChatMessages(matchId: string, recipientId?: string) {
             {
               messageId: m.messageId,
               senderId: isMe ? 'me' : m.senderId,
-              ciphertext: content,
+              ciphertext: decrypted.text,
+              undecryptable: decrypted.undecryptable,
               timestamp: m.timestamp,
               status: m.status,
-            } as ChatMessageDTO,
+            } as ChatMessageView,
           ];
         });
       })();
@@ -532,6 +545,8 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     markAsDelivered,
     markAsRead,
     refetch: fetchMessages,
+    /** True when at least one message needs a history key this device does not have yet. */
+    hasUndecryptable: messages.some((m) => m.undecryptable),
   };
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { MessageStatus } from 'onehook-api-client/graphql';
-import { ArrowLeft, ShieldCheck, MapPin, Briefcase } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, MapPin, Briefcase, Lock } from 'lucide-react';
 import type { ChatMessageDTO, UserProfile } from '../../types';
 import { StateApi } from '../../api/state';
 import { ProfileApi } from '../../api/profile';
@@ -11,6 +11,39 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { useToast } from '../../components/common/Toast';
 import { FALLBACK_PROFILE_IMAGE } from '../../utils/profile-image';
 import { MediaImage } from '../../components/common/MediaImage';
+import { HistoryRecoveryModal } from '../../components/chat/HistoryRecoveryModal';
+
+/**
+ * Replaces the body of a message this device cannot decrypt.
+ *
+ * These are messages written before this device was added to the account: they were encrypted to the
+ * account's history key, whose private half lives on an earlier device. Rather than an opaque
+ * "[Unable to decrypt]", the bubble explains why and offers the one action that fixes it.
+ */
+function LockedMessageNotice({
+  onRestore,
+  inverted,
+}: {
+  onRestore: () => void;
+  inverted: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className={`flex items-center gap-2 text-xs italic ${inverted ? 'opacity-80' : 'opacity-60'}`}>
+        <Lock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+        <span>Sent before you added this device.</span>
+      </div>
+      <button
+        onClick={onRestore}
+        className={`text-[10px] uppercase tracking-[0.2em] font-black underline hover:opacity-70 transition-opacity ${
+          inverted ? 'text-white' : 'text-accent'
+        }`}
+      >
+        Restore from another device
+      </button>
+    </div>
+  );
+}
 
 export function ChatView({
   currentUser,
@@ -67,13 +100,13 @@ export function ChatView({
     };
   }, [matchId, currentUser.id]);
 
-  const { messages, loading, error, sendMessage, markAsDelivered, markAsRead } = useChatMessages(
-    matchId || '',
-    recipientId
-  );
+  const { messages, loading, error, sendMessage, markAsDelivered, markAsRead, refetch, hasUndecryptable } =
+    useChatMessages(matchId || '', recipientId);
   const [input, setInput] = useState('');
   const { showToast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Opened from the inline prompt on a message this device cannot read; see HistoryRecoveryModal.
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -318,6 +351,23 @@ export function ChatView({
 
         {/* Message History */}
         <div className="flex-1 p-10 space-y-8 overflow-y-auto">
+          {hasUndecryptable && (
+            <div className="flex items-start justify-between gap-4 p-5 border border-amber-300 bg-amber-50">
+              <div className="flex items-start gap-3 min-w-0">
+                <Lock className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" aria-hidden="true" />
+                <p className="text-xs leading-relaxed text-amber-800">
+                  Some earlier messages were encrypted before this device was added, so they stay
+                  locked until you move the key across from a device you already use.
+                </p>
+              </div>
+              <button
+                onClick={() => setRecoveryOpen(true)}
+                className="shrink-0 py-2 px-4 bg-amber-600 text-white text-[10px] uppercase tracking-[0.2em] font-black hover:opacity-90 transition-opacity"
+              >
+                Restore
+              </button>
+            </div>
+          )}
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-xs opacity-40 italic">
@@ -342,7 +392,14 @@ export function ChatView({
                       : 'bg-[#F2F2F2] text-accent'
                   }`}
                 >
-                  {m.ciphertext}
+                  {m.undecryptable ? (
+                    <LockedMessageNotice
+                      onRestore={() => setRecoveryOpen(true)}
+                      inverted={m.senderId === 'me'}
+                    />
+                  ) : (
+                    m.ciphertext
+                  )}
                   {m.status === 'FAILED' && (
                     <div className="mt-2 text-[10px] text-red-300 flex items-center gap-1">
                       <span>Didn&rsquo;t send</span>
@@ -386,6 +443,18 @@ export function ChatView({
           </div>
         </div>
       </section>
+
+      {/*
+        Recovery runs against the ACCOUNT, not this conversation: importing the history key unlocks
+        every match at once, so a successful transfer refetches this thread and any other open one
+        re-decrypts on its next read.
+      */}
+      <HistoryRecoveryModal
+        userId={currentUser.id}
+        open={recoveryOpen}
+        onClose={() => setRecoveryOpen(false)}
+        onRecovered={() => void refetch()}
+      />
     </motion.div>
   );
 }

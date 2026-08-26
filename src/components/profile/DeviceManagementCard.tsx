@@ -3,6 +3,7 @@ import { Loader, MonitorSmartphone, ShieldCheck, History, Trash2 } from 'lucide-
 import { ChatEncryptionManager, type DeviceOverview } from '../../lib/chat-encryption';
 import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
+import { HistoryRecoveryModal } from '../chat/HistoryRecoveryModal';
 
 /**
  * Shows the devices registered for end-to-end encrypted chat (wire v2), the account-history key
@@ -23,6 +24,7 @@ export function DeviceManagementCard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!manager) return;
@@ -98,11 +100,23 @@ export function DeviceManagementCard() {
       {/* History key status */}
       <div className="flex items-start gap-3 pt-4 border-t border-border">
         <History className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
-        <div className="space-y-1">
+        <div className="space-y-2">
           <span className="text-[9px] uppercase tracking-[0.25em] font-black opacity-60 block">
             History Recovery Key
           </span>
           <p className={`text-xs leading-relaxed ${historyLabel.tone}`}>{historyLabel.text}</p>
+          {overview?.historyStatus === 'future-only' && (
+            // Second entry point into the same flow the chat prompt opens. Users who notice missing
+            // history often come looking here first, and a transfer started from settings behaves
+            // identically — it is an account-level key, not a per-conversation one.
+            <button
+              onClick={() => setRecoveryOpen(true)}
+              className="mt-1 py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
+            >
+              <History className="w-3 h-3" aria-hidden="true" />
+              Restore earlier messages
+            </button>
+          )}
         </div>
       </div>
 
@@ -166,6 +180,14 @@ export function DeviceManagementCard() {
           </ul>
         )}
       </div>
+
+      <HistoryRecoveryModal
+        userId={userId}
+        open={recoveryOpen}
+        onClose={() => setRecoveryOpen(false)}
+        // Re-read the registry so the status flips from "future-only" to "holding" straight away.
+        onRecovered={() => void load()}
+      />
     </div>
   );
 }

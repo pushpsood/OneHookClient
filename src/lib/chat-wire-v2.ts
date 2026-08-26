@@ -80,6 +80,34 @@ export function historyTargetId(userId: string, keyId: string): string {
   return `h:${userId}:${keyId}`;
 }
 
+/**
+ * Raised when an envelope is well-formed and intact but was not encrypted to any key this device
+ * holds — the signature of history written before this device was registered.
+ *
+ * Callers MUST distinguish this from transport or parse errors: it is the only failure that history
+ * recovery can fix, and it is what makes the UI offer "restore from another device" instead of a
+ * generic error.
+ */
+export class UndecryptableMessageError extends Error {
+  /** Stable across bundling/minification, unlike `instanceof` across module duplication. */
+  readonly code = 'UNDECRYPTABLE_MESSAGE';
+
+  constructor(message = 'This message was not encrypted for any of this device’s keys.') {
+    super(message);
+    this.name = 'UndecryptableMessageError';
+  }
+}
+
+/** True for the error above, whatever module instance produced it. */
+export function isUndecryptableMessageError(error: unknown): boolean {
+  return (
+    error instanceof UndecryptableMessageError ||
+    (typeof error === 'object' &&
+      error !== null &&
+      (error as { code?: string }).code === 'UNDECRYPTABLE_MESSAGE')
+  );
+}
+
 function subtle(): SubtleCrypto {
   const api = globalThis.crypto?.subtle;
   if (!api) {
@@ -238,17 +266,15 @@ export function isV2Envelope(envelope: string): boolean {
 }
 
 /**
- * Decrypts a v2 envelope. Recipients are tried in the order supplied — callers pass the device key
- * first and the account-history key second, so a device decrypts with its own key when possible and
- * only falls back to shared history material otherwise.
+ * Parses and structurally validates a v2 envelope.
  *
- * @throws if the envelope is malformed, the version byte is wrong, or no recipient can unwrap it.
+ * Exported so callers can reject junk BEFORE touching the key store: loading an identity means opening
+ * IndexedDB, and a malformed envelope should be reported as malformed rather than as whatever failure
+ * the key store happens to raise first.
+ *
+ * @throws for a wrong version byte or a payload missing any required member.
  */
-export async function decryptV2(
-  envelope: string,
-  matchId: string,
-  recipients: WireRecipient[]
-): Promise<string> {
+export function parseV2Envelope(envelope: string): WirePayload {
   const raw = fromBase64(envelope);
   if (raw.length <= 1) throw new Error('Message is malformed.');
   if (raw[0] !== WIRE_VERSION_V2) {
@@ -264,6 +290,22 @@ export async function decryptV2(
   if (!payload?.e || !payload?.n || !payload?.c || !Array.isArray(payload?.w)) {
     throw new Error('Message is malformed.');
   }
+  return payload;
+}
+
+/**
+ * Decrypts a v2 envelope. Recipients are tried in the order supplied — callers pass the device key
+ * first and the account-history key second, so a device decrypts with its own key when possible and
+ * only falls back to shared history material otherwise.
+ *
+ * @throws if the envelope is malformed, the version byte is wrong, or no recipient can unwrap it.
+ */
+export async function decryptV2(
+  envelope: string,
+  matchId: string,
+  recipients: WireRecipient[]
+): Promise<string> {
+  const payload = parseV2Envelope(envelope);
 
   const ephemeralPublic = await importEcdhPublicKey(payload.e);
 
@@ -272,8 +314,11 @@ export async function decryptV2(
     const wrap = payload.w.find((entry) => entry.i === recipient.id);
     if (!wrap) continue;
 
+    // Derivation happens OUTSIDE the catch: a WebCrypto or environment failure here is not "this
+    // device holds no key for the message", and callers key the history-recovery prompt off that
+    // distinction. Only an authentication failure falls through to the next recipient.
+    const wrapKey = await deriveWrapKey(recipient.privateKey, ephemeralPublic, matchId, wrap.i);
     try {
-      const wrapKey = await deriveWrapKey(recipient.privateKey, ephemeralPublic, matchId, wrap.i);
       const contentKeyBytes = await subtle().decrypt(
         {
           name: 'AES-GCM',
@@ -301,5 +346,5 @@ export async function decryptV2(
     }
   }
 
-  throw new Error('This message was not encrypted for any of this device’s keys.');
+  throw new UndecryptableMessageError();
 }

@@ -127,6 +127,17 @@ import type { Message } from 'onehook-api-client/graphql';
 /** Backward-compat alias — consumers should migrate to `Message`. */
 export type ChatMessageDTO = Message;
 
+/**
+ * A message as the chat UI needs it: the decrypted body in `ciphertext` plus the client-only fact of
+ * whether decryption was impossible on THIS device.
+ *
+ * `undecryptable` is set only when the envelope was intact but encrypted to keys this device does not
+ * hold — history written before the device was registered. That is exactly the case history recovery
+ * fixes, so the flag is what lets the UI offer "restore from another device" instead of a dead end.
+ * Transport and parse failures are NOT flagged; they render as a plain error and a retry is pointless.
+ */
+export type ChatMessageView = ChatMessageDTO & { undecryptable?: boolean };
+
 export interface Invite {
   code: string;
   referrerId: string;

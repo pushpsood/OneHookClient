@@ -84,19 +84,32 @@ describe('ChatEncryptionManager', () => {
     await expect(manager.encryptMessage('peer-1', 'match-1', 'hello')).rejects.toThrow();
   });
 
-  it('rejects a malformed or wrong-version envelope', async () => {
+  it('rejects a malformed envelope and a retired wire format', async () => {
     const manager = new ChatEncryptionManager('user-1');
-    await expect(manager.decryptMessage('peer-1', 'match-1', btoa('short'))).rejects.toThrow(
-      /malformed/i
-    );
-    const wrongVersion = new Uint8Array(1 + 12 + 4);
-    wrongVersion[0] = 99;
+
+    // A v2 envelope that is too short to hold a payload.
+    const truncatedV2 = new Uint8Array([0x02]);
     await expect(
-      manager.decryptMessage('peer-1', 'match-1', Buffer.from(wrongVersion).toString('base64'))
-    ).rejects.toThrow(/Unsupported message encryption version/i);
+      manager.decryptMessage('match-1', Buffer.from(truncatedV2).toString('base64'))
+    ).rejects.toThrow(/malformed/i);
+
+    // A wire-v1 envelope (version byte 1). v1 was removed, so this must fail with an explicit
+    // old-format message rather than being routed to history recovery, which could not fix it.
+    const v1Envelope = new Uint8Array(1 + 12 + 4);
+    v1Envelope[0] = 1;
+    await expect(
+      manager.decryptMessage('match-1', Buffer.from(v1Envelope).toString('base64'))
+    ).rejects.toThrow(/old encryption format/i);
+
+    // Any other version byte is equally unreadable.
+    const unknownVersion = new Uint8Array(1 + 12 + 4);
+    unknownVersion[0] = 99;
+    await expect(
+      manager.decryptMessage('match-1', Buffer.from(unknownVersion).toString('base64'))
+    ).rejects.toThrow(/old encryption format/i);
   });
 
-  it('requires a peer and a match to derive a conversation key', async () => {
+  it('requires a peer and a match to encrypt', async () => {
     const manager = new ChatEncryptionManager('user-1');
     await expect(manager.encryptMessage('', 'match-1', 'hello')).rejects.toThrow(/peer id/i);
     await expect(manager.encryptMessage('peer-1', '', 'hello')).rejects.toThrow(/matchId/i);

@@ -18,10 +18,12 @@ export type { ChatMessage, MessageReceipt, DeletedMessage };
  *    receipts and message deletion are PREMIUM-tier mutations (the server
  *    enforces the tier from the caller's JWT).
  *  - Messages carry only `ciphertext`; the server never sees plaintext (E2EE).
- *  - REST (via the generated SDK) is used only for E2EE pre-key management and
+ *  - REST (via the generated SDK) is used only for multi-device key management and
  *    bulk match-message deletion:
- *      POST   /chat/prekeys                     -> upload/replenish own pre-keys
- *      POST   /chat/prekeys/{userId}?matchId=   -> claim a bundle (consumes an OTK)
+ *      POST   /chat/devices                     -> register/refresh this device
+ *      GET    /chat/devices                     -> own device registry
+ *      DELETE /chat/devices/{deviceId}          -> revoke a device
+ *      GET    /chat/registry/{userId}?matchId=  -> a peer's device registry
  *      DELETE /chat/match/{matchId}             -> hard-delete a match's messages
  */
 
@@ -126,6 +128,15 @@ function client() {
     _client = generateClient();
   }
   return _client;
+}
+
+/**
+ * The shared AppSync client. Exported so sibling modules (history-key recovery) issue their
+ * operations over the same configured, Cognito-authorized connection instead of standing up a
+ * second one.
+ */
+export function appSyncClient() {
+  return client();
 }
 
 async function graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
@@ -352,26 +363,14 @@ async function chatRest<T>(method: string, path: string, body?: unknown): Promis
 }
 
 /**
- * E2EE key-server + match management, served over REST via the generated SDK.
+ * E2EE device registry + match management, served over REST.
+ *
+ * Wire v1's pre-key endpoints (`POST /chat/prekeys`, `POST /chat/prekeys/{userId}`) were removed along
+ * with v1 itself: the device registry below is now the sole key-distribution mechanism. Reading a
+ * peer's registry is also what initializes a conversation server-side, a responsibility that used to
+ * belong to claiming a pre-key bundle.
  */
 export const ChatApi = {
-  /** Upload (or replenish) the caller's own X3DH pre-keys. */
-  uploadPreKeys: (
-    userId: string,
-    identityKey: string,
-    signedPreKey: string,
-    oneTimePreKeys: string[]
-  ) => (sdkClient as any).uploadPreKeys({ userId, identityKey, signedPreKey, oneTimePreKeys }),
-
-  /**
-   * Claim a pre-key bundle for a target user to start an E2EE session. Requires
-   * the shared `matchId` — the server authorizes the claim against a
-   * State-verified mutual match and consumes one of the target's one-time
-   * pre-keys.
-   */
-  claimPreKeyBundle: (userId: string, matchId: string) =>
-    sdkClient.claimPreKeyBundle({ userId, matchId }),
-
   /** Hard-delete all messages for a match (PREMIUM, e.g. on unmatch). */
   deleteMatchMessages: (matchId: string) => sdkClient.deleteMatchMessages({ matchId }),
 
