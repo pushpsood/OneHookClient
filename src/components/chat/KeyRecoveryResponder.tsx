@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Fingerprint, Loader, ShieldAlert, ShieldCheck, X } from 'lucide-react';
+import { Fingerprint, Loader, ShieldAlert, ShieldCheck, X, Download } from 'lucide-react';
 import { useRecoveryResponder } from '../../hooks/use-key-recovery';
 import { useAppStore } from '../../store/app-store';
 
@@ -37,6 +37,46 @@ export function KeyRecoveryResponder() {
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [incoming]);
+
+  const saveQrAsImage = () => {
+    if (!qrPayload) return;
+    
+    // Create a canvas from the QR SVG to generate a downloadable PNG
+    const svg = document.querySelector('.recovery-qr-code');
+    if (!svg) return;
+    
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const img = new Image();
+    const svgBlob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(svgBlob);
+    
+    img.onload = () => {
+      canvas.width = 240;
+      canvas.height = 240;
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, 240, 240);
+      ctx.drawImage(img, 0, 0);
+      
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const downloadUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = `onehook-recovery-${Date.now()}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(downloadUrl);
+      }, 'image/png');
+      
+      URL.revokeObjectURL(url);
+    };
+    
+    img.src = url;
+  };
 
   if (!userId || !incoming) return null;
 
@@ -97,13 +137,24 @@ export function KeyRecoveryResponder() {
                   size={240}
                   level="M"
                   title="History recovery code"
+                  className="recovery-qr-code"
                 />
               </div>
-              {secondsLeft !== null && (
-                <p className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-40">
-                  Expires in {secondsLeft}s
-                </p>
-              )}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={saveQrAsImage}
+                  className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
+                  title="Save QR code as image for same-device transfer"
+                >
+                  <Download className="w-3 h-3" aria-hidden="true" />
+                  Save QR
+                </button>
+                {secondsLeft !== null && (
+                  <p className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-40">
+                    Expires in {secondsLeft}s
+                  </p>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
@@ -146,6 +197,7 @@ export function KeyRecoveryResponder() {
           <p className="text-[10px] opacity-50 leading-relaxed flex items-start gap-2">
             <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
             Only a device you just picked can read this code, and only for the next couple of minutes.
+            The saved image works the same way — it&rsquo;s bound to your specific devices and expires automatically.
             Decline if you did not start this.
           </p>
         </div>

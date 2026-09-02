@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
-import { Camera, CameraOff, Loader } from 'lucide-react';
+import { Camera, CameraOff, Loader, Upload } from 'lucide-react';
 
 /**
  * Live camera QR scanner for history-key recovery.
@@ -43,6 +43,44 @@ export function QrCameraScanner({
   const [status, setStatus] = useState<'starting' | 'scanning' | 'denied' | 'unsupported'>(
     'starting'
   );
+
+  const handleImageUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || deliveredRef.current) return;
+
+    const img = new Image();
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    
+    if (!context) {
+      onErrorRef.current?.('Could not process the image.');
+      return;
+    }
+
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      context.drawImage(img, 0, 0);
+      
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const found = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+      
+      if (found?.data) {
+        deliveredRef.current = true;
+        onScanRef.current(found.data);
+      } else {
+        onErrorRef.current?.('No QR code found in this image. Make sure it contains the full code.');
+      }
+    };
+
+    img.onerror = () => {
+      onErrorRef.current?.('Could not load this image file.');
+    };
+
+    img.src = URL.createObjectURL(file);
+  }, []);
 
   const stop = useCallback(() => {
     if (frameRef.current !== null) {
@@ -161,6 +199,24 @@ export function QrCameraScanner({
         <Camera className="w-3 h-3" aria-hidden="true" />
         Point at the code on your other device
       </p>
+      
+      <div className="flex items-center justify-center gap-3">
+        <div className="h-px flex-1 bg-border"></div>
+        <span className="text-[9px] uppercase tracking-[0.2em] font-bold opacity-40">Or</span>
+        <div className="h-px flex-1 bg-border"></div>
+      </div>
+      
+      <label className="w-full py-3 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors cursor-pointer inline-flex items-center justify-center gap-2">
+        <Upload className="w-3 h-3" aria-hidden="true" />
+        Upload saved QR image
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleImageUpload}
+          className="hidden"
+          disabled={deliveredRef.current}
+        />
+      </label>
     </div>
   );
 }

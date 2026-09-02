@@ -79,9 +79,20 @@ export function DeviceManagementCard() {
           tone: 'text-amber-600',
         };
       default:
-        return { text: 'No account history key established yet.', tone: 'opacity-50' };
+        return {
+          text: 'This device can’t open messages sent before it was added. If you use OneHook on another device, move the key across to read them here.',
+          tone: 'opacity-60',
+        };
     }
   }, [overview?.historyStatus]);
+
+  // This device benefits from recovery unless it already holds the history key. A device that has not
+  // yet reconciled the account's canonical key ("none") is offered the same action as a "future-only"
+  // device: without this, a new device stuck in "none" has no visible way to start recovery at all,
+  // since the in-chat prompt only appears once a conversation with unreadable history loads. The
+  // modal itself gates every sub-case (already holding, or no other devices to restore from), so
+  // offering it here can never promise a transfer that would do nothing.
+  const canRestoreHistory = overview != null && overview.historyStatus !== 'holding';
 
   return (
     <div className="border border-border p-8 space-y-8 bg-white">
@@ -105,10 +116,12 @@ export function DeviceManagementCard() {
             History Recovery Key
           </span>
           <p className={`text-xs leading-relaxed ${historyLabel.tone}`}>{historyLabel.text}</p>
-          {overview?.historyStatus === 'future-only' && (
+          {canRestoreHistory && (
             // Second entry point into the same flow the chat prompt opens. Users who notice missing
             // history often come looking here first, and a transfer started from settings behaves
-            // identically — it is an account-level key, not a per-conversation one.
+            // identically — it is an account-level key, not a per-conversation one. Shown for both
+            // "future-only" and "none" so a device that has not yet reconciled the account key still
+            // has a reachable way to start recovery.
             <button
               onClick={() => setRecoveryOpen(true)}
               className="mt-1 py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
