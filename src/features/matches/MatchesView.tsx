@@ -25,6 +25,8 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { MediaImage } from '../../components/common/MediaImage';
 import { FALLBACK_PROFILE_IMAGE } from '../../utils/profile-image';
 import { useToast } from '../../components/common/Toast';
+import { HistoryRecoveryModal } from '../../components/chat/HistoryRecoveryModal';
+import { HistoryLockedBanner, LockedMessageNotice } from '../../components/chat/LockedMessage';
 
 export interface HydratedMatch {
   matchId: string;
@@ -355,6 +357,7 @@ export function MatchesView({
               matchId={selectedMatchId}
               peerId={recipientId}
               peerProfile={peerProfile}
+              currentUserId={currentUser.id}
               onBack={() => setShowMobileChat(false)}
               onToggleProfile={() => setShowProfileDetails((prev) => !prev)}
               onUnhookClick={() => setUnhookingMatchId(selectedMatchId)}
@@ -543,6 +546,7 @@ function ChatConversationPanel({
   matchId,
   peerId,
   peerProfile,
+  currentUserId,
   onBack,
   onToggleProfile,
   onUnhookClick,
@@ -550,17 +554,27 @@ function ChatConversationPanel({
   matchId: string;
   peerId?: string;
   peerProfile?: UserProfile | null;
+  /** Needed to open history recovery, which is scoped to the account rather than this conversation. */
+  currentUserId?: string;
   onBack: () => void;
   onToggleProfile: () => void;
   onUnhookClick: () => void;
 }) {
-  const { messages, loading, error, sendMessage, markAsDelivered, markAsRead } = useChatMessages(
-    matchId,
-    peerId
-  );
+  const {
+    messages,
+    loading,
+    error,
+    sendMessage,
+    markAsDelivered,
+    markAsRead,
+    refetch,
+    hasUndecryptable,
+  } = useChatMessages(matchId, peerId);
   const [input, setInput] = useState('');
   const { showToast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Opened from the banner or from an individual locked message; see LockedMessage.tsx.
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -669,6 +683,7 @@ function ChatConversationPanel({
 
       {/* Message History */}
       <div className="flex-1 p-6 md:p-8 space-y-6 overflow-y-auto bg-white min-h-0">
+        {hasUndecryptable && <HistoryLockedBanner onRestore={() => setRecoveryOpen(true)} />}
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <LoadingSpinner size="md" />
@@ -701,7 +716,18 @@ function ChatConversationPanel({
                     : 'bg-[#F2F2F2] text-accent'
                 }`}
               >
-                {m.ciphertext}
+                {/*
+                  MUST branch on `undecryptable`: an unreadable message carries an EMPTY body, so
+                  rendering `ciphertext` unconditionally here produced a silent blank bubble.
+                */}
+                {m.undecryptable ? (
+                  <LockedMessageNotice
+                    onRestore={() => setRecoveryOpen(true)}
+                    inverted={m.senderId === 'me'}
+                  />
+                ) : (
+                  m.ciphertext
+                )}
                 {m.status === 'FAILED' && (
                   <div className="mt-2 text-[10px] text-red-300 flex items-center gap-1">
                     <span>Didn&rsquo;t send</span>
@@ -744,6 +770,18 @@ function ChatConversationPanel({
           <span>One Connection at a Time</span>
         </div>
       </div>
+
+      {/*
+        Recovery runs against the ACCOUNT, not this conversation: importing the history key unlocks
+        every match at once, so a successful transfer refetches this thread and any other open one
+        re-decrypts on its next read.
+      */}
+      <HistoryRecoveryModal
+        userId={currentUserId}
+        open={recoveryOpen}
+        onClose={() => setRecoveryOpen(false)}
+        onRecovered={() => void refetch()}
+      />
     </div>
   );
 }
