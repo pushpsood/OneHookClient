@@ -1,4 +1,5 @@
 import { appSyncClient } from './chat';
+import { hasGraphQLErrors, toGraphQLError } from './graphql-error';
 
 /**
  * History-key recovery transport (AppSync GraphQL).
@@ -102,8 +103,19 @@ const ON_KEY_RECOVERY_UPDATED = /* GraphQL */ `
 `;
 
 async function graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-  const res = (await appSyncClient().graphql({ query, variables })) as unknown as { data: T };
-  return res.data;
+  let res: unknown;
+  try {
+    res = await appSyncClient().graphql({ query, variables });
+  } catch (raw) {
+    // Without this the resolver's precise reason (for instance "That device is not registered on your
+    // account.") is lost, because Amplify rejects with a plain object rather than an Error and the UI
+    // falls back to a generic "could not reach your other device".
+    throw toGraphQLError(raw, 'The recovery service could not be reached.');
+  }
+  if (hasGraphQLErrors(res)) {
+    throw toGraphQLError(res, 'The recovery service rejected the request.');
+  }
+  return (res as { data: T }).data;
 }
 
 type Subscribable<T> = {
@@ -125,10 +137,15 @@ export const KeyRecoveryApi = {
     targetEphemeralPublicKey: string;
     challenge: string;
   }): Promise<KeyRecoverySession> => {
-    const data = await graphql<{ requestKeyRecovery: KeyRecoverySession }>(
+    const data = await graphql<{ requestKeyRecovery: KeyRecoverySession | null }>(
       REQUEST_KEY_RECOVERY,
       params
     );
+    // A null payload with no `errors` array should not fall through: the caller's next check compares
+    // the echoed challenge and would otherwise report a missing session as tampering.
+    if (!data?.requestKeyRecovery) {
+      throw new Error('The recovery service did not open a session. Please try again.');
+    }
     return data.requestKeyRecovery;
   },
 

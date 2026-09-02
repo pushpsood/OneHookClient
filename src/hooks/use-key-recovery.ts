@@ -112,6 +112,12 @@ export function useHistoryRecovery(userId: string | undefined, matchRefetch?: ()
     setBusy(true);
     setError(undefined);
     try {
+      // Register THIS device before anything else. `getDeviceOverview` only reads — it creates local
+      // keys but does not publish them — so on a device whose registration has not completed, the
+      // backend authorization gate (verify-recovery-devices.js) rejects the later request with "This
+      // device is not registered on your account.". DeviceManagementCard already had to do this for
+      // the same reason.
+      await manager.initialize();
       if (await manager.holdsHistoryKey()) {
         // Nothing to recover: this device can already read history. Surfacing this explicitly avoids
         // sending the user through a transfer that would change nothing.
@@ -176,7 +182,14 @@ export function useHistoryRecovery(userId: string | undefined, matchRefetch?: ()
         setVerificationCode(await deriveVerificationCode(sessionBinding, pair.publicKeySpki));
         setPhase(opened.status === 'DISPLAYING' ? 'scanning' : 'waiting');
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not reach your other device.');
+        // The request is opened against the BACKEND, not against the other device — that device is
+        // only contacted afterwards, by subscription. Saying "could not reach your other device" here
+        // sent users to check that the other device was awake when the actual fault was a rejected
+        // mutation, so the fallback now describes what really failed. With GraphQL errors normalised
+        // into real Errors (api/graphql-error.ts), the server's own reason reaches this line.
+        setError(
+          err instanceof Error ? err.message : 'Could not start the transfer. Please try again.'
+        );
         setPhase('error');
       } finally {
         setBusy(false);

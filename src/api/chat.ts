@@ -1,6 +1,7 @@
 import { generateClient } from 'aws-amplify/api';
 import { sdkClient } from './sdk-client';
 import { apiBaseUrl } from '../utils/env.config';
+import { hasGraphQLErrors, toGraphQLError } from './graphql-error';
 import type {
   Message as ChatMessage,
   MessageReceipt,
@@ -140,8 +141,19 @@ export function appSyncClient() {
 }
 
 async function graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-  const res = (await client().graphql({ query, variables })) as unknown as { data: T };
-  return res.data;
+  let res: unknown;
+  try {
+    res = await client().graphql({ query, variables });
+  } catch (raw) {
+    // Amplify rejects with a plain `{ data, errors }` object, not an Error. Converting here means every
+    // caller can rely on `instanceof Error` and on the server's own message.
+    throw toGraphQLError(raw, 'The chat service could not be reached.');
+  }
+  // A 200 response can still carry resolver errors alongside partial data; that is a failure.
+  if (hasGraphQLErrors(res)) {
+    throw toGraphQLError(res, 'The chat service rejected the request.');
+  }
+  return (res as { data: T }).data;
 }
 
 /**
