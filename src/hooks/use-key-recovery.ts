@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KeyRecoveryApi, type KeyRecoverySession } from '../api/key-recovery';
+import { onAppSyncConnectionRestored } from '../api/appsync-connection';
 import { ChatEncryptionManager, type DeviceSummary } from '../lib/chat-encryption';
 import {
   deriveVerificationCode,
@@ -13,6 +14,7 @@ import {
 import { requireUserPresence, type UserPresenceResult } from '../lib/user-presence';
 import {
   recoveryCandidates,
+  responderActionFor,
   selectIncomingRequest,
   targetPhaseFor,
 } from '../lib/key-recovery-session';
@@ -27,9 +29,6 @@ import {
 
 /** How long the new device waits before suggesting the other device may be offline. */
 export const WAITING_HINT_MS = 15_000;
-
-/** Backstop poll interval. Subscriptions carry the happy path; polling covers a silently dropped socket. */
-const POLL_INTERVAL_MS = 3_000;
 
 export type RecoveryPhase =
   /** Nothing started. */
@@ -216,26 +215,39 @@ export function useHistoryRecovery(userId: string | undefined, matchRefetch?: ()
     };
 
     const unsubscribe = KeyRecoveryApi.subscribeToUpdates(userId, targetDeviceId, apply);
-    const poll = setInterval(() => {
+
+    // One read when the socket recovers from a disruption, because Amplify re-subscribes but does not
+    // replay what was published while it was down. No timer: the subscription is the only thing that
+    // needs to work here, and this covers its one blind spot.
+    const stopWatchingConnection = onAppSyncConnectionRestored(() => {
       const current = session.current;
       if (!current) return;
       void KeyRecoveryApi.getSession(current.sourceDeviceId, current.targetDeviceId)
         .then((latest) => {
-          if (!latest) {
-            setError('The request expired before your other device answered.');
-            setPhase('error');
-            return;
-          }
-          apply(latest);
+          if (latest) apply(latest);
         })
         .catch(() => {
-          /* transient: the subscription or the next poll will catch up */
+          /* the subscription is live again; a genuine failure surfaces on the next event */
         });
-    }, POLL_INTERVAL_MS);
+    });
+
+    // The session dies at a known instant, so wait for exactly that instant instead of asking
+    // repeatedly whether it has passed yet.
+    const expiry = session.current.expiresAt - Date.now();
+    const expiryTimer = setTimeout(
+      () => {
+        if (session.current) {
+          setError('The request expired before your other device answered.');
+          setPhase('error');
+        }
+      },
+      Math.max(0, expiry)
+    );
 
     return () => {
       unsubscribe();
-      clearInterval(poll);
+      stopWatchingConnection();
+      clearTimeout(expiryTimer);
     };
   }, [userId, phase]);
 
@@ -333,6 +345,12 @@ export interface ResponderState {
   busy: boolean;
   /** True when this device cannot fulfil requests because it does not hold the history key. */
   cannotHelp: boolean;
+  /**
+   * True once a real request arrived that this device could not fulfil (and was therefore declined).
+   * Distinct from `cannotHelp`, which is a standing property: this one means the user is waiting on
+   * the other screen right now and needs to be told to pick a different device.
+   */
+  unableNotice: boolean;
 }
 
 /**
@@ -353,6 +371,10 @@ export function useRecoveryResponder(userId: string | undefined) {
   const [presence, setPresence] = useState<UserPresenceResult | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  /** Set when a request arrived that this device cannot fulfil, so the UI can say so. */
+  const [unableNotice, setUnableNotice] = useState(false);
+  /** Guards against the poll re-declining the same session every few seconds. */
+  const refused = useRef<string | null>(null);
 
   // Resolve this device's identity once, and whether it has anything to offer.
   useEffect(() => {
@@ -380,6 +402,27 @@ export function useRecoveryResponder(userId: string | undefined) {
     setPresence(undefined);
     setError(undefined);
     setBusy(false);
+    setUnableNotice(false);
+  }, []);
+
+  /**
+   * Refuses a request this device cannot satisfy, and says so on screen.
+   *
+   * A device without the history PRIVATE key has nothing to hand over. Previously such a device did not
+   * even subscribe, so the asking device waited the full two minutes and then reported a timeout — with
+   * no hint that it had simply picked the wrong device. Declining immediately turns that into an
+   * actionable "declined on your other device" on the asking screen.
+   */
+  const refuseUnhelpable = useCallback(async (session: KeyRecoverySession) => {
+    if (refused.current === session.sessionId) return;
+    refused.current = session.sessionId;
+    setUnableNotice(true);
+    await KeyRecoveryApi.update({
+      sourceDeviceId: session.sourceDeviceId,
+      targetDeviceId: session.targetDeviceId,
+      sessionId: session.sessionId,
+      status: 'DECLINED',
+    }).catch(() => undefined);
   }, []);
 
   const adopt = useCallback(
@@ -412,29 +455,57 @@ export function useRecoveryResponder(userId: string | undefined) {
     [manager]
   );
 
-  // Subscription for live requests + a cold-start read. The read matters: a subscription only
-  // delivers while connected, so a device that was closed or reconnecting when the user tapped
-  // "restore" would never hear about it and the other screen would wait forever.
+  // Subscription for live requests, plus a read at the two moments something could have been missed:
+  // startup, and the socket recovering from a disruption.
+  //
+  // No polling. Amplify's WebSocket provider already detects a dead connection via its keep-alive
+  // heartbeat and re-subscribes with backoff, so a timer would duplicate that — and this component is
+  // mounted for the entire session, so it would do so on every device, forever. What Amplify does not
+  // do is replay events published while the socket was down; `onAppSyncConnectionRestored` covers
+  // exactly that, and the visibility/focus reads cover a tab that was suspended by the browser.
+  //
+  // Note this runs even when `canHelp === false`. Such a device cannot fulfil a request, but staying
+  // silent is worse than refusing: the server records no owner for the account-history key, so the
+  // picker on the asking device cannot know in advance which device holds it. Declining promptly is
+  // the only way the asking device learns to try a different one.
   useEffect(() => {
-    if (!userId || !deviceId || canHelp !== true) return;
+    if (!userId || !deviceId || canHelp === undefined) return;
+
+    const handle = (session: KeyRecoverySession) => {
+      switch (
+        responderActionFor({
+          session,
+          now: Date.now(),
+          holdsHistoryKey: canHelp === true,
+          currentSessionId: incoming?.sessionId,
+          refusedSessionId: refused.current,
+        })
+      ) {
+        case 'adopt':
+          void adopt(session);
+          break;
+        case 'refuse':
+          void refuseUnhelpable(session);
+          break;
+        default:
+          break;
+      }
+    };
 
     const refresh = () => {
       void KeyRecoveryApi.listRequests(deviceId)
         .then((sessions) => {
           const live = selectIncomingRequest(sessions, Date.now());
-          if (live && live.sessionId !== incoming?.sessionId) {
-            void adopt(live);
-          }
+          if (live) handle(live);
         })
         .catch(() => {
-          /* the subscription remains the primary path */
+          /* a real request will arrive over the subscription, or on the next read */
         });
     };
 
     refresh();
-    const unsubscribe = KeyRecoveryApi.subscribeToRequests(userId, deviceId, (session) => {
-      void adopt(session);
-    });
+    const unsubscribe = KeyRecoveryApi.subscribeToRequests(userId, deviceId, handle);
+    const stopWatchingConnection = onAppSyncConnectionRestored(refresh);
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh();
     };
@@ -443,13 +514,14 @@ export function useRecoveryResponder(userId: string | undefined) {
 
     return () => {
       unsubscribe();
+      stopWatchingConnection();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
     };
-    // `incoming` is read inside `refresh` but deliberately not a dependency: re-subscribing every
+    // `incoming` is read inside `handle` but deliberately not a dependency: re-subscribing every
     // time a request arrives would tear down the socket mid-flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, deviceId, canHelp, adopt]);
+  }, [userId, deviceId, canHelp, adopt, refuseUnhelpable]);
 
   /**
    * Confirms intent, seals the bundle and publishes DISPLAYING so the new device opens its camera.
@@ -519,8 +591,14 @@ export function useRecoveryResponder(userId: string | undefined) {
 
   // While the code is on screen, watch for the new device finishing (or the session dying) so the QR
   // comes down as soon as it is no longer needed rather than lingering until expiry.
+  //
+  // The new device announces COMPLETED (and either side announces DECLINED) through
+  // `updateKeyRecovery`, which publishes on `onKeyRecoveryUpdated`. Both devices know the target device
+  // id, so this side can subscribe to the very same channel the asking device uses — no polling needed
+  // to notice the transfer finished. Expiry is a known instant, so it gets one timer rather than a
+  // repeated "has it passed yet?" query.
   useEffect(() => {
-    if (!qrPayload || !incoming) return;
+    if (!qrPayload || !incoming || !userId) return;
 
     const finish = (message?: string) => {
       if (message) setError(message);
@@ -529,21 +607,36 @@ export function useRecoveryResponder(userId: string | undefined) {
       setVerificationCode(undefined);
     };
 
-    const poll = setInterval(() => {
-      if (incoming.expiresAt <= Date.now()) {
-        finish('The code expired. Ask the new device to try again.');
-        return;
-      }
+    const apply = (latest: KeyRecoverySession) => {
+      if (latest.sessionId !== incoming.sessionId) return;
+      // DISPLAYING is this device's own announcement coming back around; only the terminal states mean
+      // the QR has done its job.
+      if (latest.status === 'COMPLETED' || latest.status === 'DECLINED') finish();
+    };
+
+    const unsubscribe = KeyRecoveryApi.subscribeToUpdates(userId, incoming.targetDeviceId, apply);
+
+    // Amplify re-subscribes after a drop but does not replay what it missed, so read once on recovery.
+    const stopWatchingConnection = onAppSyncConnectionRestored(() => {
       void KeyRecoveryApi.getSession(incoming.sourceDeviceId, incoming.targetDeviceId)
         .then((latest) => {
           if (!latest) return finish();
-          if (latest.status === 'COMPLETED' || latest.status === 'DECLINED') finish();
+          apply(latest);
         })
         .catch(() => undefined);
-    }, POLL_INTERVAL_MS);
+    });
 
-    return () => clearInterval(poll);
-  }, [qrPayload, incoming]);
+    const expiryTimer = setTimeout(
+      () => finish('The code expired. Ask the new device to try again.'),
+      Math.max(0, incoming.expiresAt - Date.now())
+    );
+
+    return () => {
+      unsubscribe();
+      stopWatchingConnection();
+      clearTimeout(expiryTimer);
+    };
+  }, [qrPayload, incoming, userId]);
 
   const state: ResponderState = {
     incoming,
@@ -553,6 +646,7 @@ export function useRecoveryResponder(userId: string | undefined) {
     error,
     busy,
     cannotHelp: canHelp === false,
+    unableNotice,
   };
 
   return { ...state, approve, decline, dismiss };

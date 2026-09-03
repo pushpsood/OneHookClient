@@ -24,7 +24,7 @@ export function KeyRecoveryResponder() {
   const displayName = currentUser?.displayName || currentUser?.name || 'OneHook member';
 
   const responder = useRecoveryResponder(userId);
-  const { incoming, qrPayload, verificationCode, presence, error, busy } = responder;
+  const { incoming, qrPayload, verificationCode, presence, error, busy, unableNotice } = responder;
 
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   useEffect(() => {
@@ -78,7 +78,85 @@ export function KeyRecoveryResponder() {
     img.src = url;
   };
 
-  if (!userId || !incoming) return null;
+  if (!userId) return null;
+
+  // A request arrived that this device cannot satisfy (it does not hold the history private key). It
+  // has already been declined; this explains why, because otherwise BOTH screens would sit silent —
+  // which is precisely how this flow failed before.
+  if (!incoming && unableNotice) {
+    return (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="recovery-unable-title"
+      >
+        <div className="bg-white border border-border w-full max-w-sm p-8 space-y-5">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" aria-hidden="true" />
+            <div>
+              <h2
+                id="recovery-unable-title"
+                className="text-[10px] uppercase tracking-[0.3em] font-black text-accent"
+              >
+                Can&rsquo;t Restore From This Device
+              </h2>
+              <p className="mt-2 text-xs opacity-60 leading-relaxed">
+                Another of your devices asked this one for the key that unlocks your earlier messages,
+                but this device does not have it either — so the request was declined.
+              </p>
+              <p className="mt-2 text-xs opacity-60 leading-relaxed">
+                On the other device, choose a different one from the list. The key lives on whichever
+                device you used first.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => responder.dismiss()}
+            className="w-full py-4 border border-border text-[10px] uppercase tracking-[0.3em] font-black hover:border-accent hover:text-accent transition-colors"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // A request was seen but could not be prepared (for example the asking device is no longer in the
+  // registry). Showing it beats rendering nothing, which is indistinguishable from "never arrived".
+  if (!incoming && error) {
+    return (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="recovery-error-title"
+      >
+        <div className="bg-white border border-border w-full max-w-sm p-8 space-y-5">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-4 h-4 mt-0.5 text-red-600 shrink-0" aria-hidden="true" />
+            <div>
+              <h2
+                id="recovery-error-title"
+                className="text-[10px] uppercase tracking-[0.3em] font-black text-accent"
+              >
+                Restore Request Failed
+              </h2>
+              <p className="mt-2 text-xs text-red-600 leading-relaxed">{error}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => responder.dismiss()}
+            className="w-full py-4 border border-border text-[10px] uppercase tracking-[0.3em] font-black hover:border-accent hover:text-accent transition-colors"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!incoming) return null;
 
   return (
     <div

@@ -57,3 +57,39 @@ export function targetPhaseFor(status: KeyRecoveryStatus): TargetPhaseSignal {
       return 'wait';
   }
 }
+
+/** What the SOURCE device should do with a request it has just observed. */
+export type ResponderAction =
+  /** Prompt the user: show the comparison code and the approve/decline buttons. */
+  | 'adopt'
+  /** Decline it: this device has no history key to give, so waiting would strand the other screen. */
+  | 'refuse'
+  /** Nothing to do — dead, or already being handled. */
+  | 'ignore';
+
+/**
+ * Decides how the source device reacts to an incoming request.
+ *
+ * Pulled out of the React hook because the silent-failure modes live here: a device that cannot help
+ * used to do nothing at all (so the asking device waited out the full expiry with no explanation), and
+ * a repeated poll must not re-decline a session it already refused.
+ */
+export function responderActionFor(params: {
+  session: KeyRecoverySession;
+  now: number;
+  /** Whether this device holds the history PRIVATE key, i.e. whether it can actually fulfil a request. */
+  holdsHistoryKey: boolean;
+  /** The session already on screen, if any. */
+  currentSessionId?: string;
+  /** The last session this device declined for lack of a key. */
+  refusedSessionId?: string | null;
+}): ResponderAction {
+  const { session, now, holdsHistoryKey, currentSessionId, refusedSessionId } = params;
+
+  if (!isLiveSession(session, now)) return 'ignore';
+  if (!holdsHistoryKey) {
+    return refusedSessionId === session.sessionId ? 'ignore' : 'refuse';
+  }
+  if (currentSessionId === session.sessionId) return 'ignore';
+  return 'adopt';
+}

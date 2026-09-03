@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isLiveSession,
   recoveryCandidates,
+  responderActionFor,
   selectIncomingRequest,
   targetPhaseFor,
 } from '../lib/key-recovery-session';
@@ -123,5 +124,90 @@ describe('targetPhaseFor', () => {
     expect(targetPhaseFor('DISPLAYING')).toBe('scan');
     expect(targetPhaseFor('DECLINED')).toBe('declined');
     expect(targetPhaseFor('COMPLETED')).toBe('done');
+  });
+});
+
+describe('responderActionFor', () => {
+  it('prompts the user when this device can actually hand the key over', () => {
+    expect(
+      responderActionFor({ session: session(), now: NOW, holdsHistoryKey: true })
+    ).toBe('adopt');
+  });
+
+  it('declines instead of going silent when this device has no history key', () => {
+    // The regression this guards: a device without the key used to do nothing at all — it did not even
+    // subscribe — so the asking device sat on "waiting for your other device" until the session
+    // expired, with nothing indicating it had picked a device that could never help.
+    expect(
+      responderActionFor({ session: session(), now: NOW, holdsHistoryKey: false })
+    ).toBe('refuse');
+  });
+
+  it('declines a session only once, so the poll cannot spam updates', () => {
+    expect(
+      responderActionFor({
+        session: session({ sessionId: 'session-9' }),
+        now: NOW,
+        holdsHistoryKey: false,
+        refusedSessionId: 'session-9',
+      })
+    ).toBe('ignore');
+  });
+
+  it('still declines a DIFFERENT session after refusing one', () => {
+    expect(
+      responderActionFor({
+        session: session({ sessionId: 'session-10' }),
+        now: NOW,
+        holdsHistoryKey: false,
+        refusedSessionId: 'session-9',
+      })
+    ).toBe('refuse');
+  });
+
+  it('ignores the session already on screen, so a poll does not restart the prompt', () => {
+    expect(
+      responderActionFor({
+        session: session({ sessionId: 'session-live' }),
+        now: NOW,
+        holdsHistoryKey: true,
+        currentSessionId: 'session-live',
+      })
+    ).toBe('ignore');
+  });
+
+  it('ignores an expired request rather than prompting for a dead transfer', () => {
+    expect(
+      responderActionFor({
+        session: session({ expiresAt: NOW - 1 }),
+        now: NOW,
+        holdsHistoryKey: true,
+      })
+    ).toBe('ignore');
+  });
+
+  it('ignores a request already finished on the other side', () => {
+    for (const status of ['COMPLETED', 'DECLINED'] as const) {
+      expect(
+        responderActionFor({ session: session({ status }), now: NOW, holdsHistoryKey: true })
+      ).toBe('ignore');
+    }
+  });
+
+  it('does not try to refuse an expired request', () => {
+    // Declining a dead session would fail its condition server-side and surface a pointless error.
+    expect(
+      responderActionFor({
+        session: session({ expiresAt: NOW - 1 }),
+        now: NOW,
+        holdsHistoryKey: false,
+      })
+    ).toBe('ignore');
+  });
+
+  it('adopts a DISPLAYING session, so a reconnecting source device recovers its own prompt', () => {
+    expect(
+      responderActionFor({ session: session({ status: 'DISPLAYING' }), now: NOW, holdsHistoryKey: true })
+    ).toBe('adopt');
   });
 });
