@@ -58,3 +58,6 @@ credentials.json
 
 # Ad-hoc local debug scripts (direct Cognito API probes)
 test-*.js
+
+# Local AI tooling config (not part of the app)
+.ai/
