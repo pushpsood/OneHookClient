@@ -297,6 +297,15 @@ export class ChatEncryptionManager {
   private registration: Promise<void> | null = null;
   private readonly peerRegistries = new Map<string, Promise<DeviceRegistry>>();
   private selfRegistry: Promise<DeviceRegistry> | null = null;
+  /**
+   * Cached account history-key state.
+   *
+   * Epochs and wraps are ACCOUNT-level and change almost never — a new match does not touch them — but
+   * a fresh manager is created per chat view, and both `ensureHistoryEpoch()` and `historyHorizon()`
+   * read this. Without a cache, opening one conversation cost two `GET /chat/history` calls and opening
+   * five cost ten, all for data that had not changed. Invalidated on every write.
+   */
+  private historyState: Promise<HistoryState> | null = null;
 
   constructor(userId: string) {
     if (!userId) throw new Error('A userId is required to encrypt messages.');
@@ -534,6 +543,7 @@ export class ChatEncryptionManager {
             }
           ),
         });
+        this.invalidateHistoryState();
       }
     } catch {
       /* retried by ensureHistoryEpoch/unlockHistoryKey on the next sign-in */
@@ -558,7 +568,7 @@ export class ChatEncryptionManager {
     // Only a device that actually holds the private key can seal wraps for an epoch.
     if (!identity.historyKeyId || !identity.historyPrivateKeyPkcs8) return;
 
-    const state = await ChatApi.getHistoryState();
+    const state = await this.historyStateFresh();
     if (state.activeEpoch) {
       // An epoch already exists. Record which one this device's key belongs to so later unlock and
       // wrap writes address the right slot.
@@ -586,6 +596,7 @@ export class ChatEncryptionManager {
     });
 
     if (result.established) {
+      this.invalidateHistoryState();
       identity.historyEpoch = 1;
       await writeIdentity(await openDatabase(), identity);
       this.identity = Promise.resolve(identity);
@@ -613,7 +624,7 @@ export class ChatEncryptionManager {
     const identity = await this.loadIdentity();
     if (!identity.deviceId || !identity.devicePrivateKey) return 'unavailable';
 
-    const state = await ChatApi.getHistoryState();
+    const state = await this.historyStateFresh();
     const activeEpoch = state.activeEpoch;
     if (!activeEpoch) return 'unavailable';
 
@@ -707,6 +718,7 @@ export class ChatEncryptionManager {
             { userId: this.userId, epoch, method: 'DEVICE', wrapId: identity.deviceId }
           ),
         });
+        this.invalidateHistoryState();
       } catch {
         /* the next sign-in retries via ensureHistoryEpoch/unlock */
       }
@@ -737,6 +749,7 @@ export class ChatEncryptionManager {
         wrapId: targetDeviceId,
       }),
     });
+    this.invalidateHistoryState();
   }
 
   /**
@@ -772,6 +785,7 @@ export class ChatEncryptionManager {
         wrapId: derived.credentialId,
       }),
     });
+    this.invalidateHistoryState();
     return derived.credentialId;
   }
 
@@ -786,7 +800,7 @@ export class ChatEncryptionManager {
     device: number;
     prfSupportedHere: boolean;
   }> {
-    const state = await ChatApi.getHistoryState();
+    const state = await this.historyStateFresh();
     const wraps = state.wraps ?? [];
     return {
       activeEpoch: state.activeEpoch,
@@ -854,6 +868,7 @@ export class ChatEncryptionManager {
     });
 
     if (!established.established) return false;
+    this.invalidateHistoryState();
 
     const db = await openDatabase();
     identity.historyKeyId = keyId;
@@ -882,7 +897,7 @@ export class ChatEncryptionManager {
    * so the UI shows one marker instead of a wall of individually locked bubbles.
    */
   async historyHorizon(): Promise<number | undefined> {
-    const state = await ChatApi.getHistoryState();
+    const state = await this.historyStateFresh();
     if (!state.activeEpoch) return undefined;
     return state.epochs.find((e) => e.epoch === state.activeEpoch)?.horizonAt;
   }
@@ -956,6 +971,24 @@ export class ChatEncryptionManager {
     });
     this.peerRegistries.set(cacheKey, pending);
     return pending;
+  }
+
+  /** Reads history state once per manager, then serves the cached copy. */
+  private historyStateFresh(): Promise<HistoryState> {
+    if (this.historyState) return this.historyState;
+    const pending = ChatApi.getHistoryState().catch((error) => {
+      // Do not cache a failure: a transient error must not make the whole session believe the account
+      // has no epoch, which would send every unlock straight to the QR fallback.
+      this.historyState = null;
+      throw error;
+    });
+    this.historyState = pending;
+    return pending;
+  }
+
+  /** Drops the cached state after any write that could change it. */
+  private invalidateHistoryState(): void {
+    this.historyState = null;
   }
 
   private selfRegistryFresh(): Promise<DeviceRegistry> {

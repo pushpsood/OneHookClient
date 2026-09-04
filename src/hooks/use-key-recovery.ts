@@ -11,6 +11,7 @@ import {
   sealRecoveryBundle,
   type RecoverySessionBinding,
 } from '../lib/key-recovery';
+import { derivePasskeySecret } from '../lib/passkey-prf';
 import { requireUserPresence, type UserPresenceResult } from '../lib/user-presence';
 import {
   recoveryCandidates,
@@ -117,6 +118,19 @@ export function useHistoryRecovery(userId: string | undefined, matchRefetch?: ()
       // device is not registered on your account.". DeviceManagementCard already had to do this for
       // the same reason.
       await manager.initialize();
+
+      // Try the cheaper rungs before asking the user to fetch a second device. A device wrap opens the
+      // key silently; PRF costs one biometric prompt, which is warranted here because the user has just
+      // asked to restore. Only if both come up empty is the QR transfer worth their time.
+      const unlocked = await manager.unlockHistoryKey((credentialId) =>
+        derivePasskeySecret(credentialId)
+      );
+      if (unlocked !== 'unavailable') {
+        setPhase('not-needed');
+        matchRefetch?.();
+        return;
+      }
+
       if (await manager.holdsHistoryKey()) {
         // Nothing to recover: this device can already read history. Surfacing this explicitly avoids
         // sending the user through a transfer that would change nothing.

@@ -17,11 +17,18 @@ import { DiscoveryView } from '../features/discovery/DiscoveryView';
 import { MatchesView } from '../features/matches/MatchesView';
 import { ProfileView } from '../features/profile/ProfileView';
 import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
+import { useHistoryUnlock } from '../hooks/use-history-unlock';
 
 export function AppContent() {
   const navigate = useNavigate();
   const [appState, setAppState] = useState<'DISCOVERY' | 'MATCHES' | 'PROFILE'>('DISCOVERY');
   const { currentUser, setCurrentUser, logout, userState } = useAppStore();
+
+  // Try the silent rungs of the history-key unlock ladder once per session: a device wrap sealed to this
+  // device opens history with no prompt at all. PRF is deliberately NOT attempted here, because an
+  // unbidden biometric dialog at sign-in would be alarming and is usually pointless — the recovery UI
+  // asks for it when the user has actually chosen to restore.
+  useHistoryUnlock(currentUser?.id);
   const {
     profile,
     loading: profileLoading,
