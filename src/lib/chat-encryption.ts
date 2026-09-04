@@ -120,7 +120,6 @@ interface StoredIdentity {
   historyKeyId?: string;
   historyPrivateKey?: CryptoKey;
   historyPublicKey?: CryptoKey;
-  historyFutureOnly?: boolean;
   /**
    * Epoch of the history key this device holds. An epoch is a distinct history key with its own set
    * of encrypted copies ("wraps"), so a stranded key can be replaced without stranding the account
@@ -512,7 +511,6 @@ export class ChatEncryptionManager {
     identity.historyPrivateKey = imported.privateKey;
     identity.historyPublicKey = imported.publicKey;
     identity.historyPrivateKeyPkcs8 = bundle.historyPrivateKey;
-    identity.historyFutureOnly = false;
     await writeIdentity(db, identity);
 
     // Force the next decrypt to rebuild its recipient list with the adopted key.
@@ -565,15 +563,15 @@ export class ChatEncryptionManager {
   async ensureHistoryEpoch(): Promise<void> {
     const identity = await this.loadIdentity();
     if (!identity.deviceId || !identity.devicePublicKey) return;
-    // Only a device that actually holds the private key can seal wraps for an epoch.
-    if (!identity.historyKeyId || !identity.historyPrivateKeyPkcs8) return;
 
     const state = await this.historyStateFresh();
+
     if (state.activeEpoch) {
-      // An epoch already exists. Record which one this device's key belongs to so later unlock and
-      // wrap writes address the right slot.
+      // An epoch already exists. If this device holds its key, record which epoch that is so later
+      // unlock and wrap writes address the right slot. If it does not, there is nothing to do here —
+      // `unlockHistoryKey()` owns that case.
       const match = state.epochs.find((e) => e.keyId === identity.historyKeyId);
-      if (match && identity.historyEpoch !== match.epoch) {
+      if (match && identity.historyEpoch !== match.epoch && identity.historyPrivateKeyPkcs8) {
         identity.historyEpoch = match.epoch;
         await writeIdentity(await openDatabase(), identity);
         this.identity = Promise.resolve(identity);
@@ -581,25 +579,57 @@ export class ChatEncryptionManager {
       return;
     }
 
-    const wrapped = await wrapToDeviceKey(
-      identity.historyPrivateKeyPkcs8,
-      await exportPublicKey(identity.devicePublicKey),
-      { userId: this.userId, epoch: 1, method: 'DEVICE', wrapId: identity.deviceId }
-    );
+    // No epoch yet, so this device creates one. Generated extractable on purpose: this is the key that
+    // must be transferable to future devices and to other unlock methods.
+    const pair = await generateKeyPair(true);
+    const pkcs8 = new Uint8Array(await subtle().exportKey('pkcs8', pair.privateKey));
+    const keyId = randomId();
 
+    // The wrap set goes in the SAME call as the epoch, which is what makes an unrecoverable history key
+    // impossible: the backend rejects an epoch with no wraps.
     const result = await ChatApi.establishHistoryEpoch({
       epoch: 1,
       expectedEpoch: 0,
-      keyId: identity.historyKeyId,
-      publicKey: await exportPublicKey(identity.historyPublicKey!),
-      wraps: [{ method: 'DEVICE', wrapId: identity.deviceId, wrappedKey: wrapped }],
+      keyId,
+      publicKey: await exportPublicKey(pair.publicKey),
+      wraps: [
+        {
+          method: 'DEVICE',
+          wrapId: identity.deviceId,
+          wrappedKey: await wrapToDeviceKey(pkcs8, await exportPublicKey(identity.devicePublicKey), {
+            userId: this.userId,
+            epoch: 1,
+            method: 'DEVICE',
+            wrapId: identity.deviceId,
+          }),
+        },
+      ],
     });
 
-    if (result.established) {
-      this.invalidateHistoryState();
-      identity.historyEpoch = 1;
-      await writeIdentity(await openDatabase(), identity);
-      this.identity = Promise.resolve(identity);
+    this.invalidateHistoryState();
+
+    if (!result.established) {
+      // Another of the user's devices created epoch 1 first. Discard the key we generated — keeping it
+      // would leave this device believing it holds a history key the account never adopted — and let the
+      // unlock ladder obtain the real one.
+      return;
+    }
+
+    const db = await openDatabase();
+    identity.historyKeyId = keyId;
+    identity.historyEpoch = 1;
+    identity.historyPrivateKey = pair.privateKey;
+    identity.historyPublicKey = pair.publicKey;
+    identity.historyPrivateKeyPkcs8 = pkcs8;
+    await writeIdentity(db, identity);
+    this.identity = Promise.resolve(identity);
+
+    // Add a second, device-independent holder straight away where the platform allows it, so a
+    // brand-new account is not one lost device away from losing its history.
+    try {
+      await this.addPasskeyUnlock();
+    } catch {
+      /* PRF unavailable here; the device wrap above still stands */
     }
   }
 
@@ -700,7 +730,6 @@ export class ChatEncryptionManager {
     identity.historyPrivateKey = imported.privateKey;
     identity.historyPublicKey = imported.publicKey;
     identity.historyPrivateKeyPkcs8 = pkcs8;
-    identity.historyFutureOnly = false;
     await writeIdentity(db, identity);
     this.identity = Promise.resolve(identity);
 
@@ -876,7 +905,6 @@ export class ChatEncryptionManager {
     identity.historyPrivateKey = pair.privateKey;
     identity.historyPublicKey = pair.publicKey;
     identity.historyPrivateKeyPkcs8 = pkcs8;
-    identity.historyFutureOnly = false;
     await writeIdentity(db, identity);
     this.identity = Promise.resolve(identity);
 
@@ -1010,54 +1038,27 @@ export class ChatEncryptionManager {
         throw new Error('Device identity is missing after migration.');
       }
 
-      // Propose a fresh account-history key only if this account has none yet on this device.
-      let proposal: AccountHistoryKey | undefined;
-      let proposedPair: CryptoKeyPair | undefined;
-      if (!identity.historyKeyId) {
-        // Extractable: this key is the one history recovery hands to future devices.
-        proposedPair = await generateKeyPair(true);
-        proposal = {
-          keyId: randomId(),
-          publicKey: await exportPublicKey(proposedPair.publicKey),
-        };
-      }
-
       const response = await ChatApi.registerDevice({
         deviceId: identity.deviceId,
         publicKey: await exportPublicKey(identity.devicePublicKey),
         platform: PLATFORM,
         displayName: this.defaultDisplayName(),
         maxEnvelopeVersion: MAX_ENVELOPE_VERSION,
-        accountHistoryKey: proposal,
       });
 
-      // Reconcile the account-history key against the server's canonical answer.
-      if (proposal && proposedPair) {
-        if (response.ownsAccountHistoryKey && response.accountHistoryKey?.keyId === proposal.keyId) {
-          // Accepted: this device owns the canonical history key and can decrypt history wraps.
-          identity.historyKeyId = proposal.keyId;
-          identity.historyPrivateKey = proposedPair.privateKey;
-          identity.historyPublicKey = proposedPair.publicKey;
-          identity.historyFutureOnly = false;
-          // Keep the raw bytes so this device can later seal the key to other unlock methods (an
-          // approved device, a new passkey). Safe to persist: the key is generated extractable
-          // precisely because it must be transferable, so this stores nothing a holder could not
-          // already export. Contrast the DEVICE key, which is non-extractable and has no equivalent.
-          identity.historyPrivateKeyPkcs8 = new Uint8Array(
-            await subtle().exportKey('pkcs8', proposedPair.privateKey)
-          );
-          await writeIdentity(db, identity);
-        } else if (response.accountHistoryKey?.publicKey) {
-          // Rejected: a different device owns history. Discard our private key and retain only the
-          // canonical public key so we can still wrap NEW messages to it ("future-only").
-          identity.historyKeyId = response.accountHistoryKey.keyId;
-          identity.historyPrivateKey = undefined;
-          identity.historyPublicKey = await importEcdhPublicKey(
-            response.accountHistoryKey.publicKey
-          );
-          identity.historyFutureOnly = true;
-          await writeIdentity(db, identity);
-        }
+      // Registration no longer proposes a history key. It used to, first-write-wins, which left the
+      // winner holding the only copy and every later device permanently "future-only" — able to wrap new
+      // messages to history but never to read it, and dependent on that one device surviving. Epoch 1 is
+      // now established by `ensureHistoryEpoch()` through an endpoint that requires a wrap set in the
+      // same call, so a history key can never exist with no way to unlock it.
+      //
+      // What this device DOES take from the response is the history PUBLIC key, so it can wrap new
+      // messages to history immediately. Whether it can READ history is decided by the wraps on the
+      // active epoch — see `unlockHistoryKey()`.
+      if (response.accountHistoryKey?.publicKey && !identity.historyKeyId) {
+        identity.historyKeyId = response.accountHistoryKey.keyId;
+        identity.historyPublicKey = await importEcdhPublicKey(response.accountHistoryKey.publicKey);
+        await writeIdentity(db, identity);
       }
 
       // POST /chat/devices intentionally returns only the registered device, not the full list.

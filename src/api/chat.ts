@@ -314,13 +314,15 @@ export interface RegisterDeviceRequest {
   platform: string;
   displayName?: string;
   maxEnvelopeVersion: number;
-  accountHistoryKey?: AccountHistoryKey;
 }
 
 export interface RegisterDeviceResponse {
   device: DeviceRecord;
+  /**
+   * The account's history PUBLIC key, if an epoch exists. Present so a new device can wrap NEW messages
+   * to history immediately; it grants no ability to READ history, which depends on the epoch's wraps.
+   */
   accountHistoryKey?: AccountHistoryKey;
-  ownsAccountHistoryKey: boolean;
 }
 
 /**
@@ -452,9 +454,14 @@ export const ChatApi = {
   // --- Multi-device registry (wire v2) ---
 
   /**
-   * Register (or refresh) this device in the caller's device registry and, on first registration,
-   * propose an account-history key. Returns the caller's full device list plus the canonical
-   * account-history key and whether the proposed key was accepted.
+   * Register (or refresh) this device in the caller's device registry.
+   *
+   * Registration does NOT claim the account-history key. It used to, first-write-wins, which left one
+   * device holding the only copy and every later device permanently unable to read history. Epoch 1 is
+   * established separately via `establishHistoryEpoch`, which requires a wrap set in the same call.
+   *
+   * The response carries the history PUBLIC key when an epoch exists, so this device can wrap NEW
+   * messages to history right away.
    */
   registerDevice: (request: RegisterDeviceRequest): Promise<RegisterDeviceResponse> =>
     chatRest<RegisterDeviceResponse>('POST', '/chat/devices', request),
