@@ -3,7 +3,13 @@ import {
   type AccountHistoryKey,
   type DeviceRecord,
   type DeviceRegistry,
+  type HistoryState,
 } from '../api/chat';
+import {
+  unwrapWithDeviceKey,
+  unwrapWithSecret,
+  wrapToDeviceKey,
+} from './ahk-wrap';
 import {
   decryptV2,
   deviceTargetId,
@@ -113,6 +119,21 @@ interface StoredIdentity {
   historyPrivateKey?: CryptoKey;
   historyPublicKey?: CryptoKey;
   historyFutureOnly?: boolean;
+  /**
+   * Epoch of the history key this device holds. An epoch is a distinct history key with its own set
+   * of encrypted copies ("wraps"), so a stranded key can be replaced without stranding the account
+   * forever — see OneHookBackend/docs/account-key-recovery.md.
+   */
+  historyEpoch?: number;
+  /**
+   * Raw PKCS#8 of the history private key, kept so this device can seal it to ANOTHER unlock method
+   * later (a newly approved device, or a newly added passkey).
+   *
+   * Stored because the key is deliberately generated extractable — it is the one key that must be
+   * transferable — so persisting the bytes reveals nothing a `historyPrivateKey` holder could not
+   * already export. The DEVICE key by contrast is non-extractable and never has a counterpart here.
+   */
+  historyPrivateKeyPkcs8?: Uint8Array;
 }
 
 export interface DeviceSummary {
@@ -290,6 +311,14 @@ export class ChatEncryptionManager {
    */
   async initialize(): Promise<void> {
     await this.ensureDeviceRegistered();
+    // Publish epoch 1 with a wrap for this device if the account has no epoch yet. Best effort: chat
+    // must still work if this fails, and the next sign-in retries. Without it the race winner would
+    // remain the account's ONLY holder, which is the failure the epoch model exists to remove.
+    try {
+      await this.ensureHistoryEpoch();
+    } catch {
+      /* non-fatal: messaging does not depend on the epoch record existing yet */
+    }
   }
 
   /**
@@ -471,11 +500,253 @@ export class ChatEncryptionManager {
     identity.historyKeyId = canonical.keyId;
     identity.historyPrivateKey = imported.privateKey;
     identity.historyPublicKey = imported.publicKey;
+    identity.historyPrivateKeyPkcs8 = bundle.historyPrivateKey;
     identity.historyFutureOnly = false;
     await writeIdentity(db, identity);
 
     // Force the next decrypt to rebuild its recipient list with the adopted key.
     this.identity = Promise.resolve(identity);
+
+    // A QR transfer should also make this device a HOLDER others can unlock from, not just a reader.
+    // Best effort: the key already works locally, so a failed publish must not present the transfer as
+    // failed — it only means this device is not yet advertised as a holder.
+    try {
+      const state = await ChatApi.getHistoryState();
+      const epochRecord = state.epochs.find((e) => e.keyId === canonical.keyId);
+      if (epochRecord && identity.deviceId && identity.devicePublicKey) {
+        identity.historyEpoch = epochRecord.epoch;
+        await writeIdentity(db, identity);
+        this.identity = Promise.resolve(identity);
+        await ChatApi.putHistoryWrap({
+          epoch: epochRecord.epoch,
+          method: 'DEVICE',
+          wrapId: identity.deviceId,
+          wrappedKey: await wrapToDeviceKey(
+            bundle.historyPrivateKey,
+            await exportPublicKey(identity.devicePublicKey),
+            {
+              userId: this.userId,
+              epoch: epochRecord.epoch,
+              method: 'DEVICE',
+              wrapId: identity.deviceId,
+            }
+          ),
+        });
+      }
+    } catch {
+      /* retried by ensureHistoryEpoch/unlockHistoryKey on the next sign-in */
+    }
+  }
+
+  // ── Account history-key epochs and the unlock ladder ───────────────────────────────────────────
+
+  /**
+   * Publishes epoch 1 with a wrap for this device, if the account has no epoch yet.
+   *
+   * Called after registration by the device that WON the first-write-wins race, so the winner is no
+   * longer the sole holder: its own key becomes one wrap among several. Without this the account
+   * would still have exactly one holder, which is the failure the epoch model exists to remove.
+   *
+   * Safe to call repeatedly and safe to lose: a losing race returns quietly, because another of the
+   * user's devices published the epoch and this device will unlock against that instead.
+   */
+  async ensureHistoryEpoch(): Promise<void> {
+    const identity = await this.loadIdentity();
+    if (!identity.deviceId || !identity.devicePublicKey) return;
+    // Only a device that actually holds the private key can seal wraps for an epoch.
+    if (!identity.historyKeyId || !identity.historyPrivateKeyPkcs8) return;
+
+    const state = await ChatApi.getHistoryState();
+    if (state.activeEpoch) {
+      // An epoch already exists. Record which one this device's key belongs to so later unlock and
+      // wrap writes address the right slot.
+      const match = state.epochs.find((e) => e.keyId === identity.historyKeyId);
+      if (match && identity.historyEpoch !== match.epoch) {
+        identity.historyEpoch = match.epoch;
+        await writeIdentity(await openDatabase(), identity);
+        this.identity = Promise.resolve(identity);
+      }
+      return;
+    }
+
+    const wrapped = await wrapToDeviceKey(
+      identity.historyPrivateKeyPkcs8,
+      await exportPublicKey(identity.devicePublicKey),
+      { userId: this.userId, epoch: 1, method: 'DEVICE', wrapId: identity.deviceId }
+    );
+
+    const result = await ChatApi.establishHistoryEpoch({
+      epoch: 1,
+      expectedEpoch: 0,
+      keyId: identity.historyKeyId,
+      publicKey: await exportPublicKey(identity.historyPublicKey!),
+      wraps: [{ method: 'DEVICE', wrapId: identity.deviceId, wrappedKey: wrapped }],
+    });
+
+    if (result.established) {
+      identity.historyEpoch = 1;
+      await writeIdentity(await openDatabase(), identity);
+      this.identity = Promise.resolve(identity);
+    }
+  }
+
+  /**
+   * Walks the unlock ladder to obtain the active epoch's history private key.
+   *
+   * Order is deliberate — cheapest and least interactive first:
+   *   1. already held (nothing to do);
+   *   2. a DEVICE wrap sealed to this device, written when another device approved it;
+   *   3. PRF, supplied by the caller because deriving it needs a user gesture this layer must not
+   *      trigger on its own.
+   *
+   * QR transfer and reset sit ABOVE this in the UI rather than here: both need explicit user
+   * involvement, and this method must be safe to call unattended at sign-in.
+   *
+   * @param derivePrfSecret optional: given a credential id, returns that passkey's PRF output
+   * @returns how the key was obtained, or why it could not be
+   */
+  async unlockHistoryKey(
+    derivePrfSecret?: (credentialId: string) => Promise<Uint8Array | null>
+  ): Promise<'already-held' | 'device-wrap' | 'prf' | 'unavailable'> {
+    const identity = await this.loadIdentity();
+    if (!identity.deviceId || !identity.devicePrivateKey) return 'unavailable';
+
+    const state = await ChatApi.getHistoryState();
+    const activeEpoch = state.activeEpoch;
+    if (!activeEpoch) return 'unavailable';
+
+    if (identity.historyPrivateKey && identity.historyEpoch === activeEpoch) {
+      return 'already-held';
+    }
+
+    const wraps = state.wraps ?? [];
+
+    const deviceWrap = wraps.find(
+      (w) => w.method === 'DEVICE' && w.wrapId === identity.deviceId && w.wrappedKey
+    );
+    if (deviceWrap?.wrappedKey) {
+      const pkcs8 = await unwrapWithDeviceKey(deviceWrap.wrappedKey, identity.devicePrivateKey, {
+        userId: this.userId,
+        epoch: activeEpoch,
+        method: 'DEVICE',
+        wrapId: identity.deviceId,
+      });
+      await this.adoptHistoryKey(pkcs8, activeEpoch, state);
+      return 'device-wrap';
+    }
+
+    if (derivePrfSecret) {
+      for (const wrap of wraps.filter((w) => w.method === 'PRF' && w.wrappedKey)) {
+        const secret = await derivePrfSecret(wrap.wrapId);
+        if (!secret) continue;
+        try {
+          const pkcs8 = await unwrapWithSecret(wrap.wrappedKey!, secret, {
+            userId: this.userId,
+            epoch: activeEpoch,
+            method: 'PRF',
+            wrapId: wrap.wrapId,
+          });
+          await this.adoptHistoryKey(pkcs8, activeEpoch, state);
+          return 'prf';
+        } catch {
+          // This passkey is not the one this wrap was sealed to; try the next.
+        }
+      }
+    }
+
+    return 'unavailable';
+  }
+
+  /**
+   * Stores an unlocked history key and publishes a wrap for THIS device.
+   *
+   * Publishing matters as much as storing: it turns every successful unlock into an additional
+   * holder, so the account becomes progressively harder to strand rather than depending forever on
+   * whichever method happened to work first.
+   */
+  private async adoptHistoryKey(
+    pkcs8: Uint8Array,
+    epoch: number,
+    state: HistoryState
+  ): Promise<void> {
+    const imported = await importTransferredPrivateKey(pkcs8);
+    const epochRecord = state.epochs.find((e) => e.epoch === epoch);
+    if (!epochRecord) {
+      throw new Error('The account has no record of that history epoch.');
+    }
+    if (imported.publicKeySpki !== epochRecord.publicKey) {
+      // The unwrapped key must be the epoch's key. A mismatch means the wrap and the epoch record
+      // disagree, so adopting it would leave this device unable to read anything.
+      throw new Error('That recovery key does not match this account’s history key.');
+    }
+
+    const db = await openDatabase();
+    const identity = await this.loadIdentity();
+    identity.historyKeyId = epochRecord.keyId;
+    identity.historyEpoch = epoch;
+    identity.historyPrivateKey = imported.privateKey;
+    identity.historyPublicKey = imported.publicKey;
+    identity.historyPrivateKeyPkcs8 = pkcs8;
+    identity.historyFutureOnly = false;
+    await writeIdentity(db, identity);
+    this.identity = Promise.resolve(identity);
+
+    // Best effort: the key is already usable locally, so a failed publish must not present the
+    // unlock as failed. It only means this device is not yet a holder others can rely on.
+    if (identity.deviceId && identity.devicePublicKey) {
+      try {
+        await ChatApi.putHistoryWrap({
+          epoch,
+          method: 'DEVICE',
+          wrapId: identity.deviceId,
+          wrappedKey: await wrapToDeviceKey(
+            pkcs8,
+            await exportPublicKey(identity.devicePublicKey),
+            { userId: this.userId, epoch, method: 'DEVICE', wrapId: identity.deviceId }
+          ),
+        });
+      } catch {
+        /* the next sign-in retries via ensureHistoryEpoch/unlock */
+      }
+    }
+  }
+
+  /**
+   * Seals the history key to ANOTHER device, granting it access without a QR transfer.
+   *
+   * Must only be called after the user has explicitly approved that device: the backend supplies the
+   * public key being sealed to, so an unverified call here is exactly the substitution risk noted in
+   * docs/account-key-recovery.md §5.1.
+   */
+  async grantHistoryKeyToDevice(targetDeviceId: string): Promise<void> {
+    const identity = await this.loadIdentity();
+    if (!identity.historyPrivateKeyPkcs8 || !identity.historyEpoch) {
+      throw new Error('This device does not hold your history key, so it cannot grant access.');
+    }
+    const targetPublicKey = await this.lookupOwnDevicePublicKey(targetDeviceId);
+    await ChatApi.putHistoryWrap({
+      epoch: identity.historyEpoch,
+      method: 'DEVICE',
+      wrapId: targetDeviceId,
+      wrappedKey: await wrapToDeviceKey(identity.historyPrivateKeyPkcs8, targetPublicKey, {
+        userId: this.userId,
+        epoch: identity.historyEpoch,
+        method: 'DEVICE',
+        wrapId: targetDeviceId,
+      }),
+    });
+  }
+
+  /**
+   * The active epoch's history horizon, if it has one.
+   *
+   * Set only on an epoch created by a reset. Messages older than this cannot be read on this account,
+   * so the UI shows one marker instead of a wall of individually locked bubbles.
+   */
+  async historyHorizon(): Promise<number | undefined> {
+    const state = await ChatApi.getHistoryState();
+    if (!state.activeEpoch) return undefined;
+    return state.epochs.find((e) => e.epoch === state.activeEpoch)?.horizonAt;
   }
 
   // ── v2 internals ───────────────────────────────────────────────────────────────────────────────
@@ -597,6 +868,13 @@ export class ChatEncryptionManager {
           identity.historyPrivateKey = proposedPair.privateKey;
           identity.historyPublicKey = proposedPair.publicKey;
           identity.historyFutureOnly = false;
+          // Keep the raw bytes so this device can later seal the key to other unlock methods (an
+          // approved device, a new passkey). Safe to persist: the key is generated extractable
+          // precisely because it must be transferable, so this stores nothing a holder could not
+          // already export. Contrast the DEVICE key, which is non-extractable and has no equivalent.
+          identity.historyPrivateKeyPkcs8 = new Uint8Array(
+            await subtle().exportKey('pkcs8', proposedPair.privateKey)
+          );
           await writeIdentity(db, identity);
         } else if (response.accountHistoryKey?.publicKey) {
           // Rejected: a different device owns history. Discard our private key and retain only the
