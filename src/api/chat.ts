@@ -323,8 +323,71 @@ export interface RegisterDeviceResponse {
   ownsAccountHistoryKey: boolean;
 }
 
-async function chatRestBaseUrl(): Promise<string> {
-  if (apiBaseUrl && apiBaseUrl.startsWith('http')) return apiBaseUrl.replace(/\/+$/, '');
+/**
+ * How an encrypted copy of the history private key can be opened. Ordered by preference: escrow is
+ * already present after an OS restore, PRF needs no other device, a device wrap needs one approval,
+ * and QR (not a wrap) is the manual fallback.
+ */
+export type WrapMethod = 'ESCROW' | 'PRF' | 'DEVICE';
+
+/** One epoch of the account history key. Only the PUBLIC half is ever published. */
+export interface HistoryEpochRecord {
+  epoch: number;
+  keyId: string;
+  publicKey: string;
+  createdAt: number;
+  /**
+   * Present only on epochs created by a reset. Messages older than this cannot be read on this
+   * account, and the client renders a single marker rather than a wall of locked bubbles. Never a
+   * licence to delete shared ciphertext.
+   */
+  horizonAt?: number;
+}
+
+/**
+ * One encrypted copy of an epoch's history PRIVATE key.
+ *
+ * `wrappedKey` is absent for `ESCROW`, which is a marker: the material lives in iCloud Keychain or
+ * Android Block Store, not on the server.
+ */
+export interface AhkWrapRecord {
+  epoch: number;
+  method: WrapMethod;
+  wrapId: string;
+  wrappedKey?: string;
+  createdAt: number;
+}
+
+export interface HistoryState {
+  epochs: HistoryEpochRecord[];
+  activeEpoch?: number;
+  wraps?: AhkWrapRecord[];
+}
+
+export interface EstablishEpochRequest {
+  epoch: number;
+  /** The epoch the caller believes is active; 0 when the account has none yet. */
+  expectedEpoch: number;
+  keyId: string;
+  publicKey: string;
+  /** Required when replacing an existing epoch, rejected on the first one. */
+  horizonAt?: number;
+  wraps: Array<{ method: WrapMethod; wrapId: string; wrappedKey?: string }>;
+}
+
+export interface EstablishEpochResponse {
+  established: boolean;
+  epochs?: HistoryEpochRecord[];
+}
+
+export interface PutWrapRequest {
+  epoch: number;
+  method: WrapMethod;
+  wrapId: string;
+  wrappedKey?: string;
+}
+
+async function chatRestBaseUrl(): Promise<string> {  if (apiBaseUrl && apiBaseUrl.startsWith('http')) return apiBaseUrl.replace(/\/+$/, '');
   if (typeof window !== 'undefined' && window.location?.origin) {
     const origin = window.location.origin;
     return apiBaseUrl ? `${origin}/${apiBaseUrl.replace(/^\/+|\/+$/g, '')}` : origin;
@@ -412,4 +475,42 @@ export const ChatApi = {
   /** Revoke (remove) a device from the caller's registry. */
   revokeDevice: (deviceId: string): Promise<void> =>
     chatRest<void>('DELETE', `/chat/devices/${encodeURIComponent(deviceId)}`),
+
+  // --- Account history-key lifecycle (epochs + wraps) ---
+
+  /**
+   * The caller's history-key state: every epoch, which is active, and the active epoch's wraps.
+   *
+   * This is the read a device performs at sign-in to decide how to unlock — platform escrow, then
+   * PRF, then a device wrap, then QR, then reset. Wrap ciphertext is returned because only this
+   * account can open it; the server holds no key that would let it do so.
+   */
+  getHistoryState: (): Promise<HistoryState> => chatRest<HistoryState>('GET', '/chat/history'),
+
+  /**
+   * Establish a history epoch and make it active.
+   *
+   * Serves both the account's FIRST key (`expectedEpoch: 0`) and a RESET after every unlock method
+   * has failed (pass the active epoch plus `horizonAt`). The wrap set is mandatory: an epoch with no
+   * wraps would be unrecoverable from the moment it existed.
+   *
+   * A `false` result means another of the caller's devices established an epoch first — re-read
+   * `getHistoryState` and unlock against the epoch that won rather than retrying.
+   */
+  establishHistoryEpoch: (request: EstablishEpochRequest): Promise<EstablishEpochResponse> =>
+    chatRest<EstablishEpochResponse>('POST', '/chat/history/epochs', request),
+
+  /**
+   * Add or replace one wrap. Idempotent on (epoch, method, wrapId), so re-approving a device or
+   * re-deriving a PRF wrap refreshes rather than accumulating rows.
+   */
+  putHistoryWrap: (request: PutWrapRequest): Promise<{ wraps: AhkWrapRecord }> =>
+    chatRest<{ wraps: AhkWrapRecord }>('POST', '/chat/history/wraps', request),
+
+  /** Revoke one unlock method — a retired device, or a passkey the user deleted. */
+  revokeHistoryWrap: (epoch: number, method: WrapMethod, wrapId: string): Promise<void> =>
+    chatRest<void>(
+      'DELETE',
+      `/chat/history/wraps/${epoch}/${encodeURIComponent(method)}/${encodeURIComponent(wrapId)}`
+    ),
 };
