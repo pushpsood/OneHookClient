@@ -12,7 +12,11 @@ import { useToast } from '../../components/common/Toast';
 import { FALLBACK_PROFILE_IMAGE } from '../../utils/profile-image';
 import { MediaImage } from '../../components/common/MediaImage';
 import { HistoryRecoveryModal } from '../../components/chat/HistoryRecoveryModal';
-import { HistoryLockedBanner, LockedMessageNotice } from '../../components/chat/LockedMessage';
+import {
+  HistoryHorizonMarker,
+  HistoryLockedBanner,
+  LockedMessageNotice,
+} from '../../components/chat/LockedMessage';
 
 
 export function ChatView({
@@ -70,8 +74,17 @@ export function ChatView({
     };
   }, [matchId, currentUser.id]);
 
-  const { messages, loading, error, sendMessage, markAsDelivered, markAsRead, refetch, hasUndecryptable } =
-    useChatMessages(matchId || '', recipientId);
+  const {
+    messages,
+    loading,
+    error,
+    sendMessage,
+    markAsDelivered,
+    markAsRead,
+    refetch,
+    hasUndecryptable,
+    historyHorizon,
+  } = useChatMessages(matchId || '', recipientId);
   const [input, setInput] = useState('');
   const { showToast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -321,7 +334,16 @@ export function ChatView({
 
         {/* Message History */}
         <div className="flex-1 p-10 space-y-8 overflow-y-auto">
-          {hasUndecryptable && <HistoryLockedBanner onRestore={() => setRecoveryOpen(true)} />}
+          {/*
+            A horizon means the account was reset, so those messages can never be opened again and
+            offering recovery would be a false promise. Otherwise fall back to the restore prompt.
+          */}
+          {hasUndecryptable &&
+            (historyHorizon ? (
+              <HistoryHorizonMarker horizonAt={historyHorizon} />
+            ) : (
+              <HistoryLockedBanner onRestore={() => setRecoveryOpen(true)} />
+            ))}
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <p className="text-xs opacity-40 italic">

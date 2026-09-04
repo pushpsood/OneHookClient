@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useHistoryRecovery } from '../../hooks/use-key-recovery';
 import { QrCameraScanner } from './QrCameraScanner';
+import { HistoryResetDialog } from './HistoryResetDialog';
 
 /**
  * NEW-device side of history recovery, as a modal.
@@ -33,6 +34,8 @@ export function HistoryRecoveryModal({
   const recovery = useHistoryRecovery(userId, onRecovered);
   const { phase, start, reset } = recovery;
   const [scanError, setScanError] = useState<string | undefined>();
+  // The last rung: offered only from a genuine dead end, never while a transfer could still work.
+  const [resetOpen, setResetOpen] = useState(false);
 
   useEffect(() => {
     if (open && phase === 'idle') void start();
@@ -220,6 +223,25 @@ export function HistoryRecoveryModal({
               </button>
             </div>
           )}
+
+          {/*
+            The floor of the ladder, offered only from the two genuine dead ends: no device to restore
+            from, or the transfer failed. Never shown while a transfer might still succeed, because a
+            holder that is merely offline must not be written off.
+          */}
+          {(phase === 'error' || (phase === 'choosing' && recovery.candidates.length === 0)) && (
+            <div className="pt-2 border-t border-border space-y-3">
+              <p className="text-[10px] opacity-40 leading-relaxed">
+                Out of options? You can set up a new key and carry on without your older messages.
+              </p>
+              <button
+                onClick={() => setResetOpen(true)}
+                className="text-[10px] uppercase tracking-[0.2em] font-bold text-amber-700 underline hover:opacity-70 transition-opacity"
+              >
+                Start fresh without old messages
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="px-8 py-6 border-t border-border bg-[#F9F9F9]">
@@ -230,6 +252,17 @@ export function HistoryRecoveryModal({
           </p>
         </div>
       </div>
+
+      <HistoryResetDialog
+        userId={userId}
+        open={resetOpen}
+        onClose={() => setResetOpen(false)}
+        onReset={() => {
+          setResetOpen(false);
+          onRecovered?.();
+          onClose();
+        }}
+      />
     </div>
   );
 }

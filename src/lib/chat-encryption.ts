@@ -798,6 +798,84 @@ export class ChatEncryptionManager {
   }
 
   /**
+   * Establishes a NEW epoch after every unlock method has failed, deliberately abandoning history.
+   *
+   * The floor of the ladder. Without it a stranded key leaves the account permanently broken: every
+   * future message would keep being wrapped to a key nobody holds, with no way to establish a
+   * replacement. This trades "old messages lost" for "account works again".
+   *
+   * Records a HORIZON rather than deleting anything. `ChatTable` stores one shared copy per match, so
+   * deleting would destroy the peer's copy too — and the peer may still read it perfectly well. It also
+   * buys no confidentiality, since that ciphertext is already unreadable without the key. See
+   * docs/account-key-recovery.md §4.1.
+   *
+   * Callers MUST confirm with the user first and should re-authenticate: reset cannot reveal history,
+   * but it can destroy this account's access to it.
+   *
+   * @returns true when this device established the new epoch; false when another device won the race,
+   *          in which case the caller should re-read and try unlocking against that epoch instead.
+   */
+  async resetHistoryKey(): Promise<boolean> {
+    const identity = await this.loadIdentity();
+    if (!identity.deviceId || !identity.devicePublicKey) {
+      throw new Error('This device is not registered for encrypted chat yet.');
+    }
+
+    const state = await ChatApi.getHistoryState();
+    const currentEpoch = state.activeEpoch ?? 0;
+    const nextEpoch = currentEpoch + 1;
+
+    // Extractable on purpose: this key must be transferable to future devices and to other unlock
+    // methods, exactly like the epoch it replaces.
+    const pair = await generateKeyPair(true);
+    const pkcs8 = new Uint8Array(await subtle().exportKey('pkcs8', pair.privateKey));
+    const keyId = randomId();
+
+    const established = await ChatApi.establishHistoryEpoch({
+      epoch: nextEpoch,
+      expectedEpoch: currentEpoch,
+      keyId,
+      publicKey: await exportPublicKey(pair.publicKey),
+      // Every epoch after the first is a reset, so the backend requires a horizon. This is the line
+      // the UI renders as "earlier messages aren't available on this account".
+      horizonAt: currentEpoch > 0 ? Date.now() : undefined,
+      wraps: [
+        {
+          method: 'DEVICE',
+          wrapId: identity.deviceId,
+          wrappedKey: await wrapToDeviceKey(pkcs8, await exportPublicKey(identity.devicePublicKey), {
+            userId: this.userId,
+            epoch: nextEpoch,
+            method: 'DEVICE',
+            wrapId: identity.deviceId,
+          }),
+        },
+      ],
+    });
+
+    if (!established.established) return false;
+
+    const db = await openDatabase();
+    identity.historyKeyId = keyId;
+    identity.historyEpoch = nextEpoch;
+    identity.historyPrivateKey = pair.privateKey;
+    identity.historyPublicKey = pair.publicKey;
+    identity.historyPrivateKeyPkcs8 = pkcs8;
+    identity.historyFutureOnly = false;
+    await writeIdentity(db, identity);
+    this.identity = Promise.resolve(identity);
+
+    // Immediately add a second holder where possible, so the fresh epoch is not a single point of
+    // failure the way the one it replaced was.
+    try {
+      await this.addPasskeyUnlock();
+    } catch {
+      /* PRF is unavailable here; the device wrap above still stands */
+    }
+    return true;
+  }
+
+  /**
    * The active epoch's history horizon, if it has one.
    *
    * Set only on an epoch created by a reset. Messages older than this cannot be read on this account,

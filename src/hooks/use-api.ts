@@ -334,15 +334,26 @@ export function useChatMessages(matchId: string, recipientId?: string) {
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  /**
+   * Set when the account was reset. Messages older than this can never be opened again on this
+   * account, so the UI must show one marker rather than a "restore from another device" prompt that
+   * cannot possibly succeed.
+   */
+  const [historyHorizon, setHistoryHorizon] = useState<number | undefined>();
 
   const myId = currentUser?.id;
 
   const encryptionManager = useMemo(() => (myId ? new ChatEncryptionManager(myId) : null), [myId]);
 
   useEffect(() => {
-    if (encryptionManager) {
-      encryptionManager.initialize().catch(console.error);
-    }
+    if (!encryptionManager) return;
+    encryptionManager.initialize().catch(console.error);
+    // Best effort: without the horizon the UI simply falls back to offering recovery, which is the
+    // correct behaviour for an account that was never reset.
+    encryptionManager
+      .historyHorizon()
+      .then(setHistoryHorizon)
+      .catch(() => undefined);
   }, [encryptionManager]);
 
   const createMessageId = useCallback(() => {
@@ -547,6 +558,8 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     refetch: fetchMessages,
     /** True when at least one message needs a history key this device does not have yet. */
     hasUndecryptable: messages.some((m) => m.undecryptable),
+    /** Epoch start after a reset; messages older than this are permanently unreadable here. */
+    historyHorizon,
   };
 }
 

@@ -48,6 +48,30 @@ export function LockedMessageNotice({
 }
 
 /**
+ * Shown in place of the individually-locked bubbles once the account has a history horizon.
+ *
+ * A horizon means the account was reset: the key that could read those messages is gone, and no
+ * transfer will bring it back. One honest line is better than a wall of "restore from another device"
+ * prompts that can never succeed.
+ */
+export function HistoryHorizonMarker({ horizonAt }: { horizonAt: number }) {
+  const when = new Date(horizonAt).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  return (
+    <div className="flex items-start gap-3 p-5 border border-border bg-bg/40">
+      <Lock className="w-4 h-4 mt-0.5 opacity-40 shrink-0" aria-hidden="true" />
+      <p className="text-xs leading-relaxed opacity-60">
+        Messages from before {when} aren&rsquo;t available on this account. Your encryption key was
+        reset, so they can no longer be opened on any device.
+      </p>
+    </div>
+  );
+}
+
+/**
  * Conversation-level prompt shown once when any message in the thread is locked.
  *
  * Recovery is an ACCOUNT-level action, not a per-conversation one, so this deliberately reads as a
