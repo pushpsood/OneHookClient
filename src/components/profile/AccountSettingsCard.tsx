@@ -2,12 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { Mail, Fingerprint, Loader, Apple, Chrome, Settings } from 'lucide-react';
 import { getCognitoAuth } from '../../lib/cognito-auth';
 import { IdentityApi } from '../../api/identity';
+import { ChatEncryptionManager } from '../../lib/chat-encryption';
+import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
 import { requestGoogleIdToken } from '../../lib/google-identity';
 import { googleClientId } from '../../utils/env.config';
 
 export function AccountSettingsCard() {
   const { showToast } = useToast();
+  const { currentUser } = useAppStore();
   const [loading, setLoading] = useState<string | null>(null);
   
   const [email, setEmail] = useState('');
@@ -84,7 +87,27 @@ export function AccountSettingsCard() {
     try {
       setLoading('passkey');
       await getCognitoAuth().registerWebAuthn();
-      showToast('Passkey added successfully!', 'success');
+
+      // Register the new passkey as a way to UNLOCK message history, not just to sign in. This is what
+      // makes a second passkey worth adding: each one becomes an independent holder of the history key,
+      // so losing one provider (or one ecosystem) no longer costs the user their history. Best effort —
+      // PRF is absent on Windows 10, Firefox-on-Android and Chrome-profile authenticators, and the
+      // passkey is still perfectly good for sign-in there.
+      let unlockAdded = false;
+      if (currentUser?.id) {
+        try {
+          unlockAdded = Boolean(await new ChatEncryptionManager(currentUser.id).addPasskeyUnlock());
+        } catch {
+          /* this device may not hold the history key; the passkey still works for sign-in */
+        }
+      }
+
+      showToast(
+        unlockAdded
+          ? 'Passkey added. It can now also unlock your message history.'
+          : 'Passkey added successfully!',
+        'success'
+      );
     } catch (err: any) {
       showToast(err?.message || 'Could not register passkey.', 'error');
     } finally {

@@ -7,6 +7,8 @@ import { useToast } from '../common/Toast';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { SOCIALS } from '../common/socials';
+import { WEB_SIGNUP_ENABLED } from '../../config/signup.config';
+import { SignupInAppNotice } from './SignupInAppNotice';
 
 type Step = 'invite' | 'phone' | 'otp';
 
@@ -22,6 +24,15 @@ type Step = 'invite' | 'phone' | 'otp';
  * Cognito (the Login screen) and completes their profile.
  */
 export function RedeemInvite() {
+  // Accounts are created in the app, so the first device can put the history key into platform
+  // escrow. The flow below is retained because it is the same contract the native clients drive.
+  // See config/signup.config.ts and OneHookBackend/docs/account-key-recovery.md §3.
+  if (!WEB_SIGNUP_ENABLED) return <SignupInAppNotice />;
+
+  return <RedeemInviteFlow />;
+}
+
+function RedeemInviteFlow() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 

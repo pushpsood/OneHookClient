@@ -4,6 +4,7 @@ import { ChatEncryptionManager, type DeviceOverview } from '../../lib/chat-encry
 import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
 import { HistoryRecoveryModal } from '../chat/HistoryRecoveryModal';
+import { SecondPasskeyNudge } from './SecondPasskeyNudge';
 
 /**
  * Shows the devices registered for end-to-end encrypted chat (wire v2), the account-history key
@@ -132,6 +133,9 @@ export function DeviceManagementCard() {
           )}
         </div>
       </div>
+
+      {/* Redundancy nudge: shown only when this device can actually seal another wrap. */}
+      <SecondPasskeyNudge userId={userId} />
 
       {/* Device list */}
       <div className="space-y-4 pt-4 border-t border-border">
