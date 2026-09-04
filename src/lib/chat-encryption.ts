@@ -9,7 +9,9 @@ import {
   unwrapWithDeviceKey,
   unwrapWithSecret,
   wrapToDeviceKey,
+  wrapToSecret,
 } from './ahk-wrap';
+import { derivePasskeySecretWithId, isPrfSupported } from './passkey-prf';
 import {
   decryptV2,
   deviceTargetId,
@@ -735,6 +737,64 @@ export class ChatEncryptionManager {
         wrapId: targetDeviceId,
       }),
     });
+  }
+
+  /**
+   * Registers a passkey as an unlock method for the active epoch.
+   *
+   * This is the rung that makes a future device self-sufficient: because passkeys sync through iCloud
+   * Keychain and Google Password Manager, a brand-new device can re-derive the same PRF output and open
+   * the key with NO other device online. Every other method needs a second device or a native platform.
+   *
+   * Must be called on a device that already holds the key. Returns the credential id used, or null when
+   * PRF is unavailable — an ordinary outcome on Windows 10, Firefox-on-Android and Chrome-profile
+   * authenticators, where the caller keeps QR and reset as the available paths.
+   */
+  async addPasskeyUnlock(): Promise<string | null> {
+    const identity = await this.loadIdentity();
+    if (!identity.historyPrivateKeyPkcs8 || !identity.historyEpoch) {
+      throw new Error('This device does not hold your history key, so it cannot add a passkey unlock.');
+    }
+    if (!(await isPrfSupported())) return null;
+
+    const derived = await derivePasskeySecretWithId();
+    if (!derived) return null;
+
+    const epoch = identity.historyEpoch;
+    await ChatApi.putHistoryWrap({
+      epoch,
+      method: 'PRF',
+      wrapId: derived.credentialId,
+      wrappedKey: await wrapToSecret(identity.historyPrivateKeyPkcs8, derived.secret, {
+        userId: this.userId,
+        epoch,
+        method: 'PRF',
+        wrapId: derived.credentialId,
+      }),
+    });
+    return derived.credentialId;
+  }
+
+  /**
+   * Which unlock methods the active epoch currently has, so settings can show the account's real
+   * resilience and nudge toward a second passkey rather than guessing.
+   */
+  async historyUnlockMethods(): Promise<{
+    activeEpoch?: number;
+    escrow: number;
+    prf: number;
+    device: number;
+    prfSupportedHere: boolean;
+  }> {
+    const state = await ChatApi.getHistoryState();
+    const wraps = state.wraps ?? [];
+    return {
+      activeEpoch: state.activeEpoch,
+      escrow: wraps.filter((w) => w.method === 'ESCROW').length,
+      prf: wraps.filter((w) => w.method === 'PRF').length,
+      device: wraps.filter((w) => w.method === 'DEVICE').length,
+      prfSupportedHere: await isPrfSupported(),
+    };
   }
 
   /**
