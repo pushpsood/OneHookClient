@@ -4,11 +4,22 @@
  * WHY THIS EXISTS
  * ---------------
  * Wire v2 (see chat-wire-v2.ts) wraps every message to each member's long-lived "account-history"
- * key as well as to each registered device. The history PRIVATE key, however, only ever exists on
- * the device that won the first-write-wins race server-side (see `ensureDeviceRegistered` in
- * chat-encryption.ts). Every later device is therefore "future-only": it reads new messages but
- * cannot open history. This module moves the history private key from an existing device (SOURCE)
- * to a new one (TARGET) without the backend ever being able to read it.
+ * key as well as to each registered device. A device can read anything sent during its own lifetime
+ * with its own key, but messages sent BEFORE it existed could not be wrapped to it, so opening those
+ * requires the history PRIVATE key. This module moves that key from an existing device (SOURCE) to a
+ * new one (TARGET) without the backend ever being able to read it.
+ *
+ * WHERE THIS SITS IN THE LADDER
+ * -----------------------------
+ * This is the MANUAL FALLBACK, not the primary mechanism. The history key is versioned as an epoch
+ * carrying several independently encrypted copies ("wraps"), and `unlockHistoryKey` in
+ * chat-encryption.ts tries the cheaper rungs first: platform escrow (already present after an OS
+ * restore), a passkey via WebAuthn PRF (one biometric prompt, no second device), then a device wrap
+ * written by a device that already has access. QR is what remains when none of those is available —
+ * notably on platforms with no PRF support — and `resetHistoryKey` is the floor below it.
+ *
+ * It earns its place by working everywhere and needing nothing but two screens and a camera. What it
+ * costs is both devices present and awake, which is why it is tried last rather than first.
  *
  * THE FLOW (backend is a dumb router; see api/key-recovery.ts + the AppSync resolvers)
  * -----------------------------------------------------------------------------------

@@ -68,31 +68,26 @@ export function DeviceManagementCard() {
   );
 
   const historyLabel = useMemo(() => {
-    switch (overview?.historyStatus) {
-      case 'holding':
-        return {
-          text: 'This device holds your history key — it can restore past chats.',
-          tone: 'text-green-600',
-        };
-      case 'future-only':
-        return {
-          text: 'History key established on another device. New messages sync; older ones stay on the original device.',
-          tone: 'text-amber-600',
-        };
-      default:
-        return {
-          text: 'This device can’t open messages sent before it was added. If you use OneHook on another device, move the key across to read them here.',
-          tone: 'opacity-60',
-        };
+    // Two states only. The old copy for a "future-only" device said older messages "stay on the original
+    // device", which asserted a permanent limitation — and is now simply wrong: such a device can
+    // usually unlock with one biometric prompt via a synced passkey, or with a tap of approval from a
+    // device that already has the key. Telling the user it is impossible would cost them their history
+    // for no reason.
+    if (overview?.historyStatus === 'holding') {
+      return {
+        text: 'This device can open your full message history, and can pass that access to your other devices.',
+        tone: 'text-green-600',
+      };
     }
+    return {
+      text: 'This device can’t open messages sent before it was added — yet. Unlock it with a passkey, or approve this device from one that already has access.',
+      tone: 'text-amber-600',
+    };
   }, [overview?.historyStatus]);
 
-  // This device benefits from recovery unless it already holds the history key. A device that has not
-  // yet reconciled the account's canonical key ("none") is offered the same action as a "future-only"
-  // device: without this, a new device stuck in "none" has no visible way to start recovery at all,
-  // since the in-chat prompt only appears once a conversation with unreadable history loads. The
-  // modal itself gates every sub-case (already holding, or no other devices to restore from), so
-  // offering it here can never promise a transfer that would do nothing.
+  // Anything other than "holding" benefits from the unlock ladder, so the action is offered whenever
+  // this device cannot read history. The modal itself gates every sub-case (already holding, nothing to
+  // restore from), so offering it here can never promise something that would do nothing.
   const canRestoreHistory = overview != null && overview.historyStatus !== 'holding';
 
   return (
@@ -121,8 +116,9 @@ export function DeviceManagementCard() {
             // Second entry point into the same flow the chat prompt opens. Users who notice missing
             // history often come looking here first, and a transfer started from settings behaves
             // identically — it is an account-level key, not a per-conversation one. Shown for both
-            // "future-only" and "none" so a device that has not yet reconciled the account key still
-            // has a reachable way to start recovery.
+            // Shown for any device that cannot yet read history, so there is always a reachable way to
+            // start the unlock ladder — the in-chat prompt only appears once a conversation with
+            // unreadable history actually loads.
             <button
               onClick={() => setRecoveryOpen(true)}
               className="mt-1 py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
@@ -202,7 +198,7 @@ export function DeviceManagementCard() {
         userId={userId}
         open={recoveryOpen}
         onClose={() => setRecoveryOpen(false)}
-        // Re-read the registry so the status flips from "future-only" to "holding" straight away.
+        // Re-read the registry so the status flips to "holding" straight away.
         onRecovered={() => void load()}
       />
     </div>

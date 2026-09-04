@@ -45,18 +45,26 @@ import {
  *    (`POST /chat/devices`) under a random `deviceId`. A message is encrypted once with a random
  *    AES-256 content key, and that content key is wrapped separately for every registered device of
  *    BOTH members plus each member's account-history key. Every device registered at send time can
- *    read the message immediately. A later device is future-only until it securely obtains the
- *    account-history private key; this module never derives that private key from public account
- *    identifiers or backend-known material.
- *  - The first device to register may propose an account-history key. The server returns the
- *    canonical account-history key and whether the proposal was accepted. If accepted, this device
- *    keeps the private key and can decrypt history wraps. If a different device already owns it, this
- *    device keeps only the public key ("future-only") — it can wrap NEW messages to history but
- *    cannot decrypt history-wrapped messages it was not a recipient of.
- *  - A future-only device closes that gap through device-to-device history recovery: the holding
- *    device seals the history private key to a single-use key the new device mints and hands it over
- *    optically via QR (see key-recovery.ts). `exportRecoveryBundle` / `importRecoveryBundle` below
- *    are the two ends of that transfer.
+ *    therefore read the message immediately, with no transfer and no network round-trip.
+ *  - Messages sent BEFORE a device existed cannot be wrapped to it — nothing can retroactively add a
+ *    wrap to stored ciphertext. Reading those requires the account-history private key, which is the
+ *    only thing this module ever moves between devices. It is never derived from `userId`, the Cognito
+ *    subject, tokens, or any other backend-known value.
+ *  - The account-history key is versioned as an EPOCH, and an epoch carries several independently
+ *    encrypted copies of its private half ("wraps"), each openable by one unlock method: platform
+ *    escrow, a passkey via WebAuthn PRF, or a specific device's key. Registration claims nothing; an
+ *    epoch is established through an endpoint that REQUIRES a wrap set in the same call, so an account
+ *    can never hold a history key that nothing can unlock.
+ *  - A device without a wrap is not in a dead end. `unlockHistoryKey` walks the ladder — a device wrap
+ *    sealed to it, then PRF — and `resetHistoryKey` is the floor when every rung fails. QR transfer
+ *    (see key-recovery.ts, `exportRecoveryBundle` / `importRecoveryBundle`) is the manual fallback, no
+ *    longer the mechanism. Every path that obtains the key also PUBLISHES a wrap for the device that
+ *    obtained it, so the holder set grows and the account becomes progressively harder to strand.
+ *
+ * Historical note, because it explains several names here: the key used to be claimed at registration
+ * first-write-wins. That left one winner holding the only copy and every later device permanently
+ * "future-only" — able to wrap new messages to history but never to read it — with the account
+ * depending forever on that one device surviving. Both the claim and the `future-only` state are gone.
  *
  * Consequences of v1's removal that callers must respect:
  *  - Device registration is REQUIRED, not best-effort. With no fallback format, a device that failed
@@ -107,7 +115,17 @@ const STORE_NAME = 'identity-keys';
 const MAX_ENVELOPE_VERSION = 2;
 const PLATFORM = 'WEB';
 
-export type HistoryKeyStatus = 'none' | 'holding' | 'future-only';
+/**
+ * Whether this device can read message history.
+ *
+ * Deliberately BINARY. The old model had a third state, `future-only`, for a device that knew the
+ * history public key but had lost the registration race and could therefore never read history without
+ * a device-to-device transfer. That state no longer exists: a device either holds a wrap for the active
+ * epoch or it does not yet, and if it does not, the unlock ladder (platform escrow, passkey PRF, a
+ * device wrap, QR, reset) is how it gets one. Keeping a `future-only` label would tell users a
+ * limitation is permanent when it is usually one biometric prompt away from being resolved.
+ */
+export type HistoryKeyStatus = 'holding' | 'not-yet';
 
 interface StoredIdentity {
   userId: string;
@@ -115,8 +133,9 @@ interface StoredIdentity {
   deviceId?: string;
   devicePrivateKey?: CryptoKey;
   devicePublicKey?: CryptoKey;
-  // Account-history key. `historyPrivateKey` is present only when this device holds the canonical
-  // history private key; otherwise the key is "future-only" (public wrap target without decrypt).
+  // Account-history key. `historyPublicKey` is enough to wrap NEW messages to history, which every
+  // registered device can do. `historyPrivateKey` is present only once this device has unlocked a wrap
+  // for the active epoch, and is what lets it READ older messages.
   historyKeyId?: string;
   historyPrivateKey?: CryptoKey;
   historyPublicKey?: CryptoKey;
@@ -394,11 +413,9 @@ export class ChatEncryptionManager {
   async getDeviceOverview(): Promise<DeviceOverview> {
     const identity = await this.loadIdentity();
     const registry = await this.selfRegistryFresh();
-    const historyStatus: HistoryKeyStatus = identity.historyPrivateKey
-      ? 'holding'
-      : identity.historyKeyId
-        ? 'future-only'
-        : 'none';
+    // Holding the PRIVATE key is the only thing that decides this. Knowing the public key means only
+    // that this device can wrap NEW messages to history, which every registered device can do.
+    const historyStatus: HistoryKeyStatus = identity.historyPrivateKey ? 'holding' : 'not-yet';
     return {
       currentDeviceId: identity.deviceId,
       historyStatus,

@@ -218,20 +218,35 @@ export function KeyRecoveryResponder() {
                   className="recovery-qr-code"
                 />
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={saveQrAsImage}
-                  className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
-                  title="Save QR code as image for same-device transfer"
-                >
-                  <Download className="w-3 h-3" aria-hidden="true" />
-                  Save QR
-                </button>
-                {secondsLeft !== null && (
-                  <p className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-40">
-                    Expires in {secondsLeft}s
-                  </p>
-                )}
+              <div className="flex flex-col items-center gap-3 w-full">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={saveQrAsImage}
+                    className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
+                    title="Save the code as an image to open on another browser on this same computer"
+                  >
+                    <Download className="w-3 h-3" aria-hidden="true" />
+                    Save QR
+                  </button>
+                  {secondsLeft !== null && (
+                    <p className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-40">
+                      Expires in {secondsLeft}s
+                    </p>
+                  )}
+                </div>
+                {/*
+                  Stated explicitly because "save" reads as "backup", and acting on that belief is the
+                  one use that silently destroys data: the code is sealed to the receiving device's
+                  CURRENT keys, so clearing that browser's storage first makes the file permanently
+                  useless. Durable protection comes from the app's encrypted backup and from passkeys,
+                  not from this file.
+                */}
+                <p className="text-[10px] leading-relaxed text-amber-700 border border-amber-300 bg-amber-50 p-3">
+                  <strong className="font-black">Not a backup.</strong> This image only works for the
+                  device that asked, and only in the next couple of minutes. If that browser&rsquo;s data
+                  is cleared, the file stops working — it can&rsquo;t bring your history back later. Use
+                  it to finish a transfer now, then delete it.
+                </p>
               </div>
             </div>
           ) : (
@@ -275,8 +290,8 @@ export function KeyRecoveryResponder() {
           <p className="text-[10px] opacity-50 leading-relaxed flex items-start gap-2">
             <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
             Only a device you just picked can read this code, and only for the next couple of minutes.
-            The saved image works the same way — it&rsquo;s bound to your specific devices and expires automatically.
-            Decline if you did not start this.
+            A saved copy is no different — it is tied to that device&rsquo;s current keys, so it stops
+            working the moment they change. Decline if you did not start this.
           </p>
         </div>
       </div>
