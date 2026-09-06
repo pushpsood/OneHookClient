@@ -303,11 +303,11 @@ than maintaining independent URL values in deployment settings.
 ### **Stage builds and deployment**
 
 AWS CodeConnections sends the exact protected-`main` revision to a queued CodePipeline V2
-execution. AWS then deploys Gamma first and proves the immutable production cloud assembly before
-requesting release approval:
+execution. AWS builds and proves the immutable production cloud assembly before requesting release
+approval:
 
 ```text
-source → verify → build/deploy Gamma → smoke-test Gamma → production lint/test/build/synth
+source → verify → production lint/test/build/synth
        → AWS manual approval → deploy exact cloud assembly → smoke-test production
 ```
 

@@ -52,7 +52,6 @@ const GITHUB_BRANCH = 'main';
 
 const BUILDSPEC = {
   verify: 'infra/pipeline/buildspecs/verify.yml',
-  gammaDeploy: 'infra/pipeline/buildspecs/gamma-deploy.yml',
   smoke: 'infra/pipeline/buildspecs/smoke.yml',
   productionBuild: 'infra/pipeline/buildspecs/production-build.yml',
   productionDeploy: 'infra/pipeline/buildspecs/production-deploy.yml',
@@ -212,57 +211,6 @@ export class FrontendPipelineStack extends Stack {
               type: BuildEnvironmentVariableType.PLAINTEXT,
               value: sourceAction.variables.commitId,
             },
-          },
-        }),
-      ],
-    });
-
-    const gammaDeployRole = codeBuildRole(
-      'GammaDeploy',
-      'Builds Gamma and assumes only ap-south-1 frontend CDK bootstrap roles'
-    );
-    grantBootstrapAssume(
-      gammaDeployRole,
-      bootstrapRoleArns([PIPELINE_REGION], ['deploy', 'file-publishing'])
-    );
-    const gammaDeployProject = createProject(
-      'GammaDeploy',
-      BUILDSPEC.gammaDeploy,
-      gammaDeployRole,
-      Duration.minutes(45)
-    );
-    pipeline.addStage({
-      stageName: 'DeployGamma',
-      actions: [
-        new CodeBuildAction({
-          actionName: 'BuildAndDeployGamma',
-          project: gammaDeployProject,
-          input: sourceArtifact,
-          environmentVariables: {
-            CDK_DEFAULT_ACCOUNT: { value: ACCOUNTS.frontend },
-            CDK_DEFAULT_REGION: { value: PIPELINE_REGION },
-            VITE_APP_ENV: { value: 'production' },
-            VITE_BACKEND_STAGE: { value: 'gamma' },
-            SOURCE_COMMIT: { value: sourceAction.variables.commitId },
-          },
-        }),
-      ],
-    });
-
-    const gammaSmokeRole = codeBuildRole(
-      'GammaSmoke',
-      'Performs the public Gamma HTTP smoke test; has no deployment permissions'
-    );
-    const gammaSmokeProject = createProject('GammaSmoke', BUILDSPEC.smoke, gammaSmokeRole);
-    pipeline.addStage({
-      stageName: 'SmokeGamma',
-      actions: [
-        new CodeBuildAction({
-          actionName: 'SmokeTestGamma',
-          project: gammaSmokeProject,
-          input: sourceArtifact,
-          environmentVariables: {
-            SITE_URL: { value: 'https://gamma.onehook.club' },
           },
         }),
       ],
