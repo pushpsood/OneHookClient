@@ -5,9 +5,9 @@
  * app-client and identity-pool IDs are public routing identifiers; authorization remains enforced
  * by Cognito, JWT validation and IAM policies.
  *
- * Both gamma.onehook.club and onehook.club intentionally use `gamma` until the backend production
- * rollout is complete. Add a `prod` entry and change the production workflow selector only after
- * that backend has been deployed and validated.
+ * Local development and the production site (onehook.club) both intentionally use the `gamma`
+ * backend entry until the backend production rollout is complete. Add a `prod` entry and change the
+ * production build selector only after that backend has been deployed and validated.
  */
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';

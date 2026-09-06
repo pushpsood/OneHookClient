@@ -5,10 +5,6 @@ import { describe, expect, it } from 'vitest';
 import { FrontendPipelineStack } from '../../infra/pipeline/frontend-pipeline-stack';
 
 const root = new URL('../../', import.meta.url);
-const gammaDeploy = readFileSync(
-  new URL('infra/pipeline/buildspecs/gamma-deploy.yml', root),
-  'utf8'
-);
 const smoke = readFileSync(
   new URL('infra/pipeline/buildspecs/smoke.yml', root),
   'utf8'
@@ -40,7 +36,7 @@ function resourcesOf(
 }
 
 describe('AWS-native frontend deployment pipeline', () => {
-  it('uses a queued V2 pipeline with Gamma-first deployment and AWS production approval', () => {
+  it('uses a queued V2 pipeline with direct production build and AWS production approval', () => {
     const template = synthPipeline();
     const [, pipeline] = resourcesOf(template, 'AWS::CodePipeline::Pipeline')[0];
     const properties = pipeline.Properties as Record<string, unknown>;
@@ -51,15 +47,13 @@ describe('AWS-native frontend deployment pipeline', () => {
     expect(stages.map((stage) => stage.Name)).toEqual([
       'Source',
       'Verify',
-      'DeployGamma',
-      'SmokeGamma',
       'BuildProduction',
       'ApproveProduction',
       'DeployProduction',
       'SmokeProduction',
     ]);
 
-    const approvalAction = (stages[5].Actions as Array<Record<string, unknown>>)[0];
+    const approvalAction = (stages[3].Actions as Array<Record<string, unknown>>)[0];
     const actionType = approvalAction.ActionTypeId as Record<string, unknown>;
     expect(actionType.Category).toBe('Approval');
     expect(actionType.Provider).toBe('Manual');
@@ -110,12 +104,6 @@ describe('AWS-native frontend deployment pipeline', () => {
       return JSON.stringify(policy);
     };
 
-    const gamma = policyJson('GammaDeploy');
-    expect(gamma).toContain('deploy-role-851725215059-ap-south-1');
-    expect(gamma).toContain('file-publishing-role-851725215059-ap-south-1');
-    expect(gamma).not.toContain('lookup-role');
-    expect(gamma).not.toContain('us-east-1');
-
     const productionBuildPolicy = policyJson('ProductionBuild');
     expect(productionBuildPolicy).not.toContain('sts:AssumeRole');
     expect(productionBuildPolicy).not.toContain('cdk-hnb659fds');
@@ -133,7 +121,7 @@ describe('AWS-native frontend deployment pipeline', () => {
   }, 15_000);
 
   it('builds and synthesizes before approval, then deploys the exact assembly without rebuilding', () => {
-    for (const strictBuildspec of [gammaDeploy, smoke, productionBuild, productionDeploy]) {
+    for (const strictBuildspec of [smoke, productionBuild, productionDeploy]) {
       expect(strictBuildspec).toContain('shell: bash');
       expect(strictBuildspec).toContain('set -euo pipefail');
     }
