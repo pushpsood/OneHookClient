@@ -12,6 +12,7 @@ import {
   Play,
   Pause,
   Smile,
+  LogOut,
 } from 'lucide-react';
 import { ProfileApi } from '../../api/profile';
 import { StateApi } from '../../api/state';
@@ -20,7 +21,8 @@ import { useToast } from '../common/Toast';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { UserState } from '../../types';
 import { MediaImage } from '../common/MediaImage';
-import { useMediaSrc } from '../../utils/media-url';
+import { useMediaSrc, isMediaKey } from '../../utils/media-url';
+import { getCognitoAuth } from '../../lib/cognito-auth';
 
 const GENDER_OPTIONS = [
   { value: 'MALE', label: 'Man' },
@@ -147,11 +149,12 @@ type Step = 'basics' | 'photos' | 'prompts' | 'lifestyle';
 
 export function OnboardingWizard() {
   const navigate = useNavigate();
-  const { currentUser, setCurrentUser } = useAppStore();
+  const { currentUser, setCurrentUser, logout } = useAppStore();
   const { showToast } = useToast();
 
   const [step, setStep] = useState<Step>('basics');
   const [saving, setSaving] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [uploadingPhotoIndex, setUploadingPhotoIndex] = useState<number | null>(null);
   const [uploadingAudio, setUploadingAudio] = useState(false);
 
@@ -358,11 +361,15 @@ export function OnboardingWizard() {
         finalPrompts.push({ promptId: selectedPromptId, answer: promptAnswer.trim() });
       }
 
+      // A real upload returns either a pending/ key (fresh, not yet claimed by a profile save) or a
+      // media/ key (already stored). Anything else is placeholder sample data, and the fabricated key
+      // below exists only to keep that demo path shaped correctly — never fabricate over a real key, or
+      // the profile would reference an object that was never uploaded.
       const cleanedPictures = photos.map((p) =>
-        p.startsWith('media/') ? p : `media/${uid}/${crypto.randomUUID()}`
+        isMediaKey(p) ? p : `media/${uid}/${crypto.randomUUID()}`
       );
       const cleanedAudioPrompt = audioPromptKey
-        ? audioPromptKey.startsWith('media/')
+        ? isMediaKey(audioPromptKey)
           ? audioPromptKey
           : `media/${uid}/${crypto.randomUUID()}`
         : undefined;
@@ -441,7 +448,22 @@ export function OnboardingWizard() {
     }
   };
 
-  if (saving) return <LoadingSpinner fullScreen />;
+  const handleSkipAndLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await getCognitoAuth().logout();
+      logout();
+      showToast('You can continue your profile anytime. See you soon!', 'info');
+      navigate('/', { replace: true });
+    } catch (err) {
+      console.error('Logout error during onboarding skip:', err);
+      showToast('Could not sign out. Please try again.', 'error');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  if (saving || loggingOut) return <LoadingSpinner fullScreen />;
 
   return (
     <div className="min-h-screen bg-[#F7F7F7] flex items-center justify-center p-6 sm:p-12">
@@ -450,13 +472,27 @@ export function OnboardingWizard() {
 
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl w-full bg-white border border-border p-8 sm:p-12 space-y-10 shadow-sm">
         <div className="space-y-4">
-          <span className="text-[11px] uppercase tracking-[0.4em] font-black text-accent">Step {step === 'basics' ? '1' : step === 'photos' ? '2' : step === 'prompts' ? '3' : '4'} of 4</span>
-          <h1 className="text-4xl sm:text-5xl font-serif italic tracking-tighter uppercase">
-            {step === 'basics' && 'Create Your Profile'}
-            {step === 'photos' && 'Upload Your Photos'}
-            {step === 'prompts' && 'Showcase Your Voice'}
-            {step === 'lifestyle' && 'Your Lifestyle'}
-          </h1>
+          <div className="flex items-start justify-between">
+            <div className="space-y-4 flex-1">
+              <span className="text-[11px] uppercase tracking-[0.4em] font-black text-accent">Step {step === 'basics' ? '1' : step === 'photos' ? '2' : step === 'prompts' ? '3' : '4'} of 4</span>
+              <h1 className="text-4xl sm:text-5xl font-serif italic tracking-tighter uppercase">
+                {step === 'basics' && 'Create Your Profile'}
+                {step === 'photos' && 'Upload Your Photos'}
+                {step === 'prompts' && 'Showcase Your Voice'}
+                {step === 'lifestyle' && 'Your Lifestyle'}
+              </h1>
+            </div>
+            <button
+              type="button"
+              onClick={handleSkipAndLogout}
+              disabled={loggingOut}
+              className="flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:text-foreground border border-border hover:border-accent transition-all disabled:opacity-40"
+              title="Sign out and continue later"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline font-bold uppercase tracking-wider">Skip for now</span>
+            </button>
+          </div>
         </div>
 
         {/* ── STEP 1: BASICS ── */}
@@ -783,7 +819,7 @@ export function OnboardingWizard() {
                         Voice Note Ready
                       </div>
                       <div className="text-[10px] opacity-60 font-mono">
-                        {audioPromptKey.includes('media/') ? 'Uploaded to S3' : 'Voice Note Ready'}
+                        {isMediaKey(audioPromptKey) ? 'Uploaded to S3' : 'Voice Note Ready'}
                       </div>
                     </div>
                   </div>
