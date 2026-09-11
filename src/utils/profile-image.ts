@@ -59,7 +59,7 @@ export function getOptimizedProfileImageSrc(src?: string | null): string {
     return src;
   }
 
-  if (src.startsWith('media/')) {
+  if (src.startsWith('media/') || src.startsWith('pending/')) {
     const cached = getCachedMediaPreview(src);
     if (cached) return cached;
     return `https://onehook-profile-gamma-media.s3.ap-south-1.amazonaws.com/${src}`;

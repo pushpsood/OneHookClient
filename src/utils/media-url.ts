@@ -19,9 +19,18 @@ import {
 /** In-flight de-duplication so N <img> tags for the same key trigger a single request. */
 const inflight = new Map<string, Promise<string>>();
 
+/**
+ * Prefixes of private S3 object keys the backend will presign for us.
+ *
+ * `pending/` is where every upload is signed: the backend copies a claimed upload into `media/` when
+ * the profile is saved, so a freshly uploaded key is `pending/…` until then and `media/…` afterwards.
+ * Both must resolve, or a just-uploaded photo renders as a broken URL.
+ */
+const PRIVATE_KEY_PREFIXES = ['media/', 'pending/'] as const;
+
 /** True when `src` is a private S3 media object key that must be resolved via a presigned URL. */
 export function isMediaKey(src?: string | null): src is string {
-  return !!src && src.startsWith('media/');
+  return !!src && PRIVATE_KEY_PREFIXES.some((prefix) => src.startsWith(prefix));
 }
 
 /**

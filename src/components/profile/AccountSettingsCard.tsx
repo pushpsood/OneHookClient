@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Mail, Fingerprint, Loader, Apple, Chrome, Settings } from 'lucide-react';
+import { Mail, Fingerprint, Loader, Apple, Chrome, Settings, Trash2, AlertTriangle } from 'lucide-react';
 import { getCognitoAuth } from '../../lib/cognito-auth';
 import { IdentityApi } from '../../api/identity';
+import { ProfileApi } from '../../api/profile';
 import { ChatEncryptionManager } from '../../lib/chat-encryption';
 import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
@@ -18,6 +19,9 @@ export function AccountSettingsCard() {
   
   const [emailStep, setEmailStep] = useState<'input' | 'verify'>('input');
   const [emailOtp, setEmailOtp] = useState('');
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -110,6 +114,35 @@ export function AccountSettingsCard() {
       );
     } catch (err: any) {
       showToast(err?.message || 'Could not register passkey.', 'error');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleDeleteProfile = async () => {
+    if (deleteConfirmText !== 'DELETE') {
+      showToast('Type DELETE to confirm.', 'error');
+      return;
+    }
+    if (!currentUser?.id) {
+      showToast('No user ID found.', 'error');
+      return;
+    }
+    try {
+      setLoading('delete');
+      await ProfileApi.delete(currentUser.id);
+      showToast('Profile deletion initiated. You will be signed out shortly.', 'success');
+      // Sign out after a brief delay
+      setTimeout(async () => {
+        try {
+          await getCognitoAuth().logout();
+          window.location.href = '/';
+        } catch {
+          window.location.href = '/';
+        }
+      }, 2000);
+    } catch (err: any) {
+      showToast(err?.message || 'Could not delete profile.', 'error');
     } finally {
       setLoading(null);
     }
@@ -239,6 +272,64 @@ export function AccountSettingsCard() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Danger Zone - Delete Profile */}
+      <div className="pt-8 border-t border-destructive/20 space-y-4">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="w-4 h-4 text-destructive" />
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] font-black text-destructive">
+              Danger Zone
+            </div>
+            <p className="mt-1 text-xs opacity-50 leading-relaxed">
+              Permanently delete your profile, media, and all associated data. This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        {!showDeleteConfirm ? (
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="py-3 px-6 border-2 border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors text-[10px] uppercase tracking-[0.2em] font-black inline-flex items-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Profile
+          </button>
+        ) : (
+          <div className="space-y-4 p-6 border-2 border-destructive/30 bg-destructive/5">
+            <p className="text-sm font-medium text-destructive">
+              ⚠️ This will permanently delete your account, profile, photos, messages, and all data.
+            </p>
+            <p className="text-xs opacity-70">Type <span className="font-mono font-bold">DELETE</span> to confirm:</p>
+            <div className="flex gap-2 max-w-md">
+              <input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="DELETE"
+                className="field-input flex-1 min-w-0 font-mono"
+                autoFocus
+              />
+              <button
+                onClick={handleDeleteProfile}
+                disabled={loading === 'delete' || deleteConfirmText !== 'DELETE'}
+                className="py-2 px-4 bg-destructive text-white text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 shrink-0"
+              >
+                {loading === 'delete' ? <Loader className="w-3 h-3 animate-spin" /> : 'Confirm Delete'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteConfirmText('');
+                }}
+                disabled={loading === 'delete'}
+                className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-bg shrink-0 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
