@@ -37,8 +37,32 @@ export const StateApi = {
     return (sdkClient as any).upgradeUser({});
   },
 
+  /**
+   * Body-less onboarding completion, with a bounded retry for the one transient failure it has.
+   *
+   * The server refuses with **409** while the caller's PORTABLE sign-in credentials are not yet live
+   * in Cognito — the username → `preferred_username` mirror is applied asynchronously, so finishing
+   * the wizard within a second of registering can outrun it. The server repairs that in place, so a
+   * retry moments later normally succeeds.
+   *
+   * Retried here rather than surfaced immediately because it is not a user error and there is nothing
+   * for them to fix — showing a failure would be noise. Only 409 is retried: a 409 elsewhere in State
+   * can mean "this match is gone", which is NOT retryable, so the narrow scope matters. If it still
+   * fails the error propagates and the wizard explains the next step instead of dead-ending.
+   */
   completeOnboarding: async () => {
-    return (sdkClient as any).completeOnboarding({});
+    const RETRY_DELAYS_MS = [800, 2000, 4000];
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await (sdkClient as any).completeOnboarding({});
+      } catch (err: any) {
+        const status = err?.status ?? err?.$metadata?.httpStatusCode;
+        if (status !== 409 || attempt >= RETRY_DELAYS_MS.length) {
+          throw err;
+        }
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+      }
+    }
   },
 
   /** Authoritative connection state + entitlement for a user (the caller may only read their own). */

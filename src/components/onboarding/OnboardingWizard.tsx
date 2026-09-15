@@ -24,6 +24,35 @@ import { MediaImage } from '../common/MediaImage';
 import { useMediaSrc, isMediaKey } from '../../utils/media-url';
 import { getCognitoAuth } from '../../lib/cognito-auth';
 
+/** Step order, so the label and the progress bar cannot disagree about where the user is. */
+const STEP_INDEX: Record<string, number> = { basics: 0, photos: 1, prompts: 2, lifestyle: 3 };
+
+/**
+ * Selectable ages. The lower bound is the platform minimum, so an under-18 value cannot be entered at
+ * all rather than being rejected after the fact.
+ */
+const AGE_OPTIONS = Array.from({ length: 82 }, (_, i) => i + 18);
+
+/** Heights in cm, covering the adult range. Picked, not typed. */
+const HEIGHT_OPTIONS = Array.from({ length: 91 }, (_, i) => i + 130);
+
+/**
+ * Hometown suggestions only. A closed list would exclude most of the world, so this stays free text
+ * with a datalist: one tap for the common case, no dead end for anyone else.
+ */
+const HOMETOWN_SUGGESTIONS = [
+  'Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune',
+  'London', 'Manchester', 'Dublin', 'Paris', 'Berlin', 'Munich', 'Amsterdam',
+  'Madrid', 'Barcelona', 'Milan', 'Rome', 'Lisbon', 'Stockholm', 'Copenhagen',
+  'New York', 'Los Angeles', 'San Francisco', 'Chicago', 'Toronto', 'Vancouver',
+  'Mexico City', 'São Paulo', 'Buenos Aires', 'Bogotá', 'Lima', 'Santiago',
+  'Lagos', 'Nairobi', 'Cairo', 'Johannesburg', 'Cape Town', 'Accra', 'Casablanca',
+  'Dubai', 'Doha', 'Riyadh', 'Istanbul', 'Tel Aviv', 'Karachi', 'Lahore', 'Dhaka',
+  'Singapore', 'Hong Kong', 'Tokyo', 'Osaka', 'Seoul', 'Shanghai', 'Beijing',
+  'Bangkok', 'Jakarta', 'Kuala Lumpur', 'Manila', 'Hanoi',
+  'Sydney', 'Melbourne', 'Auckland',
+];
+
 const GENDER_OPTIONS = [
   { value: 'MALE', label: 'Man' },
   { value: 'FEMALE', label: 'Woman' },
@@ -442,7 +471,21 @@ export function OnboardingWizard() {
       showToast('Welcome to OneHook! Your profile is complete.', 'success');
       navigate('/app', { replace: true });
     } catch (err) {
-      showToast('Could not save profile. Please try again.', 'error');
+      // Distinguish "your account is still finishing setup" from a genuine save failure. A 409 here
+      // means only that the caller's sign-in credentials were not live in Cognito yet — nothing the
+      // user entered is wrong, and nothing is lost. StateApi.completeOnboarding already retried with
+      // backoff, so reaching this branch means it persisted (typically an Identity outage). Tell them
+      // what is happening and that retrying is the next step, rather than implying their profile was
+      // rejected — and keep them in the wizard with their input intact so "Finish" simply works later.
+      const status = (err as any)?.status ?? (err as any)?.$metadata?.httpStatusCode;
+      if (status === 409) {
+        showToast(
+          "Your account is still finishing setup — your profile is saved. Please tap Finish again in a few moments.",
+          'error'
+        );
+      } else {
+        showToast('Could not save profile. Please try again.', 'error');
+      }
     } finally {
       setSaving(false);
     }
@@ -474,13 +517,30 @@ export function OnboardingWizard() {
         <div className="space-y-4">
           <div className="flex items-start justify-between">
             <div className="space-y-4 flex-1">
-              <span className="text-[11px] uppercase tracking-[0.4em] font-black text-accent">Step {step === 'basics' ? '1' : step === 'photos' ? '2' : step === 'prompts' ? '3' : '4'} of 4</span>
+              <span className="text-[11px] uppercase tracking-[0.4em] font-black text-accent">Step {STEP_INDEX[step] + 1} of 4</span>
               <h1 className="text-4xl sm:text-5xl font-serif italic tracking-tighter uppercase">
                 {step === 'basics' && 'Create Your Profile'}
                 {step === 'photos' && 'Upload Your Photos'}
                 {step === 'prompts' && 'Showcase Your Voice'}
                 {step === 'lifestyle' && 'Your Lifestyle'}
               </h1>
+              {/* Visible progress: people tolerate a multi-step form far longer when they can see how
+                  much is left, and the reassurance that nothing is final removes the other main reason
+                  for stalling on a question. */}
+              <div className="flex items-center gap-1.5" role="progressbar" aria-valuemin={1} aria-valuemax={4}
+                   aria-valuenow={STEP_INDEX[step] + 1} aria-label={`Step ${STEP_INDEX[step] + 1} of 4`}>
+                {[0, 1, 2, 3].map((index) => (
+                  <span
+                    key={index}
+                    className={`h-[3px] flex-1 transition-colors ${
+                      index <= STEP_INDEX[step] ? 'bg-accent' : 'bg-border'
+                    }`}
+                  />
+                ))}
+              </div>
+              <p className="text-sm opacity-60 italic">
+                You can change any of this later from your profile.
+              </p>
             </div>
             <button
               type="button"
@@ -508,14 +568,20 @@ export function OnboardingWizard() {
                 />
               </Field>
               <Field label="Age *">
-                <input
-                  type="number"
-                  min={18}
-                  max={99}
+                {/* Chosen, not typed: a select cannot produce 5, 200 or an empty box, which removes a
+                    whole class of "check your age" errors that only appear after submitting. */}
+                <select
                   value={age}
                   onChange={(e) => setAge(Number(e.target.value))}
                   className="field-input"
-                />
+                  aria-label="Age"
+                >
+                  {AGE_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
 
@@ -594,21 +660,36 @@ export function OnboardingWizard() {
 
             <div className="grid sm:grid-cols-2 gap-4">
               <Field label="Hometown / Current City">
+                {/* Suggestions, not a closed list: any fixed set of cities would exclude most of the
+                    world. One tap for the common case, free text for everyone else. */}
                 <input
                   value={hometown}
                   onChange={(e) => setHometown(e.target.value)}
-                  placeholder="e.g. Mumbai, New York, London"
+                  placeholder="Start typing, or pick a suggestion"
                   className="field-input"
+                  list="hometown-suggestions"
+                  autoComplete="address-level2"
                 />
+                <datalist id="hometown-suggestions">
+                  {HOMETOWN_SUGGESTIONS.map((city) => (
+                    <option key={city} value={city} />
+                  ))}
+                </datalist>
               </Field>
               <Field label="Height (cm)">
-                <input
-                  type="number"
+                <select
                   value={height}
                   onChange={(e) => setHeight(e.target.value)}
-                  placeholder="e.g. 178"
                   className="field-input"
-                />
+                  aria-label="Height in centimetres"
+                >
+                  <option value="">Prefer not to say</option>
+                  {HEIGHT_OPTIONS.map((cm) => (
+                    <option key={cm} value={cm}>
+                      {cm} cm
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
 
