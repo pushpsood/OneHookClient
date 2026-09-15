@@ -35,13 +35,16 @@ export interface BackendDeploymentConfig {
 
 export const BACKEND_DEPLOYMENTS = {
   gamma: {
+    // Custom domains active after DNS delegation - 2026-09-14
     apiBaseUrl: 'https://api.gamma.onehook.club',
     graphqlUrl: 'https://graphql.api.gamma.onehook.club/graphql',
     chatbotUrl: 'https://onehook-chatbot-api.azurewebsites.net',
     cognitoRegion: 'ap-south-1',
-    cognitoUserPoolId: 'ap-south-1_pN10ldNoo',
-    cognitoClientId: '2rt0v69jq2acjaboom84cinign',
-    cognitoIdentityPoolId: 'ap-south-1:8bfabd43-a446-4b8d-9201-b250cf3b62ef',
+    // Fresh deployment 2026-09-14 - new Cognito user pool after backend rebuild
+    cognitoUserPoolId: 'ap-south-1_7cHT1Kxr6',
+    cognitoClientId: '4h10ahqrnoqt7755cofj2dq9eo',
+    // OneHook-Shared-gamma output `LivenessIdentityPoolId` (recreated by the 2026-09-14 rebuild).
+    cognitoIdentityPoolId: 'ap-south-1:96055816-0ada-487f-86a1-58577bdebb25',
     // No Cognito Hosted UI domain is provisioned yet; direct password/OTP/WebAuthn auth still works.
     cognitoDomain: '',
     // Mirrors OneHookBackend infra/config/auth.ts (gamma).
