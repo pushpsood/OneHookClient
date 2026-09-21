@@ -14,7 +14,7 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { useToast } from '../../src/components/common/Toast';
 import { MediaImage } from '../components/common/MediaImage';
 import { DiscoveryView } from '../features/discovery/DiscoveryView';
-import { MatchesView } from '../features/matches/MatchesView';
+import { ChatView } from '../features/chat/ChatView';
 import { ProfileView } from '../features/profile/ProfileView';
 import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
 import { useHistoryUnlock } from '../hooks/use-history-unlock';
@@ -260,8 +260,8 @@ export function AppContent() {
             />
           )}
           {appState === 'MATCHES' && (
-            <MatchesView
-              key="matches"
+            <ChatView
+              key="chat"
               currentUser={currentUser}
               userState={userState}
               activeMatchId={activeMatchId}

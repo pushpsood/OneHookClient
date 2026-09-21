@@ -143,21 +143,21 @@ describe('Profile Moderation: Text Field Transitions', () => {
       maxDistanceKm: 50,
       minAge: 18,
       maxAge: 40,
-      genders: ['FEMALE'],
+      interestedInGenders: ['FEMALE'],
     };
 
     const targetPrefs = {
       maxDistanceKm: 50,
       minAge: 18,
       maxAge: 40,
-      genders: ['FEMALE'],
+      interestedInGenders: ['FEMALE'],
     };
 
     const prefsChanged =
       targetPrefs.maxDistanceKm !== currentPrefs.maxDistanceKm ||
       targetPrefs.minAge !== currentPrefs.minAge ||
       targetPrefs.maxAge !== currentPrefs.maxAge ||
-      JSON.stringify(targetPrefs.genders) !== JSON.stringify(currentPrefs.genders);
+      JSON.stringify(targetPrefs.interestedInGenders) !== JSON.stringify(currentPrefs.interestedInGenders);
 
     expect(prefsChanged).toBe(false);
   });

@@ -39,7 +39,6 @@ function RedeemInviteFlow() {
   const [step, setStep] = useState<Step>('invite');
   const [inviteCode, setInviteCode] = useState('');
   const [phone, setPhone] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
@@ -129,7 +128,8 @@ function RedeemInviteFlow() {
         phone.trim(),
         otp.trim(),
         inviteCode.trim(),
-        displayName.trim() || undefined
+        // Name is collected during onboarding, so registration does not ask for it twice.
+        undefined
       );
       showToast('Account created! Please sign in to continue.', 'success');
       navigate('/login', { replace: true });
@@ -182,10 +182,10 @@ function RedeemInviteFlow() {
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                className="p-4 bg-red-50 border border-red-200 rounded flex items-start gap-3"
+                className="p-4 bg-red-50 border border-red-200 rounded flex items-center justify-center gap-3"
               >
                 <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700">{error}</p>
+                <p className="text-sm text-red-700 text-center">{error}</p>
               </motion.div>
             )}
 
@@ -204,9 +204,9 @@ function RedeemInviteFlow() {
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                   disabled={loading}
-                  className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed uppercase font-mono text-sm tracking-wider"
+                  className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed uppercase font-mono text-sm tracking-wider text-center"
                 />
-                <p className="text-xs opacity-40 italic">
+                <p className="text-xs opacity-40 italic text-center">
                   Your invite code comes from an existing member
                 </p>
               </div>
@@ -217,7 +217,7 @@ function RedeemInviteFlow() {
                 <div className="space-y-2">
                   <label
                     htmlFor="phone"
-                    className="block text-xs font-bold uppercase tracking-widest opacity-60"
+                    className="block text-center text-xs font-bold uppercase tracking-widest opacity-60"
                   >
                     Phone Number
                   </label>
@@ -228,24 +228,7 @@ function RedeemInviteFlow() {
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     disabled={loading}
-                    className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label
-                    htmlFor="displayName"
-                    className="block text-xs font-bold uppercase tracking-widest opacity-60"
-                  >
-                    Display Name (optional)
-                  </label>
-                  <input
-                    id="displayName"
-                    type="text"
-                    placeholder="The name people will see"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    disabled={loading}
-                    className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed text-center"
                   />
                 </div>
               </>

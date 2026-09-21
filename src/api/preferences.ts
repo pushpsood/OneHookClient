@@ -21,7 +21,7 @@ export const PreferencesApi = {
       minAge: prefs.minAge,
       maxAge: prefs.maxAge,
       maxDistanceKm: prefs.maxDistanceKm,
-      genders: prefs.genders,
+      interestedInGenders: prefs.interestedInGenders,
     });
   },
 };

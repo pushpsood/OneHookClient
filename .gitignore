@@ -61,3 +61,7 @@ test-*.js
 
 # Local AI tooling config (not part of the app)
 .ai/
+
+# Local agent/IDE config. Ignored in OneHookBackend and OneHookPlatform too — it is
+# per-developer tooling state, not project configuration.
+.kiro/

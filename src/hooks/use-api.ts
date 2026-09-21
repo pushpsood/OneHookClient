@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ApiError } from '../lib/api-client';
 import { useAppStore } from '../store/app-store';
 import {
@@ -18,6 +18,20 @@ import { MatchingApi } from '../api/matching';
 import { ChatMessagingApi } from '../api/chat';
 import { ChatEncryptionManager } from '../lib/chat-encryption';
 import { isUndecryptableMessageError } from '../lib/chat-wire-v2';
+import {
+  AttachmentObjectUrlCache,
+  putCiphertext,
+  type ProgressCallback,
+} from '../lib/attachment-transport';
+import {
+  assertCiphertextWithinLimit,
+  encodeKeyMaterial,
+  encryptAttachment,
+  frameAttachment,
+  type AttachmentEnvelope,
+  type AttachmentKind,
+} from '../lib/chat-attachments';
+import { ChatApi } from '../api/chat';
 import {
   Coordinates,
   isValidCoordinate,
@@ -324,6 +338,48 @@ export function useSwipe() {
 }
 
 /**
+ * A locally-selected or recorded attachment, ready to encrypt and send. `blob` is the PLAINTEXT file;
+ * it is encrypted per-attachment inside {@link useChatMessages.sendAttachment} and never leaves the
+ * device in the clear. Metadata (dimensions/duration/waveform/thumbnail) is best-effort and drives
+ * only how the bubble renders.
+ */
+export interface OutgoingAttachment {
+  blob: Blob;
+  kind: AttachmentKind;
+  mime: string;
+  name: string;
+  size: number;
+  durationMs?: number;
+  width?: number;
+  height?: number;
+  waveform?: number[];
+  thumbnail?: string;
+  caption?: string;
+}
+
+/** Phase of an outgoing attachment: uploading its ciphertext, sending the message, done, or failed. */
+export type AttachmentPhase = 'uploading' | 'sending' | 'failed';
+
+/** Per-message transfer state the bubble reads to draw a progress bar or a retry affordance. */
+export interface AttachmentTransferState {
+  phase: AttachmentPhase;
+  /** 0..1 upload fraction; meaningful during the `uploading` phase. */
+  progress: number;
+}
+
+/**
+ * Everything needed to (re)run an outgoing attachment. The ciphertext and key material are computed
+ * once and reused across retries — re-encrypting would waste work and, worse, a retry that produced a
+ * new key/nonce could leave a half-uploaded object under a now-orphaned key.
+ */
+interface PendingAttachmentUpload {
+  attachment: OutgoingAttachment;
+  ciphertext: Uint8Array;
+  contentKey: string;
+  nonce: string;
+}
+
+/**
  * Chat messaging hook backed by AppSync GraphQL. Reads history via `getMessages`,
  * sends via `sendMessage`, and live-updates via the `onNewMessage` subscription.
  * Delivery/read receipts are premium-only mutations; failures there are ignored
@@ -341,6 +397,21 @@ export function useChatMessages(matchId: string, recipientId?: string) {
    */
   const [historyHorizon, setHistoryHorizon] = useState<number | undefined>();
 
+  /**
+   * Per-conversation object-URL cache for decrypted attachments, plus the per-message transfer state
+   * and the retry payloads for in-flight sends. The cache instance is stable for the life of this
+   * conversation and revokes every decrypted blob when the conversation changes or unmounts (see the
+   * effect below) — decrypted media must not outlive the thread that showed it.
+   */
+  const attachmentCacheRef = useRef<AttachmentObjectUrlCache | null>(null);
+  if (attachmentCacheRef.current === null) {
+    attachmentCacheRef.current = new AttachmentObjectUrlCache();
+  }
+  const [attachmentTransfers, setAttachmentTransfers] = useState<
+    Record<string, AttachmentTransferState>
+  >({});
+  const pendingUploadsRef = useRef<Map<string, PendingAttachmentUpload>>(new Map());
+
   const myId = currentUser?.id;
 
   const encryptionManager = useMemo(() => (myId ? new ChatEncryptionManager(myId) : null), [myId]);
@@ -355,6 +426,14 @@ export function useChatMessages(matchId: string, recipientId?: string) {
       .then(setHistoryHorizon)
       .catch(() => undefined);
   }, [encryptionManager]);
+
+  // Revoke every decrypted-attachment object URL when the conversation changes or the view unmounts.
+  // Without this, plaintext media (whole decrypted videos) would linger in memory for the session —
+  // both a leak and a privacy problem. The cache instance itself is reused; only its contents go.
+  useEffect(() => {
+    const cache = attachmentCacheRef.current;
+    return () => cache?.revokeAll();
+  }, [matchId]);
 
   const createMessageId = useCallback(() => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -509,6 +588,165 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     [createMessageId, myId, matchId, encryptionManager, recipientId]
   );
 
+  /**
+   * Runs one outgoing-attachment attempt for an already-registered pending upload. Shared by the first
+   * send and by retry so the two can never drift apart.
+   *
+   * A FRESH upload URL (hence a fresh object key) is requested on every attempt: the presigned URL is
+   * short-lived, so a retry after a failure must not reuse a possibly-expired one. Because the object
+   * key can therefore change between attempts, the envelope — and the optimistic message body that
+   * carries it — is rebuilt each time, and the local blob is re-seeded into the cache under the new key
+   * so the sender's own bubble keeps rendering without a download.
+   */
+  const runAttachmentUpload = useCallback(
+    async (messageId: string): Promise<void> => {
+      const cache = attachmentCacheRef.current;
+      const pending = pendingUploadsRef.current.get(messageId);
+      if (!encryptionManager || !recipientId || !matchId || !cache || !pending) return;
+
+      const { attachment, ciphertext, contentKey, nonce } = pending;
+      setAttachmentTransfers((prev) => ({
+        ...prev,
+        [messageId]: { phase: 'uploading', progress: 0 },
+      }));
+      setMessages((prev) =>
+        prev.map((m) => (m.messageId === messageId ? { ...m, status: MessageStatus.Sending } : m))
+      );
+
+      try {
+        // Size is validated before this call (see sendAttachment); guard again defensively so a
+        // retry can never slip an over-cap object past the signed-length contract.
+        assertCiphertextWithinLimit(ciphertext.byteLength);
+        const { objectKey, uploadUrl } = await ChatApi.getMediaUploadUrl(
+          matchId,
+          ciphertext.byteLength,
+          attachment.kind
+        );
+
+        const envelope: AttachmentEnvelope = {
+          v: 1,
+          kind: attachment.kind,
+          objectKey,
+          contentKey,
+          nonce,
+          mime: attachment.mime,
+          name: attachment.name,
+          size: attachment.size,
+        };
+        if (attachment.durationMs != null) envelope.durationMs = attachment.durationMs;
+        if (attachment.width != null) envelope.width = attachment.width;
+        if (attachment.height != null) envelope.height = attachment.height;
+        if (attachment.waveform?.length) envelope.waveform = attachment.waveform;
+        if (attachment.thumbnail) envelope.thumbnail = attachment.thumbnail;
+        if (attachment.caption) envelope.caption = attachment.caption;
+
+        const framed = frameAttachment(envelope);
+        cache.seedLocal(objectKey, attachment.blob);
+        // Reflect the real envelope in the optimistic bubble so it renders the attachment immediately.
+        setMessages((prev) =>
+          prev.map((m) => (m.messageId === messageId ? { ...m, ciphertext: framed } : m))
+        );
+
+        const onProgress: ProgressCallback = (fraction) =>
+          setAttachmentTransfers((prev) => ({
+            ...prev,
+            [messageId]: { phase: 'uploading', progress: fraction },
+          }));
+        await putCiphertext(uploadUrl, ciphertext, onProgress);
+
+        setAttachmentTransfers((prev) => ({
+          ...prev,
+          [messageId]: { phase: 'sending', progress: 1 },
+        }));
+        const messageCiphertext = await encryptionManager.encryptMessage(
+          recipientId,
+          matchId,
+          framed
+        );
+        const sent = await ChatMessagingApi.sendMessage(matchId, myId || 'me', messageCiphertext);
+
+        // Swap to the server message id so the onNewMessage echo of our own send dedupes against this
+        // bubble instead of appending a duplicate — the same reason plain sendMessage swaps the id.
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === messageId
+              ? {
+                  ...m,
+                  messageId: sent.messageId,
+                  timestamp: sent.timestamp,
+                  status: MessageStatus.Sent,
+                }
+              : m
+          )
+        );
+        pendingUploadsRef.current.delete(messageId);
+        // Drop the transfer entry entirely: a sent attachment renders as a normal bubble, no overlay.
+        setAttachmentTransfers((prev) => {
+          const next = { ...prev };
+          delete next[messageId];
+          return next;
+        });
+      } catch (err) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.messageId === messageId ? { ...m, status: MessageStatus.Failed } : m
+          )
+        );
+        setAttachmentTransfers((prev) => ({
+          ...prev,
+          [messageId]: { phase: 'failed', progress: prev[messageId]?.progress ?? 0 },
+        }));
+        throw err;
+      }
+    },
+    [encryptionManager, recipientId, matchId, myId]
+  );
+
+  const sendAttachment = useCallback(
+    async (attachment: OutgoingAttachment): Promise<void> => {
+      if (!encryptionManager || !recipientId || !matchId) return;
+
+      const bytes = new Uint8Array(await attachment.blob.arrayBuffer());
+      const { ciphertext, contentKey, nonce } = await encryptAttachment(bytes);
+      // Reject over-size BEFORE the optimistic bubble appears, so the user sees a clean error rather
+      // than a bubble that starts uploading and then fails.
+      assertCiphertextWithinLimit(ciphertext.byteLength);
+      const keyMaterial = encodeKeyMaterial(contentKey, nonce);
+
+      const messageId = createMessageId();
+      pendingUploadsRef.current.set(messageId, {
+        attachment,
+        ciphertext,
+        contentKey: keyMaterial.contentKey,
+        nonce: keyMaterial.nonce,
+      });
+
+      // Optimistic bubble: an empty body until runAttachmentUpload swaps in the framed envelope once
+      // the object key exists. The transfer state (set inside runAttachmentUpload) is what the bubble
+      // shows in the meantime, so an empty body never renders as a blank text bubble.
+      const optimistic: ChatMessageDTO = {
+        messageId,
+        matchId,
+        senderId: 'me',
+        ciphertext: '',
+        timestamp: Date.now(),
+        status: MessageStatus.Sending,
+      };
+      setMessages((prev) => [...prev, optimistic]);
+
+      await runAttachmentUpload(messageId);
+    },
+    [encryptionManager, recipientId, matchId, createMessageId, runAttachmentUpload]
+  );
+
+  /** Re-attempts a failed attachment send using its retained ciphertext + key material. */
+  const retryAttachment = useCallback(
+    async (messageId: string): Promise<void> => {
+      await runAttachmentUpload(messageId);
+    },
+    [runAttachmentUpload]
+  );
+
   const markAsDelivered = useCallback(
     async (messageId: string) => {
       try {
@@ -553,6 +791,12 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     loading,
     error,
     sendMessage,
+    sendAttachment,
+    retryAttachment,
+    /** Per-message upload/send state for attachment bubbles (progress + retry affordance). */
+    attachmentTransfers,
+    /** Per-conversation cache resolving attachment envelopes to decrypted object URLs. */
+    attachmentCache: attachmentCacheRef.current,
     markAsDelivered,
     markAsRead,
     refetch: fetchMessages,

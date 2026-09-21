@@ -13,11 +13,14 @@ import { OnboardingWizard } from './components/onboarding/OnboardingWizard';
 import { Landing } from './components/Landing';
 import { Privacy } from './components/legal/Privacy';
 import { Terms } from './components/legal/Terms';
+import { Pricing } from './components/legal/Pricing';
 import { Contact } from './components/legal/Contact';
 import { Careers } from './components/careers/Careers';
 import { getCognitoAuth, initializeCognitoAuth } from './lib/cognito-auth';
 import { config } from './utils/env.config';
 import { AppContent } from './app/AppContent';
+import { FinishSetupInAppNotice } from './components/auth/FinishSetupInAppNotice';
+import { useRegistrationPrerequisites } from './hooks/use-registration-prerequisites';
 
 if (config.cognitoUserPoolId && config.cognitoClientId) {
   initializeCognitoAuth({
@@ -82,16 +85,38 @@ function OnboardedRoute({ children }: { children: ReactNode }) {
  * connection state from the State service is no longer ONBOARDING) is redirected into the app, so
  * they can't re-open — and accidentally re-submit — the wizard. The authoritative state is fetched
  * if it isn't already in the store, and we wait for it before deciding to avoid flashing the wizard.
+ *
+ * <p>It ALSO verifies the guarantees that made sign-up app-only. Sign-up is native so that every
+ * account starts with a copy of its history key in platform escrow plus a passkey (PRF) wrap — two
+ * independent holders — and the web app can create neither. Letting a half-registered user finish
+ * onboarding here would leave that account with one holder on a platform with no escrow: silent until
+ * the device is lost, then unrecoverable. So the wizard renders only once those holders exist, and
+ * otherwise the user is pointed back to the app. Fail-CLOSED, matching {@link OnboardedRoute}.
  */
 function OnboardingGuard({ children }: { children: ReactNode }) {
   const userState = useAppStore((state) => state.userState);
   const { loading } = useUserState();
+  const prerequisites = useRegistrationPrerequisites();
 
   if (!userState && loading) {
     return <LoadingSpinner fullScreen />;
   }
   if (userState && userState.state !== UserState.ONBOARDING) {
     return <Navigate to="/app" replace />;
+  }
+  // Don't flash either the wizard or the notice before the account's key state is known.
+  if (prerequisites.loading) {
+    return <LoadingSpinner fullScreen />;
+  }
+  if (!prerequisites.satisfied) {
+    return (
+      <FinishSetupInAppNotice
+        missing={prerequisites.missing}
+        onRetry={prerequisites.recheck}
+        retrying={prerequisites.loading}
+        checkFailed={prerequisites.checkFailed}
+      />
+    );
   }
   return <>{children}</>;
 }
@@ -157,6 +182,7 @@ export default function App() {
             />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/terms" element={<Terms />} />
+            <Route path="/pricing" element={<Pricing />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/careers" element={<Careers />} />
             <Route

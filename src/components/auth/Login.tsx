@@ -5,6 +5,7 @@ import { AlertCircle, Loader } from 'lucide-react';
 import { getCognitoAuth } from '../../lib/cognito-auth';
 import { useToast } from '../common/Toast';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
+import { PhoneNumberInput } from '../common/PhoneNumberInput';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { SOCIALS } from '../common/socials';
@@ -22,6 +23,20 @@ export function Login() {
   const setAuthenticated = useAppStore((state) => state.setAuthenticated);
 
   const [identifier, setIdentifier] = useState('');
+  /**
+   * Phone and email are kept as separate modes rather than one "phone or email" box. That box left a
+   * global audience guessing whether to type a country code; a dedicated phone mode owns a country
+   * selector and per-country length instead.
+   */
+  const [identifierMode, setIdentifierMode] = useState<'phone' | 'email'>('phone');
+  const [phone, setPhone] = useState<{ e164: string; isValid: boolean }>({ e164: '', isValid: false });
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  /**
+   * The identifier actually submitted, kept because later steps (resend, verify, password reset) must
+   * reuse the exact value Cognito was given — in phone mode that is a normalised E.164 string that
+   * exists in neither input box.
+   */
+  const [submittedIdentifier, setSubmittedIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -32,8 +47,28 @@ export function Login() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const isEmail = identifier.includes('@');
-  const identifierLabel = isEmail ? 'email' : 'phone';
+  const identifierLabel = identifierMode === 'phone' ? 'phone' : 'email';
+
+  /**
+   * The Cognito username for the active mode: a normalised E.164 number, or the typed email.
+   * Returns null when the input is incomplete, having already surfaced the reason in place.
+   */
+  const resolveIdentifier = (): string | null => {
+    if (identifierMode === 'phone') {
+      if (!phone.isValid) {
+        setPhoneTouched(true);
+        setError('Check your phone number and try again.');
+        return null;
+      }
+      return phone.e164;
+    }
+    const trimmed = identifier.trim();
+    if (!trimmed) {
+      setError('Please enter your email address');
+      return null;
+    }
+    return trimmed;
+  };
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -56,9 +91,12 @@ export function Login() {
     setLoading(true);
 
     try {
-      if (!identifier.trim()) {
-        throw new Error('Please enter your phone number or email');
+      const submitted = resolveIdentifier();
+      if (!submitted) {
+        setLoading(false);
+        return;
       }
+      setSubmittedIdentifier(submitted);
 
       const cognitoAuth = getCognitoAuth();
 
@@ -66,7 +104,7 @@ export function Login() {
         if (!password.trim()) {
           throw new Error('Please enter your password');
         }
-        const response = await cognitoAuth.loginWithPassword(identifier.trim(), password);
+        const response = await cognitoAuth.loginWithPassword(submitted, password);
         if (isSignedInStep(response)) {
           setAuthenticated(true);
           navigate('/auth/setup', { replace: true });
@@ -83,7 +121,7 @@ export function Login() {
       }
 
       // One-time-code flow (phone or email).
-      const response = await cognitoAuth.requestOtp(identifier.trim());
+      const response = await cognitoAuth.requestOtp(submitted);
       if (isSignedInStep(response)) {
         setAuthenticated(true);
         navigate('/auth/setup', { replace: true });
@@ -139,15 +177,12 @@ export function Login() {
 
   const handleForgotPassword = async () => {
     setError(null);
-    if (!identifier.trim()) {
-      const msg = 'Enter your phone or email first';
-      setError(msg);
-      showToast(msg, 'error');
-      return;
-    }
+    const target = resolveIdentifier();
+    if (!target) return;
+    setSubmittedIdentifier(target);
     setLoading(true);
     try {
-      await getCognitoAuth().requestPasswordReset(identifier.trim());
+      await getCognitoAuth().requestPasswordReset(target);
       setStep('SET_PASSWORD');
       showToast(`Verification code sent to your ${identifierLabel}.`, 'info');
     } catch (err) {
@@ -167,7 +202,7 @@ export function Login() {
       if (password.length < 8) throw new Error('Password must be at least 8 characters');
       if (password !== confirmPassword) throw new Error('Passwords do not match');
       setLoading(true);
-      await getCognitoAuth().confirmPasswordSet(identifier.trim(), code.trim(), password);
+      await getCognitoAuth().confirmPasswordSet(submittedIdentifier, code.trim(), password);
       showToast('Password set. Sign in with your new password.', 'success');
       setUsePassword(true);
       setStep('IDENTIFIER');
@@ -214,12 +249,12 @@ export function Login() {
   };
 
   const handleResendOtp = async () => {
-    if (resendCooldown > 0 || resendLoading || !identifier.trim()) return;
+    if (resendCooldown > 0 || resendLoading || !submittedIdentifier) return;
     setError(null);
     setResendLoading(true);
     try {
       const cognitoAuth = getCognitoAuth();
-      await cognitoAuth.requestOtp(identifier.trim());
+      await cognitoAuth.requestOtp(submittedIdentifier);
       setCode('');
       setResendCooldown(60);
       showToast(`Verification code sent to your ${identifierLabel}!`, 'info');
@@ -242,6 +277,8 @@ export function Login() {
     }
     setStep('IDENTIFIER');
     setIdentifier('');
+    setSubmittedIdentifier('');
+    setPhoneTouched(false);
     setPassword('');
     setCode('');
     setConfirmPassword('');
@@ -296,25 +333,47 @@ export function Login() {
 
             {step === 'IDENTIFIER' ? (
               <>
-                <div className="space-y-2">
-                  <label
-                    htmlFor="identifier"
-                    className="block text-center text-xs font-bold uppercase tracking-widest opacity-60"
-                  >
-                    Phone or Email
-                  </label>
-                  <input
-                    id="identifier"
-                    type="text"
-                    inputMode="email"
-                    autoComplete="username"
-                    placeholder="+1234567890 or you@example.com"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
+                {identifierMode === 'phone' ? (
+                  <PhoneNumberInput
+                    label="Phone number"
+                    onChange={setPhone}
                     disabled={loading}
-                    className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    showError={phoneTouched}
+                    onEnter={() => void handleIdentifierSubmit(new Event('submit') as unknown as React.FormEvent)}
+                    autoFocus
                   />
-                </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="identifier"
+                      className="block text-center text-xs font-bold uppercase tracking-widest opacity-60"
+                    >
+                      Email
+                    </label>
+                    <input
+                      id="identifier"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="username"
+                      placeholder="you@example.com"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      disabled={loading}
+                      className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    />
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIdentifierMode((mode) => (mode === 'phone' ? 'email' : 'phone'));
+                    setError(null);
+                  }}
+                  className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity"
+                >
+                  {identifierMode === 'phone' ? 'Use email instead' : 'Use phone number instead'}
+                </button>
 
                 {usePassword && (
                   <div className="space-y-2">
@@ -339,7 +398,11 @@ export function Login() {
 
                 <button
                   type="submit"
-                  disabled={loading || !identifier.trim() || (usePassword && !password.trim())}
+                  disabled={
+                    loading ||
+                    (identifierMode === 'phone' ? !phone.isValid : !identifier.trim()) ||
+                    (usePassword && !password.trim())
+                  }
                   className="w-full py-4 bg-accent text-white text-xs font-black uppercase tracking-[0.3em] rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (
@@ -425,9 +488,9 @@ export function Login() {
                     disabled={loading || resendLoading}
                     className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-center tracking-widest text-lg"
                   />
-                  {identifier && (
+                  {submittedIdentifier && (
                     <p className="text-center text-xs opacity-40 italic">
-                      Sent to {identifier}
+                      Sent to {submittedIdentifier}
                     </p>
                   )}
                 </div>

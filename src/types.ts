@@ -63,6 +63,8 @@ export type UserProfile = ProfileResponse & {
   name: string;
   birthDate?: string;
   photos: string[];
+  /** Display-only focal point/zoom keyed by original picture object key. */
+  pictureTransforms?: Record<string, string>;
   location: { lat: number; lng: number; geohash: string };
   moderationStatus?: 'APPROVED' | 'PENDING_REVIEW' | 'PENDING_MEDIA' | 'PENDING_TEXT' | 'REJECTED' | string;
   fieldModerationStatus?: Record<string, 'APPROVED' | 'PENDING' | 'REJECTED' | string>;

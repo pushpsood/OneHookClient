@@ -16,6 +16,7 @@ import {
 import type { DiscoveryCandidate, UserProfile } from '../../types';
 import { MediaImage } from '../../components/common/MediaImage';
 import { useMediaSrc } from '../../utils/media-url';
+import { pictureTransformStyle } from '../../utils/photo-transform';
 
 export interface DiscoveryProfileData {
   id?: string;
@@ -32,6 +33,7 @@ export interface DiscoveryProfileData {
   recommendationReason?: string;
   photos?: string[];
   pictures?: string[];
+  pictureTransforms?: Record<string, string>;
   bio?: string;
   work?: string;
   education?: string;
@@ -179,13 +181,16 @@ export function DiscoveryCard({
 
 
       {/* Primary Photo & Carousel Container */}
-      <div className="relative aspect-[4/5] overflow-hidden group bg-black/5">
+      {/* 3:4 portrait — the single canonical photo ratio used across the app (profile editor,
+          onboarding, matches, chat and discovery) so a photo is never cropped differently per screen. */}
+      <div className="relative aspect-[3/4] overflow-hidden group bg-black/5">
         {currentPhoto ? (
           <MediaImage
             src={currentPhoto}
             alt={displayName}
             loading="eager"
             decoding="async"
+            style={pictureTransformStyle(candidate.pictureTransforms?.[currentPhoto])}
             className="w-full h-full object-cover grayscale transition-all duration-1000 group-hover:grayscale-0"
           />
         ) : (

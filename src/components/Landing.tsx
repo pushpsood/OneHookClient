@@ -146,7 +146,7 @@ const brandMarkImage = '/media/onehook-512.png';
  * (a single URL that routes to the App Store / Google Play by platform) once
  * the apps are published — the QR code and store badges both read from here.
  */
-const APP_DOWNLOAD_URL = 'https://onehook.club/app';
+const APP_DOWNLOAD_URL = 'https://app.onehook.club';
 
 /**
  * Mascot explainer video. Shown inside the "Under the hood" section when the
@@ -1802,7 +1802,7 @@ export function Landing() {
 
                   {/* Match card */}
                   <div className="px-4">
-                    <div className="relative rounded-2xl overflow-hidden aspect-[4/5]">
+                    <div className="relative rounded-2xl overflow-hidden aspect-[3/4]">
                       <img
                         src={connectWithPurposeImage}
                         alt=""

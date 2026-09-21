@@ -389,6 +389,25 @@ export interface PutWrapRequest {
   wrappedKey?: string;
 }
 
+/**
+ * The two attachment media endpoints (see OneHookBackend/docs/chat-attachments.md). Like the device
+ * registry above, they are not yet modelled by the generated SDK, so they ride the same authenticated
+ * `chatRest` helper. Only the presigned URL and object key cross this boundary — the content key lives
+ * exclusively inside the E2EE message envelope and never touches these calls.
+ */
+export interface MediaUploadUrlResponse {
+  /** S3 key the server assigned, always "<matchId>/<uuid>". Goes into the attachment envelope. */
+  objectKey: string;
+  /** Presigned PUT URL, signed for EXACTLY `contentLength` bytes. */
+  uploadUrl: string;
+  expiresInSeconds: number;
+}
+
+export interface MediaDownloadUrlResponse {
+  downloadUrl: string;
+  expiresInSeconds: number;
+}
+
 async function chatRestBaseUrl(): Promise<string> {  if (apiBaseUrl && apiBaseUrl.startsWith('http')) return apiBaseUrl.replace(/\/+$/, '');
   if (typeof window !== 'undefined' && window.location?.origin) {
     const origin = window.location.origin;
@@ -450,6 +469,31 @@ async function chatRest<T>(method: string, path: string, body?: unknown): Promis
 export const ChatApi = {
   /** Hard-delete all messages for a match (PREMIUM, e.g. on unmatch). */
   deleteMatchMessages: (matchId: string) => sdkClient.deleteMatchMessages({ matchId }),
+
+  // --- Attachment media (E2EE) ---
+
+  /**
+   * Request a presigned PUT URL for an encrypted attachment. `contentLength` MUST be the ciphertext
+   * length (plaintext + GCM tag): the URL is signed for exactly that many bytes, so the PUT that
+   * follows has to upload precisely this ciphertext.
+   */
+  getMediaUploadUrl: (
+    matchId: string,
+    contentLength: number,
+    kind: string
+  ): Promise<MediaUploadUrlResponse> =>
+    chatRest<MediaUploadUrlResponse>('POST', '/chat/media/upload-url', {
+      matchId,
+      contentLength,
+      kind,
+    }),
+
+  /**
+   * Request a presigned GET URL for an attachment. The server only issues one for a key under the
+   * caller's own match, so a guessed key from another conversation is rejected here, not just hidden.
+   */
+  getMediaDownloadUrl: (matchId: string, objectKey: string): Promise<MediaDownloadUrlResponse> =>
+    chatRest<MediaDownloadUrlResponse>('POST', '/chat/media/download-url', { matchId, objectKey }),
 
   // --- Multi-device registry (wire v2) ---
 

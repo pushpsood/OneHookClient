@@ -25,10 +25,10 @@ export function PreferencesPanel() {
 
   const toggleGender = (value: string) => {
     setForm((prev) => {
-      const genders = prev.genders ?? [];
+      const genders = prev.interestedInGenders ?? [];
       return {
         ...prev,
-        genders: genders.includes(value)
+        interestedInGenders: genders.includes(value)
           ? genders.filter((g) => g !== value)
           : [...genders, value],
       };
@@ -100,7 +100,7 @@ export function PreferencesPanel() {
               type="button"
               onClick={() => toggleGender(opt)}
               className={`px-3 py-1 border text-[10px] uppercase tracking-widest font-bold ${
-                (form.genders ?? []).includes(opt)
+                (form.interestedInGenders ?? []).includes(opt)
                   ? 'border-accent bg-accent text-white'
                   : 'border-border opacity-60'
               }`}

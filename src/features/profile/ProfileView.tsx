@@ -27,6 +27,7 @@ import { isPremium, useAppStore } from '../../store/app-store';
 import { useToast } from '../../components/common/Toast';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { MediaImage } from '../../components/common/MediaImage';
+import { pictureTransformStyle } from '../../utils/photo-transform';
 import { useMediaSrc } from '../../utils/media-url';
 import { ModerationBadge } from '../../components/ui/ModerationBadge';
 import { AudioRecorder } from '../../components/profile/AudioRecorder';
@@ -263,8 +264,8 @@ export function ProfileView({
   const [interestedInGenders, setInterestedInGenders] = useState<string[]>(
     user.interestedIn && user.interestedIn.length > 0
       ? user.interestedIn
-      : prefs?.genders && prefs.genders.length > 0
-      ? prefs.genders
+      : prefs?.interestedInGenders && prefs.interestedInGenders.length > 0
+      ? prefs.interestedInGenders
       : ['FEMALE']
   );
 
@@ -325,8 +326,8 @@ export function ProfileView({
       setInterestedInGenders(
         user.interestedIn && user.interestedIn.length > 0
           ? user.interestedIn
-          : prefs?.genders && prefs.genders.length > 0
-          ? prefs.genders
+          : prefs?.interestedInGenders && prefs.interestedInGenders.length > 0
+          ? prefs.interestedInGenders
           : ['FEMALE']
       );
 
@@ -709,14 +710,14 @@ export function ProfileView({
       maxDistanceKm: numberOrUndefined(optional.maxDistanceKm),
       minAge: numberOrUndefined(optional.minAge),
       maxAge: numberOrUndefined(optional.maxAge),
-      genders: interestedInGenders,
+      interestedInGenders: interestedInGenders,
     };
 
     const prefsChanged =
       targetPrefs.maxDistanceKm !== prefs?.maxDistanceKm ||
       targetPrefs.minAge !== prefs?.minAge ||
       targetPrefs.maxAge !== prefs?.maxAge ||
-      JSON.stringify(targetPrefs.genders) !== JSON.stringify(prefs?.genders);
+      JSON.stringify(targetPrefs.interestedInGenders) !== JSON.stringify(prefs?.interestedInGenders);
 
     ProfileApi.upsert(user.id, profilePayload).catch((err) => {
       console.error('Profile save failed:', err);
@@ -801,6 +802,7 @@ export function ProfileView({
               {primaryPhoto ? (
                 <MediaImage
                   src={primaryPhoto}
+                  style={pictureTransformStyle(user.pictureTransforms?.[primaryPhoto])}
                   alt={basic.displayName}
                   className="w-full h-full object-cover grayscale transition-all duration-700 group-hover:grayscale-0"
                 />
@@ -915,6 +917,7 @@ export function ProfileView({
               >
                 <MediaImage
                   src={photo}
+                  style={pictureTransformStyle(user.pictureTransforms?.[photo])}
                   alt={`Photo ${index + 1}`}
                   className="w-full h-full object-cover"
                 />

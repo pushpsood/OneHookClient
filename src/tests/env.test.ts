@@ -44,10 +44,10 @@ describe('env config', () => {
     expect(config.apiBaseUrl).toBe('https://api.gamma.onehook.club');
     expect(config.graphqlUrl).toBe('https://graphql.api.gamma.onehook.club/graphql');
     expect(config.cognitoRegion).toBe('ap-south-1');
-    expect(config.cognitoUserPoolId).toBe('ap-south-1_pN10ldNoo');
-    expect(config.cognitoClientId).toBe('2rt0v69jq2acjaboom84cinign');
+    expect(config.cognitoUserPoolId).toBe('ap-south-1_7cHT1Kxr6');
+    expect(config.cognitoClientId).toBe('4h10ahqrnoqt7755cofj2dq9eo');
     expect(config.cognitoIdentityPoolId).toBe(
-      'ap-south-1:8bfabd43-a446-4b8d-9201-b250cf3b62ef'
+      'ap-south-1:96055816-0ada-487f-86a1-58577bdebb25'
     );
     expect(config.cognitoEndpoint).toBe('https://cognito-idp.ap-south-1.amazonaws.com');
     // Must equal the backend's GOOGLE_CLIENT_ID: the custom-auth trigger pins it as the audience.

@@ -23,6 +23,7 @@ import { useChatMessages } from '../../hooks/use-api';
 import { ApiError } from '../../lib/api-client';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { MediaImage } from '../../components/common/MediaImage';
+import { pictureTransformStyle } from '../../utils/photo-transform';
 import { FALLBACK_PROFILE_IMAGE } from '../../utils/profile-image';
 import { useToast } from '../../components/common/Toast';
 import { HistoryRecoveryModal } from '../../components/chat/HistoryRecoveryModal';
@@ -312,6 +313,7 @@ export function MatchesView({
                   <div className="w-14 h-18 bg-border overflow-hidden shrink-0 border border-border grayscale grayscale-hover">
                     <MediaImage
                       src={photo}
+                      style={pictureTransformStyle(profile?.pictureTransforms?.[photo])}
                       alt={displayName}
                       className="w-full h-full object-cover"
                     />

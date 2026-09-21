@@ -14,7 +14,10 @@ import {
   HeadersReferrerPolicy, 
   ViewerProtocolPolicy, 
   PriceClass, 
-  SecurityPolicyProtocol 
+  SecurityPolicyProtocol,
+  Function as CloudFrontFunction,
+  FunctionCode,
+  FunctionEventType
 } from 'aws-cdk-lib/aws-cloudfront';
 import { S3BucketOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Certificate, ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
@@ -26,6 +29,7 @@ import {
   RecordTarget,
 } from 'aws-cdk-lib/aws-route53';
 import { CloudFrontTarget } from 'aws-cdk-lib/aws-route53-targets';
+import { APP_LINK_SUBDOMAIN, APP_STORE_LINKS } from './constants.ts';
 import { Construct } from 'constructs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
@@ -232,7 +236,86 @@ export class FrontendStack extends Stack {
       });
     }
 
+    // ── app.<domain> — platform-aware install smart link ──────────────────────────────────────────
+    //
+    // Serves NO content. A viewer-request CloudFront Function reads the User-Agent and returns a 302
+    // to the right store, so the redirect happens at the edge before any origin is consulted (fast,
+    // and nothing to keep in S3). Per-device answers are never cached by CloudFront because
+    // function-generated responses at viewer-request are not cacheable, so an iPhone can never be
+    // served an Android visitor's redirect.
+    const appLinkFunction = new CloudFrontFunction(this, 'AppStoreRedirectFunction', {
+      comment: 'Redirects app.<domain> to the App Store / Play Store based on User-Agent',
+      code: FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request;
+  var headers = request.headers || {};
+  var ua = (headers['user-agent'] && headers['user-agent'].value) || '';
+
+  // iPadOS 13+ reports a desktop Safari UA, so also treat "Macintosh" + touch hints as iOS. The
+  // explicit device tokens are checked first because they are unambiguous.
+  var isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && /Mobile\\/|Touch/i.test(ua));
+  var isAndroid = /Android/i.test(ua);
+
+  var location = ${JSON.stringify(APP_STORE_LINKS.fallback)};
+  if (isIOS) {
+    location = ${JSON.stringify(APP_STORE_LINKS.ios)};
+  } else if (isAndroid) {
+    location = ${JSON.stringify(APP_STORE_LINKS.android)};
+  }
+
+  return {
+    statusCode: 302,
+    statusDescription: 'Found',
+    headers: {
+      'location': { value: location },
+      // Never let a browser or proxy reuse one platform's redirect for another device.
+      'cache-control': { value: 'no-cache, no-store, must-revalidate' }
+    }
+  };
+}
+`),
+    });
+
+    const appLinkDomain = `${APP_LINK_SUBDOMAIN}.${props.domainName}`;
+
+    // The origin is required by CloudFront but never fetched: the function short-circuits every
+    // request at the viewer stage. Reusing the site bucket avoids provisioning a dead origin.
+    const appLinkDistribution = new Distribution(this, 'AppLinkDistribution', {
+      comment: `${appLinkDomain} — platform-aware app install redirect`,
+      defaultBehavior: {
+        origin: S3BucketOrigin.withOriginAccessIdentity(this.bucket, {
+          originAccessIdentity: oai,
+        }),
+        viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        functionAssociations: [
+          { function: appLinkFunction, eventType: FunctionEventType.VIEWER_REQUEST },
+        ],
+      },
+      domainNames: [appLinkDomain],
+      certificate,
+      priceClass: isProd ? PriceClass.PRICE_CLASS_ALL : PriceClass.PRICE_CLASS_100,
+    });
+
+    const appLinkAliasTarget = RecordTarget.fromAlias(new CloudFrontTarget(appLinkDistribution));
+
+    new ARecord(this, 'AppLinkAliasRecord', {
+      zone: hostedZone,
+      recordName: appLinkDomain,
+      target: appLinkAliasTarget,
+    });
+
+    new AaaaRecord(this, 'AppLinkAliasRecordAAAA', {
+      zone: hostedZone,
+      recordName: appLinkDomain,
+      target: appLinkAliasTarget,
+    });
+
     // Outputs
+    new CfnOutput(this, 'AppLinkURL', {
+      value: `https://${appLinkDomain}`,
+      description: 'Platform-aware app install link (redirects to App Store / Play Store)',
+    });
+
     new CfnOutput(this, 'WebsiteURL', {
       value: `https://${this.distribution.distributionDomainName}`,
       description: 'CloudFront Distribution URL',

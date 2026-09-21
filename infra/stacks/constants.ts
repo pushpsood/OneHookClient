@@ -34,3 +34,29 @@ export const DOMAINS = {
  * frontend synth deterministic and removes all CDK lookup-role access from CodeBuild.
  */
 export const PRODUCTION_HOSTED_ZONE_ID = 'Z0711151B3O279W1TQZ0';
+
+/**
+ * Subdomain that acts as the platform-aware "smart link" for installing the app.
+ *
+ * `app.onehook.club` serves no content: a CloudFront viewer-request function inspects the
+ * User-Agent and answers with a 302 straight to the correct store, so one URL can be printed,
+ * texted or put on a poster regardless of the device that opens it.
+ */
+export const APP_LINK_SUBDOMAIN = 'app';
+
+/**
+ * Store destinations for the smart link.
+ *
+ * KEEP IN SYNC with `src/config/signup.config.ts` (`APP_STORE_LINKS`), which the web UI uses for its
+ * own "get the app" buttons. Infra cannot import from `src` (separate tsconfig), so the values are
+ * duplicated here deliberately; `deployment-pipeline.test.ts` asserts they match.
+ */
+export const APP_STORE_LINKS = {
+  ios: 'https://apps.apple.com/app/onehook',
+  android: 'https://play.google.com/store/apps/details?id=club.onehook.android',
+  /**
+   * Desktop / unknown devices cannot install the app, so they land on the marketing page rather
+   * than an App Store page that would immediately reject them.
+   */
+  fallback: 'https://onehook.club/app',
+} as const;
