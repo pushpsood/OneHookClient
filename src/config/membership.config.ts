@@ -60,6 +60,15 @@ export interface MembershipTier {
   readonly priceLabelOverride?: string;
   /** Exactly one tier is flagged the recommended / most-popular tier. */
   readonly mostPopular: boolean;
+  /**
+   * The tier this one builds on. Cards render "Everything in Super, plus …" instead of repeating the
+   * lower tier's benefits, so each list carries only what is genuinely NEW at that price.
+   */
+  readonly inheritsFrom?: TierDisplayName;
+  /** The single most compelling reason to be on this tier, shown prominently on the card. */
+  readonly headline: string;
+  /** ONLY what this tier adds over `inheritsFrom`, most prominent first. Never repeats inherited items. */
+  readonly adds: readonly string[];
 }
 
 /**
@@ -79,6 +88,18 @@ export const MEMBERSHIP_TIERS: readonly MembershipTier[] = [
     pricing: { monthly: 0, annual: 0 },
     priceLabelOverride: 'Free forever',
     mostPopular: false,
+    headline: 'Unlimited encrypted messaging, free forever',
+    adds: [
+      'Unlimited end-to-end encrypted messaging',
+      'One connection at a time',
+      'Read receipts, typing indicators & disappearing messages',
+      'Chat wallpaper & font size',
+      'Multi-device history recovery',
+      'Block & report, profile verification',
+      '10 likes a day',
+      'Mr.OneHook AI — 10 messages a day',
+      '1 invite a month',
+    ],
   },
   {
     wire: 'GOLD',
@@ -87,6 +108,20 @@ export const MEMBERSHIP_TIERS: readonly MembershipTier[] = [
     tagline: 'Full discovery reach for people actively dating.',
     pricing: { monthly: 499, annual: 3999 },
     mostPopular: true,
+    inheritsFrom: 'Must',
+    headline: 'See who liked you',
+    adds: [
+      'See who liked you',
+      'Unlimited likes',
+      'Every discovery filter',
+      'Incognito browsing',
+      'Global mode — match anywhere',
+      'Rewind your last swipe',
+      'Boosted discovery placement',
+      'Unlimited Mr.OneHook AI',
+      'Profile view insights',
+      '3 invites a month, 1 boost a month',
+    ],
   },
   {
     wire: 'PLATINUM',
@@ -95,6 +130,15 @@ export const MEMBERSHIP_TIERS: readonly MembershipTier[] = [
     tagline: 'Everything in Super, plus up to three connections at once.',
     pricing: { monthly: 999, annual: 7999 },
     mostPopular: false,
+    inheritsFrom: 'Super',
+    headline: 'Chat with 3 people at once',
+    adds: [
+      '3 connections at once — chat with up to 3 people',
+      'Top priority in discovery',
+      '3 boosts a month',
+      '5 invites a month',
+      'Early access to new features',
+    ],
   },
 ] as const;
 
@@ -197,7 +241,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
     rows: [
       {
         label: 'Daily likes',
-        values: { FREE: '10/day', GOLD: 'Unlimited', PLATINUM: 'Unlimited' },
+        values: { FREE: '10/day', GOLD: '∞', PLATINUM: '∞' },
       },
       {
         label: 'Rewind last swipe',
@@ -234,7 +278,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
     rows: [
       {
         label: 'Mr.OneHook AI',
-        values: { FREE: '10 msgs/day', GOLD: 'Unlimited', PLATINUM: 'Unlimited' },
+        values: { FREE: '10 msgs/day', GOLD: '∞', PLATINUM: '∞' },
       },
       {
         label: 'Profile view insights',

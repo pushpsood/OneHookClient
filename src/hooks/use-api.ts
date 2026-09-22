@@ -14,7 +14,8 @@ import { MessageStatus } from 'onehook-api-client/graphql';
 import { PreferencesApi } from '../api/preferences';
 import { StateApi } from '../api/state';
 import { ProfileApi } from '../api/profile';
-import { MatchingApi } from '../api/matching';
+import { MatchingApi, type ProfileSection } from '../api/matching';
+import type { LikeTargetType, ReceivedLike } from '../api/rest';
 import { ChatMessagingApi } from '../api/chat';
 import { ChatEncryptionManager } from '../lib/chat-encryption';
 import { isUndecryptableMessageError } from '../lib/chat-wire-v2';
@@ -306,24 +307,19 @@ export function useCandidates(activeCoords?: Coordinates) {
 }
 
 export function useSwipe() {
-  const { currentUser } = useAppStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const swipe = useCallback(
-    async (targetId: string, direction: 'LEFT' | 'RIGHT') => {
+  /**
+   * PASS (LEFT). Liking by swipe/button is gone — a like now always carries a comment on a specific
+   * element and goes through {@link like} below.
+   */
+  const pass = useCallback(
+    async (targetId: string, viewedSection?: ProfileSection) => {
       try {
         setLoading(true);
         setError(null);
-        try {
-          return await MatchingApi.swipe(currentUser?.id || 'me', targetId, direction);
-        } catch {
-          return {
-            status: 'SWIPED',
-            matched: direction === 'RIGHT',
-            matchId: direction === 'RIGHT' ? `match-${targetId}` : undefined,
-          };
-        }
+        return await MatchingApi.pass(targetId, viewedSection);
       } catch (err) {
         setError(err as ApiError);
         throw err;
@@ -331,10 +327,76 @@ export function useSwipe() {
         setLoading(false);
       }
     },
-    [currentUser?.id]
+    []
   );
 
-  return { swipe, loading, error };
+  /**
+   * LIKE (RIGHT) — Hinge-style comment-to-like. Errors propagate so the caller can show the message
+   * and NOT advance the deck.
+   */
+  const like = useCallback(
+    async (input: {
+      targetId: string;
+      comment: string;
+      likeTargetType: LikeTargetType;
+      likeTargetRef?: string;
+      viewedSection?: ProfileSection;
+    }) => {
+      try {
+        setLoading(true);
+        setError(null);
+        return await MatchingApi.like(input);
+      } catch (err) {
+        setError(err as ApiError);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  return { pass, like, loading, error };
+}
+
+/**
+ * Received likes ("Likes you"): who liked the caller, on which profile element, with what comment.
+ * Newest first. Refetches on demand via {@link refresh}.
+ */
+export function useReceivedLikes() {
+  const [likes, setLikes] = useState<ReceivedLike[]>([]);
+  const [count, setCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    MatchingApi.getReceivedLikes()
+      .then((res) => {
+        if (!active) return;
+        setLikes(Array.isArray(res?.likes) ? res.likes : []);
+        setCount(typeof res?.count === 'number' ? res.count : 0);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setLikes([]);
+        setCount(0);
+        setError(err instanceof ApiError ? err : new ApiError(err?.message || 'Failed to load likes', err?.status || 500, err?.code));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [refreshKey]);
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  return { likes, count, loading, error, refresh };
 }
 
 /**

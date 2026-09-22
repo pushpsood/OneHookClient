@@ -213,3 +213,89 @@ export const ConnectApi = {
  */
 export const ADD_BY_USERNAME_CONFIRMATION =
   "Request sent — if they add you back, you'll be connected";
+
+// ── Swipe (Hinge-style comment-to-like) & received likes ──────────────────────
+
+/**
+ * The service now requires a comment + a liked profile element for every LIKE (RIGHT) and exposes a
+ * "likes you" read side (GET /matching/likes). BUT the installed generated SDK
+ * (`onehook-api-client@1.0.14`) still models `SwipeRequest` with only
+ * `{ targetId, direction, viewedSection }` — it has NO `comment`, `likeTargetType` or
+ * `likeTargetRef`, and no `GetReceivedLikes` operation at all. Rather than force the new fields
+ * through the stale SDK (they would be silently dropped by the generated serializer), both calls go
+ * through this thin REST helper — exactly like the block/distance endpoints above — until a newer
+ * SDK models them. The caller's identity is the verified Cognito sub that API Gateway injects as
+ * `X-User-Id`; the Bearer token attached by {@link getAuthToken} is all this helper needs to send.
+ */
+export type LikeTargetType = 'PHOTO' | 'VIDEO' | 'VOICE' | 'PROMPT' | 'INTEREST' | 'BIO';
+
+/** Backend cap on a like comment (MatchingConstants.LIKE_COMMENT_MAX_CHARS). Enforced client-side. */
+export const LIKE_COMMENT_MAX_CHARS = 500;
+
+/** Backend cap on a like target ref (MatchingConstants.LIKE_TARGET_REF_MAX_CHARS). */
+export const LIKE_TARGET_REF_MAX_CHARS = 512;
+
+export interface SwipeResult {
+  status: string;
+  matched: boolean;
+  matchId?: string;
+}
+
+/** A single received like as returned by GET /matching/likes (newest first). */
+export interface ReceivedLike {
+  fromUserId: string;
+  /** null only for legacy add-by-username likes, which carry no comment/target. */
+  comment: string | null;
+  likeTargetType: string | null;
+  likeTargetRef: string | null;
+  /** ISO-8601 UTC. */
+  createdAt: string;
+}
+
+export interface ReceivedLikesResponse {
+  likes: ReceivedLike[];
+  count: number;
+}
+
+export const SwipeApi = {
+  /**
+   * PASS (LEFT). Carries no comment or target — the server ignores both for LEFT anyway.
+   */
+  pass: (targetId: string, viewedSection?: string): Promise<SwipeResult> =>
+    request<SwipeResult>('POST', '/matching/swipe', {
+      targetId,
+      direction: 'LEFT',
+      viewedSection,
+    }),
+
+  /**
+   * LIKE (RIGHT) — Hinge-style: always carries a comment plus the specific element being liked.
+   * `likeTargetRef` is required for every type except BIO (the server normalises BIO's ref to
+   * "bio"). Rejections surface as an {@link ApiError} (HTTP 400, code VALIDATION_FAILED) so callers
+   * can show the message and refrain from advancing the deck.
+   */
+  like: (input: {
+    targetId: string;
+    comment: string;
+    likeTargetType: LikeTargetType;
+    likeTargetRef?: string;
+    viewedSection?: string;
+  }): Promise<SwipeResult> =>
+    request<SwipeResult>('POST', '/matching/swipe', {
+      targetId: input.targetId,
+      direction: 'RIGHT',
+      comment: input.comment,
+      likeTargetType: input.likeTargetType,
+      likeTargetRef: input.likeTargetRef,
+      viewedSection: input.viewedSection,
+    }),
+};
+
+export const ReceivedLikesApi = {
+  /**
+   * The caller's still-pending received likes (RIGHT/SUPER not yet reciprocated or passed on),
+   * newest first. No input — identity is the injected `X-User-Id`.
+   */
+  list: (): Promise<ReceivedLikesResponse> =>
+    request<ReceivedLikesResponse>('GET', '/matching/likes'),
+};

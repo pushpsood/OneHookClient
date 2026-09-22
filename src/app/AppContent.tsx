@@ -14,6 +14,8 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { useToast } from '../../src/components/common/Toast';
 import { MediaImage } from '../components/common/MediaImage';
 import { DiscoveryView } from '../features/discovery/DiscoveryView';
+import { LikesYouView } from '../features/discovery/LikesYouView';
+import type { LikeTargetType } from '../api/rest';
 import { ChatView } from '../features/chat/ChatView';
 import { ProfileView } from '../features/profile/ProfileView';
 import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
@@ -21,7 +23,7 @@ import { useHistoryUnlock } from '../hooks/use-history-unlock';
 
 export function AppContent() {
   const navigate = useNavigate();
-  const [appState, setAppState] = useState<'DISCOVERY' | 'MATCHES' | 'PROFILE'>('DISCOVERY');
+  const [appState, setAppState] = useState<'DISCOVERY' | 'MATCHES' | 'PROFILE' | 'LIKES'>('DISCOVERY');
   const { currentUser, setCurrentUser, logout, userState } = useAppStore();
 
   // Try the silent rungs of the history-key unlock ladder once per session: a device wrap sealed to this
@@ -72,7 +74,7 @@ export function AppContent() {
     error: candidatesError,
     refresh: refreshCandidates,
   } = useCandidates(userCoords);
-  const { swipe, loading: swipeLoading } = useSwipe();
+  const { pass, like, loading: swipeLoading } = useSwipe();
   const { showToast } = useToast();
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
 
@@ -96,21 +98,9 @@ export function AppContent() {
     }
   }, [activeMatchId, currentUser, userState]);
 
-  const handleSwipe = async (targetId: string, direction: 'LEFT' | 'RIGHT') => {
+  const handlePass = async (targetId: string) => {
     try {
-      const result = await swipe(targetId, direction);
-
-      if (result.matched) {
-        showToast("It's a match! 🎉", 'success');
-        setActiveMatchId(result.matchId || null);
-        setAppState('MATCHES');
-      } else if (direction === 'RIGHT') {
-        showToast(
-          'Your interest is on its way — we’ll let you know if they feel the same.',
-          'info'
-        );
-      }
-
+      await pass(targetId);
       return true;
     } catch (error) {
       if (error instanceof ApiError) {
@@ -118,9 +108,30 @@ export function AppContent() {
       } else {
         showToast('We couldn’t send that just now. Please try again.', 'error');
       }
-
       return false;
     }
+  };
+
+  // LIKE (RIGHT) — Hinge-style comment-to-like. On failure this THROWS so the composer keeps the
+  // error visible and the deck does not advance.
+  const handleLike = async (
+    targetId: string,
+    comment: string,
+    likeTargetType: LikeTargetType,
+    likeTargetRef?: string
+  ) => {
+    const result = await like({ targetId, comment, likeTargetType, likeTargetRef });
+    if (result.matched) {
+      showToast("It's a match! 🎉", 'success');
+      setActiveMatchId(result.matchId || null);
+      setAppState('MATCHES');
+    } else {
+      showToast(
+        'Your comment is on its way — we’ll let you know if they feel the same.',
+        'info'
+      );
+    }
+    return true;
   };
 
   const handleLogout = async () => {
@@ -207,6 +218,12 @@ export function AppContent() {
             Discovery
           </button>
           <button
+            onClick={() => setAppState('LIKES')}
+            className={`hover:opacity-100 transition-opacity ${appState === 'LIKES' ? 'opacity-100 border-b-2 border-accent pb-1' : 'opacity-40'}`}
+          >
+            Likes
+          </button>
+          <button
             onClick={() => setAppState('MATCHES')}
             className={`hover:opacity-100 transition-opacity ${appState === 'MATCHES' ? 'opacity-100 border-b-2 border-accent pb-1' : 'opacity-40'}`}
           >
@@ -255,10 +272,12 @@ export function AppContent() {
               candidates={candidates}
               loading={candidatesLoading}
               error={candidatesError}
-              onSwipe={handleSwipe}
+              onPass={handlePass}
+              onLike={handleLike}
               onRetry={refreshCandidates}
             />
           )}
+          {appState === 'LIKES' && <LikesYouView key="likes" />}
           {appState === 'MATCHES' && (
             <ChatView
               key="chat"

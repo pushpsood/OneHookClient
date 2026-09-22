@@ -106,6 +106,22 @@ function TierCard({ tier, period }: { key?: string; tier: MembershipTier; period
           ? 'One connection at a time'
           : `Up to ${tier.maxConnections} connections at once`}
       </p>
+
+      {/* The headline reason, then ONLY what this tier adds. Higher tiers say "Everything in X, plus"
+          rather than repeating the lower tier's list. */}
+      <p className="mt-5 text-sm font-bold">{tier.headline}</p>
+      <p className="mt-4 text-[10px] font-black uppercase tracking-[0.2em] text-accent">
+        {tier.inheritsFrom ? `Everything in ${tier.inheritsFrom}, plus` : "What's included"}
+      </p>
+      <ul className="mt-2 space-y-1.5 text-sm opacity-70">
+        {tier.adds.map((item) => (
+          <li key={item} className="flex gap-2">
+            <Check className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+
       <div className="mt-6">
         <DownloadCta tier={tier} />
       </div>
@@ -232,6 +248,8 @@ export function Pricing() {
               </tfoot>
             </table>
           </div>
+          {/* Decode the ∞ used in the value cells (narrow columns cannot fit the word). */}
+          <p className="mt-4 text-xs italic opacity-50 text-center">∞ means unlimited</p>
         </div>
       </section>
 
@@ -243,6 +261,7 @@ export function Pricing() {
             <StackedTierFeatures key={tier.wire} tier={tier} />
           ))}
         </div>
+        <p className="mt-6 text-xs italic opacity-50 text-center">∞ means unlimited</p>
       </section>
 
       {/* Honest note */}

@@ -749,6 +749,12 @@ export function Landing() {
                   >
                     Get the app
                   </button>
+                  <button
+                    onClick={() => navigate('/pricing')}
+                    className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
+                  >
+                    Pricing
+                  </button>
                 </div>
               )}
             </div>
@@ -777,6 +783,12 @@ export function Landing() {
                 className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
               >
                 Get the app
+              </button>
+              <button
+                onClick={() => navigate('/pricing')}
+                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
+              >
+                Pricing
               </button>
               <button
                 onClick={() => navigate(isAuthenticated ? '/app' : '/login')}
