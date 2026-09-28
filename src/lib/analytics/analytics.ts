@@ -115,6 +115,37 @@ export function trackCardSwipe(direction: 'left' | 'right' | 'up', candidateId?:
   getAnalytics().track('card_swipe_ui', { direction, candidateId });
 }
 
+/** A profile section (photos/prompts/bio/interests/voice) was viewed. `dwellMs` optional. */
+export function trackSectionView(
+  sectionId: string,
+  opts?: { viewedUserId?: string; dwellMs?: number; context?: string }
+): void {
+  getAnalytics().track('section_view', { sectionId, ...opts });
+}
+
+/** A photo/video/voice element was viewed (attraction-depth signal). */
+export function trackMediaView(
+  mediaId: string,
+  mediaType: 'image' | 'video' | 'voice',
+  opts?: { dwellMs?: number; index?: number; viewedUserId?: string; context?: string }
+): void {
+  getAnalytics().track('media_view', { mediaId, mediaType, ...opts });
+}
+
+/** The comment-to-like composer was opened on a specific profile element. */
+export function trackLikeComposerOpen(likeTargetType?: string, likeTargetRef?: string): void {
+  getAnalytics().track('like_composer_open', { likeTargetType, likeTargetRef });
+}
+
+/** The composer was closed WITHOUT sending — intent-without-follow-through (hesitation) signal. */
+export function trackLikeCommentAbandoned(
+  likeTargetType: string | undefined,
+  composeDurationMs: number,
+  hadDraft: boolean
+): void {
+  getAnalytics().track('like_comment_abandoned', { likeTargetType, composeDurationMs, hadDraft });
+}
+
 /** Escape hatch for any other allowed signal type. */
 export function track(type: SignalType, attributes?: Record<string, unknown>): void {
   getAnalytics().track(type, attributes);

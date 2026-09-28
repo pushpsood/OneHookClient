@@ -26,7 +26,9 @@ export type SignalType =
   | 'media_view'
   | 'section_view'
   | 'notification_opened'
-  | 'session_heartbeat';
+  | 'session_heartbeat'
+  | 'like_composer_open'
+  | 'like_comment_abandoned';
 
 export interface Signal {
   clientEventId: string;

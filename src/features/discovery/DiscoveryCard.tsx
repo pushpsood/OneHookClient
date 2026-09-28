@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Heart,
   MapPin,
@@ -11,11 +11,13 @@ import {
   Pause,
   ChevronLeft,
   ChevronRight,
+  X,
 } from 'lucide-react';
 import { MediaImage } from '../../components/common/MediaImage';
 import { useMediaSrc } from '../../utils/media-url';
 import { pictureTransformStyle } from '../../utils/photo-transform';
 import { mediaLikeType, type LikeTarget } from './like-target';
+import { trackMediaView } from '../../lib/analytics/analytics';
 
 export interface DiscoveryProfileData {
   id?: string;
@@ -52,6 +54,7 @@ export interface DiscoveryProfileData {
 }
 
 export interface DiscoveryCardProps {
+  key?: string;
   candidate: DiscoveryProfileData;
   /** PASS the candidate (LEFT). The only non-comment action left on the deck. */
   onPass?: () => void;
@@ -144,6 +147,9 @@ export function DiscoveryCard({
     } else {
       audioRef.current.play();
       setIsPlayingAudio(true);
+      if (!isPreview && audioKey) {
+        trackMediaView(audioKey, 'voice', { viewedUserId: candidate.id, context: 'discovery' });
+      }
     }
   };
 
@@ -161,11 +167,41 @@ export function DiscoveryCard({
 
   const currentPhoto = photos[photoIndex] || photos[0];
 
+  const mediaTypeOf = (key: string): 'image' | 'video' =>
+    mediaLikeType(key) === 'VIDEO' ? 'video' : 'image';
+  const shownPhotoRef = useRef<{ key: string; index: number; start: number } | null>(null);
+  
+  const emitPhotoDwell = () => {
+    if (isPreview) return;
+    const prev = shownPhotoRef.current;
+    if (prev && prev.key) {
+      trackMediaView(prev.key, mediaTypeOf(prev.key), {
+        dwellMs: Date.now() - prev.start,
+        index: prev.index,
+        viewedUserId: candidate.id,
+        context: 'discovery',
+      });
+    }
+  };
+  
+  useEffect(() => {
+    if (isPreview) return;
+    emitPhotoDwell();
+    shownPhotoRef.current = currentPhoto
+      ? { key: currentPhoto, index: photoIndex, start: Date.now() }
+      : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoIndex]);
+  
+  useEffect(() => {
+    return () => emitPhotoDwell();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const prompts =
     (candidate.prompts as Array<{ promptId: string; answer: string }> | undefined) || [];
   const interests = candidate.interests || [];
 
-  /** Small "comment to like" affordance shown next to a likeable element in live discovery. */
   const CommentButton = ({
     target,
     className: btnClass = '',
@@ -183,36 +219,45 @@ export function DiscoveryCard({
       }}
       aria-label={`Comment on ${displayName}'s ${target.label.toLowerCase()} to like`}
       title={`Comment on ${target.label.toLowerCase()} to like`}
-      className={`inline-flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-accent border border-accent/40 bg-white/95 px-2.5 py-1 hover:bg-accent hover:text-white transition-colors cursor-pointer ${btnClass}`}
+      className={`inline-flex items-center gap-1.5 text-xs font-semibold bg-white/95 text-gray-900 border border-gray-200 rounded-full px-3 py-1.5 hover:bg-gray-100 transition-colors cursor-pointer shadow-sm ${btnClass}`}
     >
-      <Heart className="w-3 h-3" /> {label}
+      <Heart className="w-3.5 h-3.5" /> {label}
     </button>
   );
 
   return (
-    <div
-      className={`w-full max-w-[460px] mx-auto bg-white border border-border flex flex-col shadow-sm select-none ${className}`}
-    >
-      {/* Recommendation / Handpicked Banner */}
-      {((candidate.score && candidate.score >= 0.9) || candidate.recommendationReason) && (
-        <div className="bg-amber-50 border-b border-amber-200 px-5 py-3.5 flex items-start gap-3">
-          <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-          <div className="space-y-0.5">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-700">
-              Handpicked For You
-            </h3>
-            <p className="text-[11px] text-amber-900/80 leading-relaxed italic">
-              {candidate.recommendationReason ||
-                'Selected based on exceptionally high compatibility and shared vibe.'}
-            </p>
+    <div className={`w-full max-w-[600px] mx-auto bg-white sm:border sm:border-border sm:rounded-lg sm:my-4 flex flex-col overflow-hidden ${className}`}>
+      {/* Post header row */}
+      <div className="flex items-center justify-between px-3 py-3">
+        <div className="flex items-center gap-2.5">
+          {photos.length > 0 ? (
+            <MediaImage
+              src={photos[0]}
+              alt={displayName}
+              loading="eager"
+              decoding="async"
+              style={pictureTransformStyle(candidate.pictureTransforms?.[photos[0]])}
+              className="w-8 h-8 rounded-full object-cover border border-gray-100"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center">
+              <span className="text-[10px] text-gray-400">No pic</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1">
+            <span className="text-sm font-semibold text-gray-900">{displayName}</span>
+            {candidate.verified && (
+              <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 fill-blue-500" strokeWidth={3} color="white" />
+            )}
           </div>
         </div>
-      )}
+        <div className="text-xs text-gray-500 font-medium">
+          {age && `${age} • `}{location}
+        </div>
+      </div>
 
-      {/* Primary Photo & Carousel Container */}
-      {/* 3:4 portrait — the single canonical photo ratio used across the app (profile editor,
-          onboarding, matches, chat and discovery) so a photo is never cropped differently per screen. */}
-      <div className="relative aspect-[3/4] overflow-hidden group bg-black/5">
+      {/* Primary Photo & Carousel Container (4:5) */}
+      <div className="relative aspect-[4/5] overflow-hidden group bg-gray-50">
         {currentPhoto ? (
           <MediaImage
             src={currentPhoto}
@@ -220,15 +265,13 @@ export function DiscoveryCard({
             loading="eager"
             decoding="async"
             style={pictureTransformStyle(candidate.pictureTransforms?.[currentPhoto])}
-            className="w-full h-full object-cover grayscale transition-all duration-1000 group-hover:grayscale-0"
+            className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground opacity-40">
-            <span className="text-xs font-mono uppercase tracking-widest">No Photo</span>
+          <div className="w-full h-full flex items-center justify-center text-gray-400">
+            <span className="text-sm font-medium">No Photo</span>
           </div>
         )}
-
-        <div className="absolute inset-0 bg-gradient-to-t from-bg/90 via-transparent to-black/20 pointer-events-none" />
 
         {/* Stories / Photo Index Bars */}
         {photos.length > 1 && (
@@ -259,7 +302,7 @@ export function DiscoveryCard({
               aria-label="Previous photo"
               className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-5 h-5" />
             </button>
             <button
               type="button"
@@ -267,14 +310,14 @@ export function DiscoveryCard({
               aria-label="Next photo"
               className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-5 h-5" />
             </button>
           </>
         )}
 
-        {/* Comment-to-like on the currently shown photo / video */}
+        {/* Comment-to-like overlay on the currently shown photo */}
         {canComment && currentPhoto && (
-          <div className="absolute bottom-16 right-4 z-20">
+          <div className="absolute bottom-4 right-4 z-20">
             <CommentButton
               label="Comment"
               target={{
@@ -285,69 +328,84 @@ export function DiscoveryCard({
             />
           </div>
         )}
-
-        {/* Photo Badges */}
-        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between z-20">
-          <div className="flex items-center gap-2">
-            {candidate.verified && (
-              <div className="px-3 py-1 bg-white border border-accent text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 shadow-sm">
-                <CheckCircle2 className="w-3 h-3 text-green-600" /> Verified
-              </div>
-            )}
-          </div>
-          {distanceDisplay && (
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-white/95 backdrop-blur-sm border border-border text-[9px] font-bold uppercase tracking-widest opacity-80 italic shadow-sm">
-              <MapPin className="w-2.5 h-2.5" /> {distanceDisplay}
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Main Profile Info Section */}
-      <div className="p-6 sm:p-7 space-y-5 flex-1">
-        {/* Name, Age, Location */}
-        <div className="flex items-baseline justify-between border-b border-border pb-3.5">
-          <h2 className="text-2xl sm:text-3xl font-serif italic uppercase tracking-tighter text-foreground">
-            {displayName}
-          </h2>
-          <span className="text-xs sm:text-sm opacity-50 font-serif italic">
-            {age && age > 0 ? `${age}, ` : ''}
-            {location}
+      {/* Action bar below photo */}
+      <div className="px-3 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          {canComment && currentPhoto && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onComment?.({
+                  type: mediaLikeType(currentPhoto),
+                  ref: currentPhoto,
+                  label: mediaLikeType(currentPhoto) === 'VIDEO' ? 'Video' : 'Photo',
+                });
+              }}
+              className="text-gray-900 hover:text-gray-500 transition-colors"
+            >
+              <Heart className="w-6 h-6" />
+            </button>
+          )}
+          {onPass && (
+            <button
+              type="button"
+              onClick={onPass}
+              className="text-gray-900 hover:text-gray-500 transition-colors"
+            >
+              <X className="w-7 h-7" />
+            </button>
+          )}
+        </div>
+        {distanceDisplay && (
+          <div className="flex items-center gap-1 text-xs text-gray-500 font-medium">
+            <MapPin className="w-3.5 h-3.5" /> {distanceDisplay}
+          </div>
+        )}
+      </div>
+
+      {/* Content below action bar */}
+      <div className="px-3 pb-5 space-y-4">
+        {/* Caption (Name, Age, Bio) */}
+        <div className="text-sm">
+          <span className="font-semibold text-gray-900 mr-2">
+            {displayName} {age && <span>{age}</span>}
           </span>
+          {candidate.bio && (
+            <span className="text-gray-900">
+              {candidate.bio}
+            </span>
+          )}
+          {canComment && candidate.bio && (
+            <div className="mt-2">
+              <CommentButton
+                target={{ type: 'BIO', label: 'Bio', preview: candidate.bio }}
+                label="Reply to bio"
+                className="!text-[11px] !py-1 !px-2.5"
+              />
+            </div>
+          )}
         </div>
 
         {/* Work & Education */}
         {(candidate.work || candidate.education || candidate.hometown) && (
-          <div className="flex flex-wrap items-center gap-4 text-xs opacity-60">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
             {candidate.work && (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1">
                 <Briefcase className="w-3.5 h-3.5" /> {candidate.work}
               </span>
             )}
             {candidate.education && (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1">
                 <GraduationCap className="w-3.5 h-3.5" /> {candidate.education}
               </span>
             )}
             {candidate.hometown && (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5" /> {candidate.hometown}
               </span>
-            )}
-          </div>
-        )}
-
-        {/* Bio / Story */}
-        {candidate.bio && (
-          <div className="space-y-2">
-            <p className="text-sm opacity-75 leading-relaxed font-serif italic border-l-2 border-accent/40 pl-4 py-0.5">
-              "{candidate.bio}"
-            </p>
-            {canComment && (
-              <CommentButton
-                target={{ type: 'BIO', label: 'Bio', preview: candidate.bio }}
-                label="Comment on bio"
-              />
             )}
           </div>
         )}
@@ -355,33 +413,30 @@ export function DiscoveryCard({
         {/* Voice Note Player */}
         {audioKey && (
           <div className="space-y-2">
-            <div className="p-4 border border-border bg-[#FAFAFA] flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 flex-1">
-                <button
-                  type="button"
-                  onClick={togglePlayAudio}
-                  className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow hover:bg-accent/90 shrink-0 cursor-pointer"
-                  title={isPlayingAudio ? 'Pause Voice Note' : 'Play Voice Note'}
-                >
-                  {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                </button>
-                <div className="flex-1 space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-1.5">
-                      <Volume2 className="w-3.5 h-3.5" /> Voice Note
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground">
-                      {formatAudioTime(playbackProgress)} / {formatAudioTime(audioDuration)}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full bg-border rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-accent transition-all duration-100 ease-linear"
-                      style={{
-                        width: `${audioDuration > 0 ? (playbackProgress / audioDuration) * 100 : 0}%`,
-                      }}
-                    />
-                  </div>
+            <div className="p-3 bg-gray-50 rounded-xl flex items-center gap-3">
+              <button
+                type="button"
+                onClick={togglePlayAudio}
+                className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-sm shrink-0 cursor-pointer"
+              >
+                {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+              </button>
+              <div className="flex-1 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-900 flex items-center gap-1.5">
+                    <Volume2 className="w-3.5 h-3.5" /> Voice Note
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {formatAudioTime(playbackProgress)} / {formatAudioTime(audioDuration)}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 transition-all duration-100 ease-linear"
+                    style={{
+                      width: `${audioDuration > 0 ? (playbackProgress / audioDuration) * 100 : 0}%`,
+                    }}
+                  />
                 </div>
               </div>
               <audio
@@ -399,7 +454,8 @@ export function DiscoveryCard({
             {canComment && (
               <CommentButton
                 target={{ type: 'VOICE', ref: audioKey, label: 'Voice note' }}
-                label="Comment on voice"
+                label="Reply to voice note"
+                className="!text-[11px] !py-1 !px-2.5"
               />
             )}
           </div>
@@ -407,14 +463,14 @@ export function DiscoveryCard({
 
         {/* Written Prompts */}
         {prompts.length > 0 && (
-          <div className="space-y-3 pt-2">
+          <div className="space-y-3">
             {prompts.map((p, idx) => (
-              <div key={idx} className="p-4 border border-border/80 bg-[#FAFAFA] space-y-1.5">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-accent block">
+              <div key={idx} className="p-3 bg-gray-50 rounded-xl space-y-1.5">
+                <span className="text-xs font-semibold text-gray-500 block">
                   {p.promptId}
                 </span>
-                <p className="text-xs font-serif italic text-foreground/90 leading-relaxed">
-                  "{p.answer}"
+                <p className="text-sm text-gray-900 leading-relaxed font-medium">
+                  {p.answer}
                 </p>
                 {canComment && (
                   <div className="pt-1">
@@ -425,7 +481,8 @@ export function DiscoveryCard({
                         label: 'Prompt',
                         preview: p.answer,
                       }}
-                      label="Comment"
+                      label="Reply"
+                      className="!text-[11px] !py-1 !px-2.5"
                     />
                   </div>
                 )}
@@ -441,48 +498,43 @@ export function DiscoveryCard({
           candidate.wantsKids ||
           candidate.smokingStatus ||
           candidate.drinkingStatus) && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
+          <div className="flex flex-wrap gap-2">
             {candidate.relationshipType && (
-              <span className="px-2.5 py-1 bg-accent/5 border border-border text-[9px] uppercase tracking-wider font-bold opacity-70">
+              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
                 {candidate.relationshipType.replace(/_/g, ' ')}
               </span>
             )}
             {candidate.starSign && (
-              <span className="px-2.5 py-1 bg-accent/5 border border-border text-[9px] uppercase tracking-wider font-bold opacity-70">
+              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
                 ⭐ {candidate.starSign}
               </span>
             )}
             {candidate.religion && (
-              <span className="px-2.5 py-1 bg-accent/5 border border-border text-[9px] uppercase tracking-wider font-bold opacity-70">
+              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
                 {candidate.religion}
               </span>
             )}
             {candidate.wantsKids && (
-              <span className="px-2.5 py-1 bg-accent/5 border border-border text-[9px] uppercase tracking-wider font-bold opacity-70">
+              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
                 Kids: {candidate.wantsKids}
               </span>
             )}
             {candidate.smokingStatus && (
-              <span className="px-2.5 py-1 bg-accent/5 border border-border text-[9px] uppercase tracking-wider font-bold opacity-70">
+              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
                 Smoke: {candidate.smokingStatus}
               </span>
             )}
             {candidate.drinkingStatus && (
-              <span className="px-2.5 py-1 bg-accent/5 border border-border text-[9px] uppercase tracking-wider font-bold opacity-70">
+              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
                 Drink: {candidate.drinkingStatus}
               </span>
             )}
           </div>
         )}
 
-        {/* Interests & Passions — each is a like target in live discovery */}
+        {/* Interests */}
         {interests.length > 0 && (
-          <div className="space-y-2 pt-2 border-t border-border/60">
-            {canComment && (
-              <span className="text-[9px] font-bold uppercase tracking-[0.2em] opacity-40 block">
-                Tap an interest to comment & like
-              </span>
-            )}
+          <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               {interests.map((interest: string, i: number) =>
                 canComment ? (
@@ -498,16 +550,14 @@ export function DiscoveryCard({
                         preview: interest,
                       });
                     }}
-                    aria-label={`Comment on interest ${interest} to like`}
-                    title={`Comment on "${interest}" to like`}
-                    className="px-3 py-1 border border-border text-[9px] uppercase tracking-[0.15em] font-bold opacity-70 bg-white hover:border-accent hover:text-accent transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 transition-colors rounded-full text-xs font-medium text-gray-700 inline-flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Heart className="w-3 h-3" /> {interest}
+                    {interest}
                   </button>
                 ) : (
                   <span
                     key={i}
-                    className="px-3 py-1 border border-border text-[9px] uppercase tracking-[0.15em] font-bold opacity-60 bg-white"
+                    className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700"
                   >
                     {interest}
                   </span>
@@ -516,32 +566,8 @@ export function DiscoveryCard({
             </div>
           </div>
         )}
-
-        {/* Actions: live PASS (like is comment-only, above) or preview footer */}
-        {onPass ? (
-          <div className="pt-6">
-            <button
-              type="button"
-              onClick={onPass}
-              className="w-full py-4 border border-border text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-bg transition-colors cursor-pointer"
-            >
-              Pass
-            </button>
-            <p className="pt-3 text-center text-[10px] uppercase tracking-[0.2em] opacity-40">
-              To like, comment on something above
-            </p>
-          </div>
-        ) : isPreview ? (
-          <div className="pt-4 border-t border-border/80">
-            <div className="flex items-center justify-between text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
-              <span className="flex items-center gap-1.5 opacity-60">
-                <Heart className="w-3.5 h-3.5 text-accent" /> Ready for matching
-              </span>
-              <span className="text-accent font-mono text-[9px]">OneHook Feed Preview</span>
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   );
 }
+

@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { X, Send, Image as ImageIcon, Video, Volume2, MessageSquareQuote, Sparkles, Tag } from 'lucide-react';
 import { LIKE_COMMENT_MAX_CHARS } from '../../api/rest';
 import type { LikeTarget, LikeTargetType } from './like-target';
+import { trackLikeComposerOpen, trackLikeCommentAbandoned } from '../../lib/analytics/analytics';
 
 const TYPE_META: Record<LikeTargetType, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   PHOTO: { label: 'Photo', icon: ImageIcon },
@@ -36,6 +37,31 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel }: Comm
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // Comment-to-like intent instrumentation: opening the composer signals intent; closing it WITHOUT
+  // sending is the hesitation ("almost liked") signal. `submittedRef` is set optimistically in
+  // handleSubmit so a successful send is never miscounted as an abandon, and reset on failure (the
+  // composer stays open, so a later close is a genuine abandon). `commentRef` lets the unmount
+  // cleanup read the latest draft length without re-subscribing.
+  const openedAtRef = useRef(Date.now());
+  const submittedRef = useRef(false);
+  const commentRef = useRef('');
+  useEffect(() => {
+    commentRef.current = comment;
+  }, [comment]);
+  useEffect(() => {
+    trackLikeComposerOpen(target.type, target.ref);
+    return () => {
+      if (!submittedRef.current) {
+        trackLikeCommentAbandoned(
+          target.type,
+          Date.now() - openedAtRef.current,
+          commentRef.current.trim().length > 0
+        );
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
@@ -58,10 +84,13 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel }: Comm
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
+    // Committing a like — not an abandon. Reset if it fails (composer stays open on error).
+    submittedRef.current = true;
     try {
       await onSubmit(comment.trim());
       // Parent closes the composer and advances on success.
     } catch (err: any) {
+      submittedRef.current = false;
       setError(err?.message || 'We couldn’t send that just now. Please try again.');
       setSubmitting(false);
     }
