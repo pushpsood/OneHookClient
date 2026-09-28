@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { DiscoveryCandidate } from '../../types';
 import type { ApiError } from '../../lib/api-client';
@@ -7,6 +7,7 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { DiscoveryCard } from './DiscoveryCard';
 import { CommentComposer } from './CommentComposer';
 import type { LikeTarget } from './like-target';
+import { trackCardImpression, trackCardSwipe } from '../../lib/analytics/analytics';
 
 export function DiscoveryView({
   candidates,
@@ -40,12 +41,20 @@ export function DiscoveryView({
 
   const currentCandidate = currentIndex < candidates.length ? candidates[currentIndex] : null;
 
+  // A new card is shown — record the impression (no-op unless analytics is enabled + consented).
+  useEffect(() => {
+    if (currentCandidate) {
+      trackCardImpression(currentCandidate.id, currentIndex);
+    }
+  }, [currentCandidate?.id, currentIndex]);
+
   const advance = () => setCurrentIndex((prev) => prev + 1);
 
   const handlePass = async () => {
     if (!currentCandidate) return;
     const targetId = currentCandidate.id;
     // Passing is optimistic — advance immediately, fire in the background.
+    trackCardSwipe('left', targetId);
     advance();
     try {
       await onPass(targetId);
@@ -60,6 +69,7 @@ export function DiscoveryView({
     // On success we close the composer and advance. On failure the composer stays open, shows the
     // error, and the deck does NOT advance — so the throw must propagate to the composer.
     await onLike(targetId, comment, activeTarget.type, activeTarget.ref);
+    trackCardSwipe('right', targetId);
     setActiveTarget(null);
     advance();
   };

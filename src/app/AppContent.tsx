@@ -20,6 +20,7 @@ import { ChatView } from '../features/chat/ChatView';
 import { ProfileView } from '../features/profile/ProfileView';
 import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
 import { useHistoryUnlock } from '../hooks/use-history-unlock';
+import { startAnalytics, stopAnalytics, trackScreenView } from '../lib/analytics/analytics';
 
 export function AppContent() {
   const navigate = useNavigate();
@@ -83,6 +84,20 @@ export function AppContent() {
       setCurrentUser(profile);
     }
   }, [profile, setCurrentUser]);
+
+  // Analytics: start batched emission + session heartbeats once the authenticated shell mounts, and
+  // flush/stop on teardown. No-op unless analytics is enabled for the stage and the user consents.
+  useEffect(() => {
+    startAnalytics();
+    return () => {
+      void stopAnalytics();
+    };
+  }, []);
+
+  // A tab/screen was shown. `appState` is a stable, non-PII screen identifier.
+  useEffect(() => {
+    trackScreenView(appState);
+  }, [appState]);
 
   useEffect(() => {
     if (!currentUser && (profileError || userState?.state === UserState.ONBOARDING)) {
