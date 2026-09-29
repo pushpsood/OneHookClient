@@ -96,14 +96,14 @@ export function ChatSettingsSheet({
             exit={{ opacity: 0, y: 12 }}
             role="dialog"
             aria-label="Chat settings"
-            className="w-full max-w-md bg-white border border-border shadow-2xl max-h-[85vh] flex flex-col"
+            className="w-full max-w-md bg-surface-card text-text border border-border shadow-2xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
-              <h2 className="text-lg font-serif italic font-bold">Chat settings</h2>
+              <h2 className="text-lg font-serif italic font-bold text-text">Chat settings</h2>
               <button
                 onClick={onClose}
-                className="p-2 border border-border hover:border-accent hover:bg-bg transition-colors"
+                className="p-2 border border-border hover:border-accent hover:bg-surface-hover transition-colors rounded-lg cursor-pointer"
                 aria-label="Close chat settings"
               >
                 <X className="w-4 h-4" />
@@ -145,7 +145,7 @@ export function ChatSettingsSheet({
                       onChange={(e) =>
                         void patch({ lastSeenVisibility: e.target.value as LastSeenVisibility })
                       }
-                      className="w-full p-3 border border-border text-xs bg-bg outline-none focus:border-accent"
+                      className="w-full p-3 border border-border text-xs bg-surface text-text rounded-xl outline-none focus:border-accent"
                     >
                       <option value="EVERYONE">Everyone</option>
                       <option value="MATCHES">Matches only</option>
@@ -170,7 +170,7 @@ export function ChatSettingsSheet({
                       onBlur={(e) =>
                         void patch({ defaultDisappearingSeconds: Number(e.target.value) || 0 })
                       }
-                      className="w-full p-3 border border-border text-xs bg-bg outline-none focus:border-accent"
+                      className="w-full p-3 border border-border text-xs bg-surface text-text rounded-xl outline-none focus:border-accent"
                     />
                   </div>
                 </>

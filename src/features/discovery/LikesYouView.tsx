@@ -1,4 +1,5 @@
 import { useEffect, useState, type ComponentType } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
   Heart,
@@ -11,6 +12,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useReceivedLikes } from '../../hooks/use-api';
+import { trackLikesYouView } from '../../lib/analytics/analytics';
 import { ProfileApi } from '../../api/profile';
 import { MediaImage } from '../../components/common/MediaImage';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -55,20 +57,15 @@ function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?
     label: 'your profile',
     icon: Heart,
   };
-  const Icon = meta.icon;
   const name = profile?.displayName || like.fromUserId;
   const isMediaTarget =
     like.likeTargetType === 'PHOTO' || like.likeTargetType === 'VIDEO';
 
-  // For PROMPT/INTEREST the ref is human-readable (promptId / interest value); surface it.
-  const refDetail =
-    (like.likeTargetType === 'PROMPT' || like.likeTargetType === 'INTEREST') && like.likeTargetRef
-      ? like.likeTargetRef
-      : null;
+  const typeLabel = meta.label.replace(/^(a |an |the )/, 'your ');
 
   return (
-    <div className="flex gap-4 p-5 border border-border bg-white">
-      <div className="w-14 h-14 shrink-0 rounded-full overflow-hidden border border-border bg-border">
+    <div className="flex items-center gap-3 px-4 py-3 hover:bg-surface-hover cursor-pointer transition-colors select-none">
+      <div className="w-11 h-11 shrink-0 rounded-full overflow-hidden bg-surface border border-border">
         <MediaImage
           src={profile?.photo}
           alt={name}
@@ -78,41 +75,30 @@ function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?
         />
       </div>
 
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="text-base font-serif italic tracking-tight text-foreground truncate">
-            {name}
-          </h3>
-          <span className="text-[9px] font-mono uppercase tracking-widest opacity-40 shrink-0">
-            {timeAgo(like.createdAt)}
-          </span>
-        </div>
-
-        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-accent flex items-center gap-1.5">
-          <Icon className="w-3 h-3" /> Liked {meta.label}
-          {refDetail ? <span className="opacity-60 normal-case tracking-normal">· {refDetail}</span> : null}
-        </span>
-
-        {like.comment ? (
-          <p className="text-sm opacity-80 leading-relaxed font-serif italic border-l-2 border-accent/40 pl-3 py-0.5">
-            “{like.comment}”
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-text leading-snug">
+          <span className="font-semibold text-text">{name}</span>{' '}
+          <span className="text-text-secondary">liked {typeLabel}.</span>{' '}
+          <span className="text-text-muted text-xs font-normal">{timeAgo(like.createdAt)}</span>
+        </p>
+        {like.comment && (
+          <p className="text-sm text-text truncate mt-0.5 opacity-90">
+            "{like.comment}"
           </p>
-        ) : (
-          <p className="text-xs opacity-40 italic">Liked you</p>
-        )}
-
-        {isMediaTarget && like.likeTargetRef && (
-          <div className="pt-1">
-            <MediaImage
-              src={like.likeTargetRef}
-              alt="Liked media"
-              loading="lazy"
-              decoding="async"
-              className="w-16 h-20 object-cover border border-border"
-            />
-          </div>
         )}
       </div>
+
+      {isMediaTarget && like.likeTargetRef && (
+        <div className="shrink-0 ml-3 w-11 h-11 rounded-lg overflow-hidden border border-border">
+          <MediaImage
+            src={like.likeTargetRef}
+            alt="Liked media"
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -121,8 +107,25 @@ export function LikesYouView() {
   const { likes, count, loading, error, refresh } = useReceivedLikes();
   const [profiles, setProfiles] = useState<Record<string, LikerProfile>>({});
 
-  // Best-effort hydration of the liker's name/photo (the read side returns only fromUserId). Mirrors
-  // how discovery hydrates candidate cards; failures fall back to the raw id.
+  const [portalNode, setPortalNode] = useState<HTMLElement | null>(() => {
+    if (typeof document !== 'undefined') {
+      return document.getElementById('topbar-center-slot');
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (!portalNode && typeof document !== 'undefined') {
+      setPortalNode(document.getElementById('topbar-center-slot'));
+    }
+  }, [portalNode]);
+
+  // Analytics: the received-likes ("Likes You") surface was viewed (engagement signal).
+  useEffect(() => {
+    if (!loading) trackLikesYouView({ count });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
   useEffect(() => {
     let active = true;
     const seen = new Set<string>();
@@ -157,87 +160,115 @@ export function LikesYouView() {
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [likes]);
 
   if (loading) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="flex-1 flex items-center justify-center bg-[#F9F9F9]"
-      >
+      <div className="h-full flex items-center justify-center bg-bg text-text">
         <LoadingSpinner size="lg" />
-      </motion.div>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="flex-1 flex items-center justify-center bg-[#F9F9F9] p-12"
-      >
-        <div className="max-w-md w-full bg-white border border-border p-12 text-center space-y-8">
-          <h2 className="text-4xl font-serif italic uppercase tracking-tighter">Likes Unavailable</h2>
-          <p className="text-xs opacity-60 leading-relaxed italic">{error.message}</p>
+      <div className="h-full flex items-center justify-center bg-bg text-text p-6">
+        <div className="max-w-sm w-full text-center space-y-4">
+          <h2 className="text-lg font-semibold text-text">Likes Unavailable</h2>
+          <p className="text-sm text-text-secondary">{error.message}</p>
           <button
             onClick={refresh}
-            className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-colors"
+            className="w-full py-3 bg-accent text-bg text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
           >
             Try Again
           </button>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="flex-1 bg-[#F9F9F9] overflow-y-auto"
-    >
-      <div className="max-w-[560px] mx-auto p-6 sm:p-10 space-y-6">
-        <div className="flex items-end justify-between border-b border-border pb-4">
-          <div className="space-y-1">
-            <h2 className="text-3xl font-serif italic uppercase tracking-tighter flex items-center gap-2">
-              <Heart className="w-5 h-5 text-accent" /> Likes You
-            </h2>
-            <p className="text-[10px] uppercase tracking-[0.2em] opacity-40">
-              {count} {count === 1 ? 'person' : 'people'} commented to like you
-            </p>
-          </div>
-          <button
-            onClick={refresh}
-            aria-label="Refresh likes"
-            title="Refresh"
-            className="w-9 h-9 border border-border flex items-center justify-center hover:bg-white transition-colors cursor-pointer"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfThisWeek = startOfToday - 7 * 24 * 60 * 60 * 1000;
+
+  const today: ReceivedLike[] = [];
+  const thisWeek: ReceivedLike[] = [];
+  const earlier: ReceivedLike[] = [];
+
+  likes.forEach((like) => {
+    const time = Date.parse(like.createdAt);
+    if (Number.isNaN(time)) {
+      earlier.push(like);
+    } else if (time >= startOfToday) {
+      today.push(like);
+    } else if (time >= startOfThisWeek) {
+      thisWeek.push(like);
+    } else {
+      earlier.push(like);
+    }
+  });
+
+  const Section = ({ title, items }: { title: string; items: ReceivedLike[] }) => {
+    if (items.length === 0) return null;
+    return (
+      <div className="mb-4">
+        <h3 className="px-4 py-2 text-sm font-bold text-text">{title}</h3>
+        <div className="divide-y divide-border/40">
+          {items.map((like, i) => (
+            <LikeRow
+              key={`${like.fromUserId}-${like.createdAt}-${i}`}
+              like={like}
+              profile={profiles[like.fromUserId]}
+            />
+          ))}
         </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="h-full bg-bg text-text overflow-y-auto">
+      {/* ── REFRESH in Top Header Center ── */}
+      {portalNode &&
+        createPortal(
+          <div className="relative group/refresh flex items-center">
+            <button
+              type="button"
+              onClick={refresh}
+              title="Refresh notifications"
+              aria-label="Refresh notifications"
+              className="h-9 px-3 flex items-center gap-2 rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer text-sm font-semibold"
+            >
+              <RefreshCw className={`w-4 h-4 stroke-[2] ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+            <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/refresh:opacity-100 transition-all duration-150 shadow-md z-50">
+              Refresh notifications
+            </div>
+          </div>,
+          portalNode
+        )}
+
+      <div className="max-w-[600px] mx-auto py-4">
 
         {likes.length === 0 ? (
-          <div className="bg-white border border-border p-12 text-center space-y-4">
-            <h3 className="text-xl font-serif italic uppercase tracking-tight">No Likes Yet</h3>
-            <p className="text-xs opacity-60 leading-relaxed italic">
-              When someone comments on your photos, prompts or bio to like you, they&rsquo;ll show up
-              here.
+          <div className="py-16 text-center px-4">
+            <div className="w-14 h-14 rounded-full border-2 border-border flex items-center justify-center mx-auto mb-3 text-text-muted">
+              <Heart className="w-7 h-7" />
+            </div>
+            <h3 className="text-sm font-semibold text-text mb-1">Activity On Your Profile</h3>
+            <p className="text-text-secondary text-xs max-w-xs mx-auto">
+              When someone likes or comments on your profile, you'll see it here.
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {likes.map((like, i) => (
-              <LikeRow key={`${like.fromUserId}-${like.createdAt}-${i}`} like={like} profile={profiles[like.fromUserId]} />
-            ))}
+          <div className="pb-8">
+            <Section title="Today" items={today} />
+            <Section title="This Week" items={thisWeek} />
+            <Section title="Earlier" items={earlier} />
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }

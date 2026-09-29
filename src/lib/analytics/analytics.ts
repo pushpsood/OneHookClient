@@ -118,7 +118,7 @@ export function trackCardSwipe(direction: 'left' | 'right' | 'up', candidateId?:
 /** A profile section (photos/prompts/bio/interests/voice) was viewed. `dwellMs` optional. */
 export function trackSectionView(
   sectionId: string,
-  opts?: { viewedUserId?: string; dwellMs?: number; context?: string }
+  opts?: { viewedUserId?: string; dwellMs?: number; context?: string; cardVariant?: string }
 ): void {
   getAnalytics().track('section_view', { sectionId, ...opts });
 }
@@ -127,7 +127,14 @@ export function trackSectionView(
 export function trackMediaView(
   mediaId: string,
   mediaType: 'image' | 'video' | 'voice',
-  opts?: { dwellMs?: number; index?: number; viewedUserId?: string; context?: string }
+  opts?: {
+    dwellMs?: number;
+    index?: number;
+    viewedUserId?: string;
+    context?: string;
+    cardVariant?: string;
+    playedToCompletion?: boolean;
+  }
 ): void {
   getAnalytics().track('media_view', { mediaId, mediaType, ...opts });
 }
@@ -149,6 +156,56 @@ export function trackLikeCommentAbandoned(
 /** Escape hatch for any other allowed signal type. */
 export function track(type: SignalType, attributes?: Record<string, unknown>): void {
   getAnalytics().track(type, attributes);
+}
+
+// ── Tier 2: conversation-centric + engagement signals ────────────────────────
+
+/** A specific prompt was viewed (conversation-seed signal). */
+export function trackPromptView(promptId: string, opts?: { viewedUserId?: string; cardVariant?: string }): void {
+  getAnalytics().track('prompt_view', { promptId, ...opts });
+}
+
+/** A push/in-app notification was opened (re-engagement). `notifType` e.g. new_match|new_message|new_like. */
+export function trackNotificationOpened(
+  notifType: string,
+  opts?: { matchId?: string; openLatencyMs?: number; channel?: 'push' | 'in_app' }
+): void {
+  getAnalytics().track('notification_opened', { notifType, ...opts });
+}
+
+/** A match's conversation was opened (investment / return signal). Metadata only — no content. */
+export function trackConversationOpened(
+  matchId: string,
+  opts?: { unreadCount?: number; msSinceLastMessage?: number }
+): void {
+  getAnalytics().track('conversation_opened', { matchId, ...opts });
+}
+
+/** The message composer was closed WITHOUT sending — the fading/hesitation signal. Metadata only. */
+export function trackComposeAbandoned(matchId: string, composeDurationMs: number, hadDraft: boolean): void {
+  getAnalytics().track('compose_abandoned', { matchId, composeDurationMs, hadDraft });
+}
+
+/** A candidate's/match's profile was re-opened (sustained-interest signal). */
+export function trackProfileRevisit(viewedUserId: string, context?: string): void {
+  getAnalytics().track('profile_revisit', { viewedUserId, context });
+}
+
+// ── Tier 3: differentiator / engagement / safety signals ─────────────────────
+
+/** Reaction to the "one connection at a time" exclusivity overlay. `action` e.g. shown|go_to_chat|dismiss. */
+export function trackHookedStateView(action?: string): void {
+  getAnalytics().track('hooked_state_view', { action });
+}
+
+/** Engagement with the received-likes ("Likes You") surface. */
+export function trackLikesYouView(opts?: { count?: number; index?: number }): void {
+  getAnalytics().track('likes_you_view', { ...opts });
+}
+
+/** Unmatch/block/report UI was opened (intent; the action itself is server-authoritative). */
+export function trackSafetyUiOpen(action: 'unmatch' | 'block' | 'report', abandoned?: boolean): void {
+  getAnalytics().track('safety_ui_open', { action, abandoned });
 }
 
 // ── Test seam ────────────────────────────────────────────────────────────────

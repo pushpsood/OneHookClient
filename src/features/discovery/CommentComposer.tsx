@@ -23,6 +23,8 @@ export interface CommentComposerProps {
   /** Submit the like. Resolves on success; rejects (with the surfaced message) on failure. */
   onSubmit: (comment: string) => Promise<void>;
   onCancel: () => void;
+  /** 'rose' shows the super-like framing (a daily-limited rose on the whole profile). */
+  kind?: 'like' | 'rose';
 }
 
 /**
@@ -31,7 +33,8 @@ export interface CommentComposerProps {
  * submit while empty or in flight. On failure it shows the error and does not close, so the caller
  * never advances the deck for a rejected like.
  */
-export function CommentComposer({ targetName, target, onSubmit, onCancel }: CommentComposerProps) {
+export function CommentComposer({ targetName, target, onSubmit, onCancel, kind = 'like' }: CommentComposerProps) {
+  const isRose = kind === 'rose';
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,7 +126,7 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel }: Comm
               <Icon className="w-3.5 h-3.5" /> {meta.label}
             </span>
             <h3 className="text-lg font-serif italic tracking-tight text-foreground truncate">
-              Comment on {targetName}
+              {isRose ? `Send a rose to ${targetName}` : `Comment on ${targetName}`}
             </h3>
             {target.preview && (
               <p className="text-xs opacity-60 italic leading-relaxed line-clamp-3 border-l-2 border-accent/40 pl-3">
@@ -149,7 +152,7 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel }: Comm
             value={comment}
             maxLength={LIKE_COMMENT_MAX_CHARS}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Add a comment to send with your like…"
+            placeholder={isRose ? 'Add a note with your rose…' : 'Add a comment to send with your like…'}
             rows={4}
             disabled={submitting}
             className="w-full resize-none border border-border bg-[#FAFAFA] p-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
@@ -186,7 +189,7 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel }: Comm
               disabled={!canSubmit}
               className="flex-1 py-3.5 bg-accent text-white text-[10px] font-bold uppercase tracking-[0.3em] hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow"
             >
-              <Send className="w-3.5 h-3.5" /> {submitting ? 'Sending…' : 'Send Like'}
+              <Send className="w-3.5 h-3.5" /> {submitting ? 'Sending…' : isRose ? 'Send Rose 🌹' : 'Send Like'}
             </button>
           </div>
         </div>

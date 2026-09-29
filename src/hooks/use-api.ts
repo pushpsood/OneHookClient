@@ -341,6 +341,7 @@ export function useSwipe() {
       likeTargetType: LikeTargetType;
       likeTargetRef?: string;
       viewedSection?: ProfileSection;
+      likeKind?: 'LIKE' | 'ROSE';
     }) => {
       try {
         setLoading(true);

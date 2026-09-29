@@ -77,7 +77,7 @@ export function HistoryResetDialog({
       aria-modal="true"
       aria-labelledby="history-reset-title"
     >
-      <div className="bg-white border border-border w-full max-w-md max-h-[90vh] overflow-y-auto p-8 space-y-6">
+      <div className="bg-surface-card text-text border border-border w-full max-w-md max-h-[90vh] overflow-y-auto p-8 space-y-6 rounded-2xl shadow-2xl">
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 mt-1 text-amber-600 shrink-0" aria-hidden="true" />
           <div>

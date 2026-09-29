@@ -1,29 +1,13 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowLeft } from 'lucide-react';
-import { BrandWordmark } from '../common/BrandWordmark';
+import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 
 export function Privacy() {
-  const navigate = useNavigate();
-
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
-      <nav className="border-b border-border">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] hover:opacity-60 transition-opacity"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </button>
-          <BrandWordmark className="text-2xl font-bold tracking-tighter uppercase" />
-          <div className="w-20" />
-        </div>
-      </nav>
+      <SiteHeader pageTitle="Privacy" />
 
       {/* Hero Section */}
       <section className="py-16 px-6 bg-gradient-to-b from-bg to-white">

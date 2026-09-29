@@ -3,9 +3,11 @@ import { RankedCandidate } from '../types';
 import {
   SwipeApi,
   ReceivedLikesApi,
+  RosesApi,
   type LikeTargetType,
   type SwipeResult,
   type ReceivedLikesResponse,
+  type RoseQuota,
 } from './rest';
 
 export type ProfileSection =
@@ -57,8 +59,14 @@ export const MatchingApi = {
     likeTargetType: LikeTargetType;
     likeTargetRef?: string;
     viewedSection?: ProfileSection;
+    likeKind?: 'LIKE' | 'ROSE';
   }): Promise<SwipeResult> => {
     return SwipeApi.like(input);
+  },
+
+  /** Remaining daily rose (super-like) quota. */
+  rosesRemaining: async (): Promise<RoseQuota> => {
+    return RosesApi.remaining();
   },
 
   /** The caller's received likes (who liked them, on which element, with what comment). */

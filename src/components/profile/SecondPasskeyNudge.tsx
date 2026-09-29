@@ -75,7 +75,7 @@ export function SecondPasskeyNudge({ userId }: { userId?: string }) {
   };
 
   return (
-    <div className="border border-border p-6 bg-bg/40 space-y-4">
+    <div className="border border-border p-6 bg-surface text-text space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
           <KeyRound className="w-4 h-4 mt-0.5 text-accent shrink-0" aria-hidden="true" />
@@ -105,13 +105,13 @@ export function SecondPasskeyNudge({ userId }: { userId?: string }) {
         <button
           onClick={() => void addPasskey()}
           disabled={busy}
-          className="py-3 px-6 bg-accent text-white text-[10px] uppercase tracking-[0.2em] font-black hover:opacity-90 disabled:opacity-50 transition-opacity"
+          className="py-3 px-6 bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black hover:opacity-90 disabled:opacity-50 transition-opacity"
         >
           Add a passkey
         </button>
         <button
           onClick={dismiss}
-          className="py-3 px-6 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent transition-colors"
+          className="py-3 px-6 border border-border text-text hover:bg-surface-hover text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent transition-colors"
         >
           Not now
         </button>

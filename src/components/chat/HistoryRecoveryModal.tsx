@@ -69,7 +69,7 @@ export function HistoryRecoveryModal({
       aria-modal="true"
       aria-labelledby="history-recovery-title"
     >
-      <div className="bg-white border border-border w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface-card text-text border border-border w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl">
         <div className="flex items-start justify-between gap-4 p-8 border-b border-border">
           <div className="flex items-start gap-3">
             <History className="w-4 h-4 mt-1 text-accent shrink-0" aria-hidden="true" />

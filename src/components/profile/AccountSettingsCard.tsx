@@ -149,7 +149,7 @@ export function AccountSettingsCard() {
   };
 
   return (
-    <div className="border border-border p-8 space-y-8 bg-white">
+    <div className="border border-border p-8 space-y-8 bg-surface-card text-text">
       <div className="flex items-center gap-3">
         <Settings className="w-4 h-4 text-accent" />
         <div>
@@ -168,13 +168,13 @@ export function AccountSettingsCard() {
           {/* Email Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Mail className="w-4 h-4 text-muted-foreground" />
+              <Mail className="w-4 h-4 text-text-muted" />
               <span className="text-[9px] uppercase tracking-[0.25em] font-black opacity-60">
                 Email Address
               </span>
             </div>
             {currentEmail ? (
-              <div className="text-sm font-medium p-3 bg-bg/50 border border-border inline-block">
+              <div className="text-sm font-medium p-3 bg-surface border border-border inline-block">
                 {currentEmail} <span className="text-green-600 text-xs ml-2">✓ Verified</span>
               </div>
             ) : (
@@ -190,7 +190,7 @@ export function AccountSettingsCard() {
                     <button
                       onClick={handleAddEmailRequest}
                       disabled={loading === 'email_request'}
-                      className="py-2 px-4 bg-accent text-white text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 shrink-0"
+                      className="py-2 px-4 bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 shrink-0"
                     >
                       {loading === 'email_request' ? <Loader className="w-3 h-3 animate-spin" /> : 'Add'}
                     </button>
@@ -207,13 +207,13 @@ export function AccountSettingsCard() {
                     <button
                       onClick={handleAddEmailVerify}
                       disabled={loading === 'email_verify'}
-                      className="py-2 px-4 bg-accent text-white text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 shrink-0"
+                      className="py-2 px-4 bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 shrink-0"
                     >
                       {loading === 'email_verify' ? <Loader className="w-3 h-3 animate-spin" /> : 'Verify'}
                     </button>
                     <button
                       onClick={() => setEmailStep('input')}
-                      className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-bg shrink-0"
+                      className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-surface-hover text-text shrink-0"
                     >
                       Cancel
                     </button>
@@ -232,7 +232,7 @@ export function AccountSettingsCard() {
               <button
                 onClick={handleLinkGoogle}
                 disabled={loading === 'google'}
-                className="py-3 px-6 border border-border bg-white text-foreground hover:border-foreground transition-colors text-[10px] uppercase tracking-[0.2em] font-black disabled:opacity-50 inline-flex items-center justify-center gap-2 flex-1"
+                className="py-3 px-6 border border-border bg-surface hover:bg-surface-hover text-text hover:border-accent transition-colors text-[10px] uppercase tracking-[0.2em] font-black disabled:opacity-50 inline-flex items-center justify-center gap-2 flex-1"
               >
                 {loading === 'google' ? <Loader className="w-4 h-4 animate-spin" /> : <Chrome className="w-4 h-4" />}
                 Link Google
@@ -240,7 +240,7 @@ export function AccountSettingsCard() {
               <button
                 onClick={handleLinkApple}
                 disabled={loading === 'apple'}
-                className="py-3 px-6 border border-border bg-black text-white hover:opacity-90 transition-opacity text-[10px] uppercase tracking-[0.2em] font-black disabled:opacity-50 inline-flex items-center justify-center gap-2 flex-1"
+                className="py-3 px-6 border border-border bg-black text-white dark:bg-white dark:text-black hover:opacity-90 transition-opacity text-[10px] uppercase tracking-[0.2em] font-black disabled:opacity-50 inline-flex items-center justify-center gap-2 flex-1"
               >
                 {loading === 'apple' ? <Loader className="w-4 h-4 animate-spin" /> : <Apple className="w-4 h-4" />}
                 Link Apple
@@ -254,7 +254,7 @@ export function AccountSettingsCard() {
           {/* Passkey Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Fingerprint className="w-4 h-4 text-muted-foreground" />
+              <Fingerprint className="w-4 h-4 text-text-muted" />
               <span className="text-[9px] uppercase tracking-[0.25em] font-black opacity-60">
                 Passkeys (WebAuthn)
               </span>
@@ -265,7 +265,7 @@ export function AccountSettingsCard() {
             <button
               onClick={handleAddPasskey}
               disabled={loading === 'passkey'}
-              className="py-3 px-6 w-full sm:w-auto bg-foreground text-background text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 inline-flex justify-center items-center gap-2"
+              className="py-3 px-6 w-full sm:w-auto bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 inline-flex justify-center items-center gap-2"
             >
               {loading === 'passkey' ? <Loader className="w-4 h-4 animate-spin" /> : <Fingerprint className="w-4 h-4" />}
               Register Passkey
@@ -323,7 +323,7 @@ export function AccountSettingsCard() {
                   setDeleteConfirmText('');
                 }}
                 disabled={loading === 'delete'}
-                className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-bg shrink-0 disabled:opacity-50"
+                className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-surface-hover text-text shrink-0 disabled:opacity-50"
               >
                 Cancel
               </button>

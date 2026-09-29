@@ -33,6 +33,7 @@ import { ModerationBadge } from '../../components/ui/ModerationBadge';
 import { AudioRecorder } from '../../components/profile/AudioRecorder';
 import { ProfilePreviewModal } from '../../components/profile/ProfilePreviewModal';
 import { ProfilePreviewHoverCard } from '../../components/profile/ProfilePreviewHoverCard';
+import { AppearanceCard } from '../../components/profile/AppearanceCard';
 import type { DiscoveryProfileData } from '../discovery/DiscoveryCard';
 
 
@@ -774,8 +775,10 @@ export function ProfileView({
       />
       
 
-      <div className="bg-white border border-border p-8 md:p-12 space-y-10 shadow-sm">
-        <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
+      <div className="bg-surface-card text-text space-y-6">
+        {/* Instagram-style profile header */}
+        <div className="flex flex-col items-center gap-4 pt-4">
+          {/* Circular profile photo */}
           <div
             className="relative"
             onMouseEnter={() => {
@@ -791,47 +794,27 @@ export function ProfileView({
               }, 300);
             }}
           >
-            <div
-              onClick={() => {
-                setIsHoveringAvatar(false);
-                setShowFullPreview(true);
-              }}
-              className="relative w-32 h-40 border-2 border-border hover:border-accent overflow-hidden bg-black/5 shrink-0 group cursor-pointer transition-all shadow-sm"
-              title="Click to preview how your profile appears on Discovery feed"
-            >
-              {primaryPhoto ? (
-                <MediaImage
-                  src={primaryPhoto}
-                  style={pictureTransformStyle(user.pictureTransforms?.[primaryPhoto])}
-                  alt={basic.displayName}
-                  className="w-full h-full object-cover grayscale transition-all duration-700 group-hover:grayscale-0"
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                  <ImageIcon className="w-8 h-8 opacity-40" />
-                  <span className="text-[10px] uppercase tracking-widest font-black">Upload</span>
-                </div>
-              )}
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center text-white p-2 text-center">
-                <Eye className="w-5 h-5 mb-1 text-green-400" />
-                <span className="text-[9px] font-black uppercase tracking-widest leading-tight">
-                  Preview Feed
-                </span>
-                <span className="text-[7px] opacity-80 uppercase tracking-wider mt-0.5 font-mono">
-                  Click to open
-                </span>
-              </div>
-            </div>
-
             <button
               type="button"
               onClick={() => {
                 setIsHoveringAvatar(false);
                 setShowFullPreview(true);
               }}
-              className="mt-2 text-[9px] uppercase tracking-widest font-black text-accent/70 hover:text-accent flex items-center gap-1 transition-colors cursor-pointer"
+              className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-border hover:border-accent bg-surface cursor-pointer transition-all"
+              title="Preview how your profile appears"
             >
-              <Eye className="w-3 h-3 text-accent" /> Feed Preview
+              {primaryPhoto ? (
+                <MediaImage
+                  src={primaryPhoto}
+                  style={pictureTransformStyle(user.pictureTransforms?.[primaryPhoto])}
+                  alt={basic.displayName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-text-muted">
+                  <ImageIcon className="w-8 h-8" />
+                </div>
+              )}
             </button>
 
             {/* Floating Live Preview on Hover */}
@@ -845,75 +828,83 @@ export function ProfileView({
             />
           </div>
 
-
-          <div className="space-y-4 flex-1">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-3xl sm:text-4xl font-serif italic tracking-tighter uppercase text-foreground">
+          {/* Name + verification */}
+          <div className="text-center space-y-1">
+            <div className="flex items-center justify-center gap-2">
+              <h2 className="text-lg font-semibold text-text">
                 {basic.displayName || 'Anonymous'}, {basic.age || '—'}
               </h2>
               {user.verified && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-500/10 text-green-700 text-[10px] font-black uppercase tracking-widest border border-green-500/30">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Verified
-                </span>
+                <CheckCircle2 className="w-4 h-4 text-ig-blue fill-ig-blue" />
               )}
-              <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-accent/10 text-accent">
-                {tierLabel} Tier
+            </div>
+            <div className="flex items-center justify-center gap-2 text-xs text-text-secondary">
+              <span className="px-2 py-0.5 bg-surface border border-border rounded-full text-[10px] font-semibold">
+                {tierLabel}
               </span>
               <ModerationBadge
                 status={effectiveModerationStatus}
                 showLabel
-                className="text-[10px] font-black uppercase tracking-widest px-3 py-1"
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
               />
             </div>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-4 text-xs opacity-60">
+          <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-text-secondary">
               {basic.work && (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1">
                   <Briefcase className="w-3.5 h-3.5" /> {basic.work}
                 </span>
               )}
               {basic.education && (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1">
                   <GraduationCap className="w-3.5 h-3.5" /> {basic.education}
                 </span>
               )}
               {basic.hometown && (
-                <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5" /> {basic.hometown}
                 </span>
               )}
             </div>
 
             {basic.bio && (
-              <p className="text-sm opacity-70 leading-relaxed font-serif max-w-xl italic border-l-2 border-border pl-4">
-                "{basic.bio}"
+              <p className="text-sm text-text text-center max-w-md mx-auto leading-relaxed opacity-90">
+                {basic.bio}
               </p>
             )}
 
-            
+            {/* Edit Profile / Preview button */}
+            <button
+              type="button"
+              onClick={() => setShowFullPreview(true)}
+              className="w-full max-w-xs mx-auto py-2 bg-surface hover:bg-surface-hover border border-border text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer text-text"
+            >
+              <Eye className="w-4 h-4" /> Preview Profile
+            </button>
           </div>
-        </div>
 
-        <div className="space-y-4 pt-6 border-t border-border">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] uppercase tracking-[0.3em] font-black text-accent flex items-center gap-2">
-              <ImageIcon className="w-4 h-4" /> Photos Gallery ({photos.length}/6 Photos)
+        {/* Photo Gallery — IG 3-column grid */}
+        <div className="space-y-3 pt-4 border-t border-border">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-sm font-semibold flex items-center gap-2">
+              <ImageIcon className="w-4 h-4" /> Photos ({photos.length}/6)
             </span>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingPhoto || photos.length >= 6}
-              className="py-2 px-4 bg-accent text-white text-[10px] font-black uppercase tracking-widest hover:bg-accent/90 transition-all flex items-center gap-1.5 shadow disabled:opacity-40"
+              className="py-1.5 px-4 bg-accent text-bg text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-40"
             >
-              {uploadingPhoto ? <LoadingSpinner /> : <Plus className="w-3.5 h-3.5" />} Add Photo
+              {uploadingPhoto ? <LoadingSpinner /> : <Plus className="w-3.5 h-3.5" />} Add
             </button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-3 gap-1">
             {photos.map((photo, index) => (
               <div
                 key={index}
-                className="relative aspect-[3/4] border border-border overflow-hidden bg-black/5 group"
+                className="relative aspect-square overflow-hidden bg-surface group"
               >
                 <MediaImage
                   src={photo}
@@ -934,7 +925,7 @@ export function ProfileView({
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
                 {index === 0 && (
-                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-accent text-white text-[9px] font-black uppercase tracking-widest shadow z-10 whitespace-nowrap">
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-accent text-bg text-[9px] font-black uppercase tracking-widest shadow z-10 whitespace-nowrap">
                     Profile Pic
                   </div>
                 )}
@@ -942,7 +933,7 @@ export function ProfileView({
                   <button
                     type="button"
                     onClick={() => setPrimaryPhoto(index)}
-                    className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/70 hover:bg-accent text-white text-[9px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all shadow z-10 whitespace-nowrap"
+                    className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/70 hover:bg-accent hover:text-bg text-white text-[9px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all shadow z-10 whitespace-nowrap"
                   >
                     Set Profile Pic
                   </button>
@@ -952,7 +943,7 @@ export function ProfileView({
             {photos.length < 6 && (
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="aspect-[3/4] border-2 border-dashed border-border hover:border-accent flex flex-col items-center justify-center gap-2 cursor-pointer text-muted-foreground p-4 text-center transition-all"
+                className="aspect-[3/4] border-2 border-dashed border-border hover:border-accent flex flex-col items-center justify-center gap-2 cursor-pointer text-text-muted hover:text-accent p-4 text-center transition-all"
               >
                 <Plus className="w-5 h-5" />
                 <span className="text-[10px] font-black uppercase tracking-widest">Add Photo</span>
@@ -973,7 +964,7 @@ export function ProfileView({
             {promptsList.map((p, index) => (
               <div
                 key={p.promptId}
-                className="p-4 border border-border bg-[#FAFAFA] flex items-start justify-between gap-4"
+                className="p-4 border border-border bg-surface flex items-start justify-between gap-4"
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -985,14 +976,14 @@ export function ProfileView({
                       showLabel
                     />
                   </div>
-                  <p className="text-xs font-serif italic text-foreground leading-relaxed">
+                  <p className="text-xs font-serif italic text-text leading-relaxed">
                     "{p.answer}"
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => removePrompt(p.promptId)}
-                  className="text-muted-foreground hover:text-red-600 p-1"
+                  className="text-text-muted hover:text-red-600 p-1"
                   title="Remove prompt"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -1026,7 +1017,7 @@ export function ProfileView({
               <button
                 type="button"
                 onClick={addPrompt}
-                className="py-2 px-5 bg-accent text-white text-xs font-bold uppercase tracking-widest hover:bg-accent/90 transition-all shadow"
+                className="py-2 px-5 bg-accent text-bg text-xs font-bold uppercase tracking-widest hover:bg-accent/90 transition-all shadow"
               >
                 Save
               </button>
@@ -1042,7 +1033,7 @@ export function ProfileView({
               <button
                 type="button"
                 onClick={() => setShowAudioRecorder(true)}
-                className="py-2 px-4 border border-border hover:border-accent text-[10px] font-black uppercase tracking-widest text-foreground hover:text-accent transition-all flex items-center gap-1.5"
+                className="py-2 px-4 border border-border hover:border-accent text-[10px] font-black uppercase tracking-widest text-text hover:text-accent transition-all flex items-center gap-1.5"
               >
                 <Mic className="w-3.5 h-3.5" /> Add Voice Note
               </button>
@@ -1057,18 +1048,18 @@ export function ProfileView({
           )}
 
           {uploadingAudio && (
-            <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground p-4 bg-bg/20 border border-border">
+            <div className="flex items-center gap-2 text-xs font-bold text-text-muted p-4 bg-bg/20 border border-border">
               <LoadingSpinner /> Uploading voice note...
             </div>
           )}
 
           {audioPromptKey && !uploadingAudio && (
-            <div className="p-4 border border-border bg-[#FAFAFA] flex items-center justify-between gap-4">
+            <div className="p-4 border border-border bg-surface flex items-center justify-between gap-4">
               <div className="flex items-center gap-4 flex-1">
                 <button
                   type="button"
                   onClick={togglePlayAudio}
-                  className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow hover:bg-accent/90 shrink-0"
+                  className="w-10 h-10 rounded-full bg-accent text-bg flex items-center justify-center shadow hover:bg-accent/90 shrink-0"
                 >
                   {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-1" />}
                 </button>
@@ -1088,7 +1079,7 @@ export function ProfileView({
                         showLabel
                       />
                     </span>
-                    <span className="text-[10px] font-mono text-muted-foreground">
+                    <span className="text-[10px] font-mono text-text-muted">
                       {formatSavedTime(playbackProgress)} / {formatSavedTime(audioDuration)}
                     </span>
                   </div>
@@ -1103,7 +1094,7 @@ export function ProfileView({
               <button
                 type="button"
                 onClick={handleRemoveAudio}
-                className="text-muted-foreground hover:text-red-600 p-2 shrink-0 ml-4"
+                className="text-text-muted hover:text-red-600 p-2 shrink-0 ml-4"
                 title="Remove Voice Note"
               >
                 <Trash2 className="w-4 h-4" />
@@ -1178,8 +1169,8 @@ export function ProfileView({
                     onClick={() => setGender(g.value)}
                     className={`py-2.5 px-3 text-[10px] font-black uppercase tracking-widest border transition-all ${
                       gender === g.value
-                        ? 'bg-accent text-white border-accent shadow-sm'
-                        : 'border-border bg-white text-foreground hover:border-accent/40'
+                        ? 'bg-accent text-bg border-accent shadow-sm'
+                        : 'border-border bg-surface text-text hover:border-accent/40 hover:bg-surface-hover'
                     }`}
                   >
                     {g.label}
@@ -1202,8 +1193,8 @@ export function ProfileView({
                       onClick={() => toggleInterestedIn(g.value)}
                       className={`py-2.5 px-3 text-[10px] font-black uppercase tracking-widest border transition-all flex items-center justify-center gap-1.5 ${
                         active
-                          ? 'bg-accent text-white border-accent shadow-sm'
-                          : 'border-border bg-white text-foreground hover:border-accent/40'
+                          ? 'bg-accent text-bg border-accent shadow-sm'
+                          : 'border-border bg-surface text-text hover:border-accent/40 hover:bg-surface-hover'
                       }`}
                     >
                       {active && <Check className="w-3 h-3" />}
@@ -1425,8 +1416,8 @@ export function ProfileView({
                       onClick={() => toggleLanguage(lang.value)}
                       className={`py-1.5 px-3 text-[10px] font-bold rounded-full border transition-all ${
                         active
-                          ? 'bg-accent text-white border-accent shadow-sm'
-                          : 'border-border bg-white text-muted-foreground hover:border-accent/40'
+                          ? 'bg-accent text-bg border-accent shadow-sm'
+                          : 'border-border bg-surface text-text-secondary hover:border-accent/40 hover:text-text hover:bg-surface-hover'
                       }`}
                     >
                       {lang.label}
@@ -1450,8 +1441,8 @@ export function ProfileView({
                       onClick={() => toggleInterest(interest)}
                       className={`py-1.5 px-3 text-[10px] font-bold rounded-full border transition-all ${
                         active
-                          ? 'bg-accent text-white border-accent shadow-sm'
-                          : 'border-border bg-white text-muted-foreground hover:border-accent/40'
+                          ? 'bg-accent text-bg border-accent shadow-sm'
+                          : 'border-border bg-surface text-text-secondary hover:border-accent/40 hover:text-text hover:bg-surface-hover'
                       }`}
                     >
                       {interest}
@@ -1467,7 +1458,7 @@ export function ProfileView({
           <button
             onClick={handleSaveMatchingDetails}
             disabled={savingProfile}
-            className="flex-1 py-5 bg-accent text-white text-[11px] font-black uppercase tracking-[0.4em] hover:scale-[1.01] shadow-2xl transition-all disabled:opacity-40"
+            className="flex-1 py-5 bg-accent text-bg text-[11px] font-black uppercase tracking-[0.4em] hover:scale-[1.01] shadow-2xl transition-all disabled:opacity-40"
           >
             {savingProfile ? 'Saving Changes…' : 'Save Changes'}
           </button>
@@ -1485,13 +1476,14 @@ export function ProfileView({
             <button
               onClick={onUpgrade}
               disabled={upgrading}
-              className="w-full py-4 bg-accent text-white text-[11px] font-black uppercase tracking-[0.4em] hover:scale-[1.01] transition-all disabled:opacity-40"
+              className="w-full py-4 bg-accent text-bg text-[11px] font-black uppercase tracking-[0.4em] hover:scale-[1.01] transition-all disabled:opacity-40"
             >
               {upgrading ? 'Upgrading…' : 'Upgrade to Premium'}
             </button>
           </div>
         )}
 
+        <AppearanceCard />
         <AccountSettingsCard />
         <DeviceManagementCard />
         <SetPasswordCard />

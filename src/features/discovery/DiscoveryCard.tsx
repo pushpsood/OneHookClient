@@ -1,23 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  Heart,
-  MapPin,
-  Sparkles,
-  CheckCircle2,
-  Briefcase,
-  GraduationCap,
-  Volume2,
-  Play,
-  Pause,
-  ChevronLeft,
-  ChevronRight,
-  X,
-} from 'lucide-react';
+import { Heart, MapPin, CheckCircle2, Volume2, Play, Pause } from 'lucide-react';
 import { MediaImage } from '../../components/common/MediaImage';
 import { useMediaSrc } from '../../utils/media-url';
 import { pictureTransformStyle } from '../../utils/photo-transform';
 import { mediaLikeType, type LikeTarget } from './like-target';
-import { trackMediaView } from '../../lib/analytics/analytics';
+import { trackMediaView, trackSectionView, trackPromptView } from '../../lib/analytics/analytics';
+
+/**
+ * DiscoveryCard — the canonical profile surface, matched to the iOS app (the UI source of truth,
+ * ios/OneHook/DiscoverCardView.swift) so discovery looks and measures the same on every device.
+ *
+ * A SINGLE vertical scroll of consistent "element cards" INTERLEAVED — photo, vitals, prompt, photo,
+ * bio, voice, photo, prompt, interests, photo, lifestyle, prompt, remaining media/prompts, then
+ * causes/communities/qualities. Interleaving (rather than a photo carousel then homogeneous blocks)
+ * is prioritised first by what a dater wants to see — alternating media with text sustains attention
+ * and surfaces a commentable element (the only way to like) early and repeatedly — and second by
+ * analytics: the scroll passes three section anchors (PHOTOS → BIO → INTERESTS) so `section_view`
+ * reports consideration depth exactly as iOS's `reportVisibleSection`, each photo emits `media_view`
+ * dwell, and each prompt emits `prompt_view`. All discovery signals carry `cardVariant: 'interleaved'`
+ * (same design as iOS) plus the server-stamped platform, so metrics aggregate and segment correctly.
+ */
 
 export interface DiscoveryProfileData {
   id?: string;
@@ -38,6 +40,7 @@ export interface DiscoveryProfileData {
   bio?: string;
   work?: string;
   education?: string;
+  height?: number | string;
   prompts?: Array<{ promptId: string; answer: string }>;
   audioPrompt?: string;
   interests?: string[];
@@ -46,54 +49,300 @@ export interface DiscoveryProfileData {
   wantsKids?: string;
   smokingStatus?: string;
   drinkingStatus?: string;
+  cannabisStatus?: string;
   religion?: string;
   starSign?: string;
-  height?: number | string;
+  exercise?: string;
+  causes?: string[];
+  communities?: string[];
+  qualities?: string[];
   gender?: string;
   [key: string]: any;
 }
 
 export interface DiscoveryCardProps {
-  key?: string;
+  key?: React.Key;
   candidate: DiscoveryProfileData;
   /** PASS the candidate (LEFT). The only non-comment action left on the deck. */
   onPass?: () => void;
-  /**
-   * Open the comment composer for a specific element. Liking is Hinge-style: it ALWAYS happens by
-   * commenting on one element (photo, video, voice, prompt, interest or bio) — there is no like
-   * button and no right-swipe like anymore.
-   */
+  /** Open the comment composer for a specific element (Hinge-style comment-to-like). */
   onComment?: (target: LikeTarget) => void;
+  /** Send a rose — a daily-limited super-like on the whole profile (mirrors iOS RoseButton). */
+  onRose?: () => void;
+  /** Remaining daily roses for the badge / desaturated "spent" state; null = not yet known. */
+  rosesRemaining?: number | null;
   isPreview?: boolean;
   className?: string;
+}
+
+type Section = 'PHOTOS' | 'BIO' | 'INTERESTS';
+const CARD_VARIANT = 'interleaved'; // matches the iOS discovery card design
+
+const humanize = (v: string): string => v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const mediaTypeOf = (key: string): 'image' | 'video' => (mediaLikeType(key) === 'VIDEO' ? 'video' : 'image');
+
+/** The single consistent surface every profile element renders in (mirrors iOS makeElementCard). */
+function ElementCard({
+  title,
+  children,
+  className = '',
+}: {
+  title?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`bg-surface border border-border rounded-xl p-4 space-y-2 ${className}`}>
+      {title && (
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary block">
+          {title}
+        </span>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/** A small "comment to like" affordance shown on/next to a likeable element. */
+function CommentButton({
+  onComment,
+  target,
+  displayName,
+  label = 'Comment',
+  className = '',
+}: {
+  onComment?: (t: LikeTarget) => void;
+  target: LikeTarget;
+  displayName: string;
+  label?: string;
+  className?: string;
+}) {
+  if (typeof onComment !== 'function') return null;
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onComment(target);
+      }}
+      aria-label={`Comment on ${displayName}'s ${target.label.toLowerCase()} to like`}
+      className={`inline-flex items-center gap-1.5 text-xs font-semibold bg-surface-card text-text border border-border rounded-full px-3 py-1.5 hover:bg-surface-hover transition-colors cursor-pointer ${className}`}
+    >
+      <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500" /> {label}
+    </button>
+  );
+}
+
+/**
+ * A single inline photo (3:4) that reports `media_view` dwell: starts a clock when the photo is
+ * ≥50% visible and emits the dwell when it scrolls out of view or the card unmounts (deck advance).
+ */
+function PhotoBlock({
+  photoKey,
+  index,
+  candidateId,
+  transform,
+  isPreview,
+  onComment,
+  displayName,
+}: {
+  photoKey: string;
+  index: number;
+  candidateId?: string;
+  transform?: string;
+  isPreview: boolean;
+  onComment?: (t: LikeTarget) => void;
+  displayName: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const startRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (isPreview) return;
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const flush = () => {
+      if (startRef.current != null) {
+        trackMediaView(photoKey, mediaTypeOf(photoKey), {
+          dwellMs: Date.now() - startRef.current,
+          index,
+          viewedUserId: candidateId,
+          context: 'discovery',
+          cardVariant: CARD_VARIANT,
+        });
+        startRef.current = null;
+      }
+    };
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting && e.intersectionRatio >= 0.5) {
+            if (startRef.current == null) startRef.current = Date.now();
+          } else {
+            flush();
+          }
+        }
+      },
+      { threshold: [0, 0.5, 1] }
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+      flush();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoKey, index, candidateId, isPreview]);
+
+  return (
+    <div ref={ref} className="relative aspect-[3/4] overflow-hidden rounded-xl border border-border bg-surface group">
+      <MediaImage
+        src={photoKey}
+        alt={displayName}
+        loading={index === 0 ? 'eager' : 'lazy'}
+        decoding="async"
+        style={pictureTransformStyle(transform)}
+        className="w-full h-full object-cover"
+      />
+      <div className="absolute bottom-3 right-3 z-10">
+        <CommentButton
+          onComment={onComment}
+          displayName={displayName}
+          label={mediaLikeType(photoKey) === 'VIDEO' ? 'Like video' : 'Like photo'}
+          target={{
+            type: mediaLikeType(photoKey),
+            ref: photoKey,
+            label: mediaLikeType(photoKey) === 'VIDEO' ? 'Video' : 'Photo',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** A written prompt that reports `prompt_view` once when it first scrolls into view. */
+function PromptBlock({
+  prompt,
+  candidateId,
+  isPreview,
+  onComment,
+  displayName,
+}: {
+  prompt: { promptId: string; answer: string };
+  candidateId?: string;
+  isPreview: boolean;
+  onComment?: (t: LikeTarget) => void;
+  displayName: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const firedRef = useRef(false);
+  useEffect(() => {
+    if (isPreview) return;
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting && e.intersectionRatio >= 0.5 && !firedRef.current) {
+            firedRef.current = true;
+            trackPromptView(prompt.promptId, { viewedUserId: candidateId, cardVariant: CARD_VARIANT });
+          }
+        }
+      },
+      { threshold: [0, 0.5, 1] }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prompt.promptId, candidateId, isPreview]);
+
+  return (
+    <div ref={ref}>
+      <ElementCard title={prompt.promptId}>
+        <p className="text-sm text-text leading-snug font-medium">{prompt.answer}</p>
+        <CommentButton
+          onComment={onComment}
+          displayName={displayName}
+          label="Reply"
+          target={{ type: 'PROMPT', ref: prompt.promptId, label: 'Prompt', preview: prompt.answer }}
+        />
+      </ElementCard>
+    </div>
+  );
+}
+
+/**
+ * RoseIcon — the discovery rose (super-like) glyph, matched to iOS `RoseButton`: a stroked line-art
+ * rose (a 2.5-turn spiral bloom, outer petal arcs, stem + two leaves) over a 4-stop rose-gold
+ * metallic disc, desaturating to silver in the "spent" (no roses left) state.
+ */
+function RoseIcon({ spent = false, size = 40 }: { spent?: boolean; size?: number }) {
+  const S = 44;
+  const cx = S / 2;
+  const cy = S / 2 - S * 0.06;
+  const maxR = S * 0.24;
+  const f = (n: number) => n.toFixed(2);
+  let d = '';
+  const turns = 2.5;
+  const steps = 72;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = t * turns * 2 * Math.PI;
+    const r = maxR * t;
+    d += `${i === 0 ? 'M' : 'L'}${f(cx + r * Math.cos(a))} ${f(cy + r * Math.sin(a))} `;
+  }
+  const petalR = maxR * 1.05;
+  d += `M${f(cx - petalR)} ${f(cy)} `;
+  d += `C${f(cx - petalR)} ${f(cy - petalR * 0.7)} ${f(cx - petalR * 0.6)} ${f(cy - petalR)} ${f(cx)} ${f(cy - petalR)} `;
+  d += `C${f(cx + petalR * 0.6)} ${f(cy - petalR)} ${f(cx + petalR)} ${f(cy - petalR * 0.7)} ${f(cx + petalR)} ${f(cy)} `;
+  const stemTop = cy + maxR * 0.9;
+  const stemBottom = S - S * 0.1;
+  d += `M${f(cx)} ${f(stemTop)} L${f(cx)} ${f(stemBottom)} `;
+  const leafY = (stemTop + stemBottom) / 2;
+  d += `M${f(cx)} ${f(leafY)} Q${f(cx - S * 0.1)} ${f(leafY - S * 0.1)} ${f(cx - S * 0.16)} ${f(leafY - S * 0.02)} `;
+  d += `M${f(cx)} ${f(leafY + S * 0.04)} Q${f(cx + S * 0.1)} ${f(leafY - S * 0.04)} ${f(cx + S * 0.16)} ${f(leafY + S * 0.02)} `;
+
+  const gid = spent ? 'ohRoseMetalSpent' : 'ohRoseMetal';
+  const stops = spent
+    ? ['#dbdbdb', '#b3b3b3', '#8c8c8c', '#c7c7c7']
+    : ['#fce0d4', '#e8a899', '#c98080', '#f5cfc2'];
+  const stroke = spent ? '#737373' : 'rgba(92,15,33,0.92)';
+  return (
+    <svg viewBox={`0 0 ${S} ${S}`} width={size} height={size} aria-hidden>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={stops[0]} />
+          <stop offset="0.42" stopColor={stops[1]} />
+          <stop offset="0.76" stopColor={stops[2]} />
+          <stop offset="1" stopColor={stops[3]} />
+        </linearGradient>
+      </defs>
+      <circle cx={S / 2} cy={S / 2} r={S / 2 - 1} fill={`url(#${gid})`} />
+      <path d={d.trim()} fill="none" stroke={stroke} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 export function DiscoveryCard({
   candidate,
   onPass,
   onComment,
+  onRose,
+  rosesRemaining,
   isPreview = false,
   className = '',
 }: DiscoveryCardProps) {
-  const [photoIndex, setPhotoIndex] = useState(0);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Live discovery = we can like (comment). Preview surfaces pass a candidate only, so the comment
-  // affordances stay hidden there.
   const canComment = typeof onComment === 'function';
-
   const photos =
     candidate.photos && candidate.photos.length > 0
       ? candidate.photos
       : candidate.pictures && candidate.pictures.length > 0
       ? candidate.pictures
       : [];
-
   const displayName = candidate.displayName || candidate.name || 'Anonymous';
-
   const age = candidate.age ? Number(candidate.age) : null;
   const location =
     typeof candidate.location === 'string'
@@ -104,40 +353,65 @@ export function DiscoveryCard({
           : candidate.distance != null
           ? `${candidate.distance} km away`
           : candidate.hometown || '');
-
-  const distanceDisplay =
-    candidate.distance != null
-      ? `${candidate.distance} km`
-      : candidate.distanceKm != null
-      ? `${candidate.distanceKm.toFixed(1)} km`
-      : null;
-
   const audioKey = candidate.audioPrompt || '';
   const audioSrc = useMediaSrc(audioKey);
+  const interests = (candidate.interests || []).filter((i) => !!i);
 
-  const handleAudioTimeUpdate = () => {
-    if (audioRef.current) {
-      setPlaybackProgress(audioRef.current.currentTime);
-    }
-  };
+  // ── section_view: report the top-most visible section anchor as the user scrolls, with dwell
+  // (mirrors iOS reportVisibleSection). No-op unless analytics is enabled + consented.
+  const photosAnchor = useRef<HTMLDivElement>(null);
+  const bioAnchor = useRef<HTMLDivElement>(null);
+  const interestsAnchor = useRef<HTMLDivElement>(null);
+  const currentSectionRef = useRef<Section>('PHOTOS');
+  const sectionStartRef = useRef<number>(Date.now());
+  useEffect(() => {
+    if (isPreview) return;
+    const anchors: Array<[Section, React.RefObject<HTMLDivElement>]> = [
+      ['PHOTOS', photosAnchor],
+      ['BIO', bioAnchor],
+      ['INTERESTS', interestsAnchor],
+    ];
+    const THRESHOLD = 140;
+    const report = () => {
+      let current: Section = 'PHOTOS';
+      for (const [name, ref] of anchors) {
+        const el = ref.current;
+        if (el && el.getBoundingClientRect().top <= THRESHOLD) current = name;
+      }
+      if (current !== currentSectionRef.current) {
+        const now = Date.now();
+        trackSectionView(currentSectionRef.current, {
+          viewedUserId: candidate.id,
+          dwellMs: now - sectionStartRef.current,
+          context: 'discovery',
+          cardVariant: CARD_VARIANT,
+        });
+        currentSectionRef.current = current;
+        sectionStartRef.current = now;
+      }
+    };
+    window.addEventListener('scroll', report, true);
+    report();
+    return () => {
+      window.removeEventListener('scroll', report, true);
+      trackSectionView(currentSectionRef.current, {
+        viewedUserId: candidate.id,
+        dwellMs: Date.now() - sectionStartRef.current,
+        context: 'discovery',
+        cardVariant: CARD_VARIANT,
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate.id, isPreview]);
 
-  const handleAudioLoadedMetadata = () => {
-    if (audioRef.current) {
-      setAudioDuration(audioRef.current.duration);
-    }
-  };
-
+  const handleAudioTimeUpdate = () => audioRef.current && setPlaybackProgress(audioRef.current.currentTime);
+  const handleAudioLoadedMetadata = () => audioRef.current && setAudioDuration(audioRef.current.duration);
   const formatAudioTime = (seconds: number) => {
     if (!seconds || isNaN(seconds) || seconds === Infinity) return '00:00';
-    const m = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, '0');
-    const s = Math.floor(seconds % 60)
-      .toString()
-      .padStart(2, '0');
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
   };
-
   const togglePlayAudio = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!audioRef.current) return;
@@ -148,426 +422,265 @@ export function DiscoveryCard({
       audioRef.current.play();
       setIsPlayingAudio(true);
       if (!isPreview && audioKey) {
-        trackMediaView(audioKey, 'voice', { viewedUserId: candidate.id, context: 'discovery' });
+        trackMediaView(audioKey, 'voice', { viewedUserId: candidate.id, context: 'discovery', cardVariant: CARD_VARIANT });
       }
     }
   };
 
-  const handlePrevPhoto = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (photos.length <= 1) return;
-    setPhotoIndex((prev) => (prev > 0 ? prev - 1 : photos.length - 1));
-  };
-
-  const handleNextPhoto = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (photos.length <= 1) return;
-    setPhotoIndex((prev) => (prev < photos.length - 1 ? prev + 1 : 0));
-  };
-
-  const currentPhoto = photos[photoIndex] || photos[0];
-
-  const mediaTypeOf = (key: string): 'image' | 'video' =>
-    mediaLikeType(key) === 'VIDEO' ? 'video' : 'image';
-  const shownPhotoRef = useRef<{ key: string; index: number; start: number } | null>(null);
-  
-  const emitPhotoDwell = () => {
-    if (isPreview) return;
-    const prev = shownPhotoRef.current;
-    if (prev && prev.key) {
-      trackMediaView(prev.key, mediaTypeOf(prev.key), {
-        dwellMs: Date.now() - prev.start,
-        index: prev.index,
-        viewedUserId: candidate.id,
-        context: 'discovery',
-      });
-    }
-  };
-  
-  useEffect(() => {
-    if (isPreview) return;
-    emitPhotoDwell();
-    shownPhotoRef.current = currentPhoto
-      ? { key: currentPhoto, index: photoIndex, start: Date.now() }
-      : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoIndex]);
-  
-  useEffect(() => {
-    return () => emitPhotoDwell();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const prompts =
-    (candidate.prompts as Array<{ promptId: string; answer: string }> | undefined) || [];
-  const interests = candidate.interests || [];
-
-  const CommentButton = ({
-    target,
-    className: btnClass = '',
-    label = 'Comment',
-  }: {
-    target: LikeTarget;
-    className?: string;
-    label?: string;
-  }) => (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onComment?.(target);
-      }}
-      aria-label={`Comment on ${displayName}'s ${target.label.toLowerCase()} to like`}
-      title={`Comment on ${target.label.toLowerCase()} to like`}
-      className={`inline-flex items-center gap-1.5 text-xs font-semibold bg-white/95 text-gray-900 border border-gray-200 rounded-full px-3 py-1.5 hover:bg-gray-100 transition-colors cursor-pointer shadow-sm ${btnClass}`}
-    >
-      <Heart className="w-3.5 h-3.5" /> {label}
-    </button>
+  // ── Element builders (return JSX or null) ────────────────────────────────────
+  const vitalsChips: string[] = [];
+  if (candidate.work) vitalsChips.push(`💼 ${candidate.work}`);
+  if (candidate.education) vitalsChips.push(`🎓 ${candidate.education}`);
+  if (candidate.hometown) vitalsChips.push(`📍 ${candidate.hometown}`);
+  if (candidate.height) vitalsChips.push(`📏 ${candidate.height}`);
+  if (candidate.relationshipType) vitalsChips.push(humanize(String(candidate.relationshipType)));
+  const chipRow = (items: string[]) => (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((c, i) => (
+        <span key={i} className="px-2.5 py-1 bg-surface-card border border-border rounded-full text-xs font-medium text-text-secondary">
+          {c}
+        </span>
+      ))}
+    </div>
   );
 
-  return (
-    <div className={`w-full max-w-[600px] mx-auto bg-white sm:border sm:border-border sm:rounded-lg sm:my-4 flex flex-col overflow-hidden ${className}`}>
-      {/* Post header row */}
-      <div className="flex items-center justify-between px-3 py-3">
-        <div className="flex items-center gap-2.5">
-          {photos.length > 0 ? (
-            <MediaImage
-              src={photos[0]}
-              alt={displayName}
-              loading="eager"
-              decoding="async"
-              style={pictureTransformStyle(candidate.pictureTransforms?.[photos[0]])}
-              className="w-8 h-8 rounded-full object-cover border border-gray-100"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center">
-              <span className="text-[10px] text-gray-400">No pic</span>
-            </div>
-          )}
-          <div className="flex items-center gap-1">
-            <span className="text-sm font-semibold text-gray-900">{displayName}</span>
-            {candidate.verified && (
-              <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 fill-blue-500" strokeWidth={3} color="white" />
-            )}
+  const vitalsEl = vitalsChips.length > 0 ? <ElementCard>{chipRow(vitalsChips)}</ElementCard> : null;
+
+  const bioEl = candidate.bio ? (
+    <ElementCard title="Bio">
+      <p className="text-sm text-text leading-relaxed">{candidate.bio}</p>
+      <CommentButton onComment={onComment} displayName={displayName} label="Comment on bio" target={{ type: 'BIO', label: 'Bio', preview: candidate.bio }} />
+    </ElementCard>
+  ) : null;
+
+  const voiceEl = audioKey ? (
+    <ElementCard>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={togglePlayAudio}
+          className="w-10 h-10 rounded-full bg-ig-blue text-white flex items-center justify-center shrink-0 cursor-pointer hover:opacity-90"
+          title={isPlayingAudio ? 'Pause Voice Note' : 'Play Voice Note'}
+        >
+          {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+        </button>
+        <div className="flex-1 space-y-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-text flex items-center gap-1.5">
+              <Volume2 className="w-3.5 h-3.5" /> Voice Note
+            </span>
+            <span className="text-text-secondary font-mono text-[11px]">
+              {formatAudioTime(playbackProgress)} / {formatAudioTime(audioDuration)}
+            </span>
+          </div>
+          <div className="h-1.5 w-full bg-border rounded-full overflow-hidden">
+            <div className="h-full bg-ig-blue transition-all duration-100 ease-linear" style={{ width: `${audioDuration > 0 ? (playbackProgress / audioDuration) * 100 : 0}%` }} />
           </div>
         </div>
-        <div className="text-xs text-gray-500 font-medium">
-          {age && `${age} • `}{location}
-        </div>
+        <CommentButton onComment={onComment} displayName={displayName} label="Reply" target={{ type: 'VOICE', ref: audioKey, label: 'Voice note' }} className="!text-[11px] !py-1 !px-2.5" />
       </div>
+      <audio
+        ref={audioRef}
+        src={audioSrc}
+        onTimeUpdate={handleAudioTimeUpdate}
+        onLoadedMetadata={handleAudioLoadedMetadata}
+        onEnded={() => {
+          setIsPlayingAudio(false);
+          setPlaybackProgress(0);
+          if (!isPreview && audioKey) {
+            trackMediaView(audioKey, 'voice', { viewedUserId: candidate.id, context: 'discovery', cardVariant: CARD_VARIANT, playedToCompletion: true });
+          }
+        }}
+        className="hidden"
+      />
+    </ElementCard>
+  ) : null;
 
-      {/* Primary Photo & Carousel Container (4:5) */}
-      <div className="relative aspect-[4/5] overflow-hidden group bg-gray-50">
-        {currentPhoto ? (
-          <MediaImage
-            src={currentPhoto}
-            alt={displayName}
-            loading="eager"
-            decoding="async"
-            style={pictureTransformStyle(candidate.pictureTransforms?.[currentPhoto])}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-400">
-            <span className="text-sm font-medium">No Photo</span>
-          </div>
-        )}
-
-        {/* Stories / Photo Index Bars */}
-        {photos.length > 1 && (
-          <div className="absolute top-3 left-3 right-3 flex gap-1 z-20">
-            {photos.map((_, i) => (
+  const interestsEl =
+    interests.length > 0 ? (
+      <ElementCard title="Interests">
+        <div className="flex flex-wrap gap-2">
+          {interests.map((interest, i) =>
+            canComment ? (
               <button
                 key={i}
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setPhotoIndex(i);
+                  onComment?.({ type: 'INTEREST', ref: interest, label: 'Interest', preview: interest });
                 }}
-                className={`h-1 flex-1 rounded-full transition-all ${
-                  i === photoIndex ? 'bg-white shadow' : 'bg-white/40 hover:bg-white/70'
-                }`}
-                title={`Photo ${i + 1}`}
-              />
-            ))}
-          </div>
-        )}
+                aria-label={`Comment on interest ${interest} to like`}
+                className="px-3 py-1 border border-border rounded-full text-xs font-medium text-text-secondary bg-surface-card hover:bg-surface-hover transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <Heart className="w-3 h-3 text-red-500" /> {interest}
+              </button>
+            ) : (
+              <span key={i} className="px-3 py-1 border border-border rounded-full text-xs font-medium text-text-secondary bg-surface-card">
+                #{interest}
+              </span>
+            )
+          )}
+        </div>
+      </ElementCard>
+    ) : null;
 
-        {/* Previous / Next Arrow Controls */}
-        {photos.length > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={handlePrevPhoto}
-              aria-label="Previous photo"
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNextPhoto}
-              aria-label="Next photo"
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </>
-        )}
+  const lifestyleValues: string[] = [];
+  if (candidate.drinkingStatus) lifestyleValues.push(`🍷 ${humanize(candidate.drinkingStatus)}`);
+  if (candidate.smokingStatus) lifestyleValues.push(`🚬 ${humanize(candidate.smokingStatus)}`);
+  if (candidate.cannabisStatus) lifestyleValues.push(`🌿 ${humanize(candidate.cannabisStatus)}`);
+  if (candidate.wantsKids) lifestyleValues.push(`👶 ${humanize(candidate.wantsKids)}`);
+  if (candidate.religion) lifestyleValues.push(`🙏 ${humanize(candidate.religion)}`);
+  if (candidate.starSign) lifestyleValues.push(`✨ ${humanize(candidate.starSign)}`);
+  if (candidate.exercise) lifestyleValues.push(`🏃 ${humanize(candidate.exercise)}`);
+  if (candidate.languages?.length) lifestyleValues.push(`🗣 ${candidate.languages.map(humanize).join(', ')}`);
+  const lifestyleEl = lifestyleValues.length > 0 ? <ElementCard title="Lifestyle">{chipRow(lifestyleValues)}</ElementCard> : null;
 
-        {/* Comment-to-like overlay on the currently shown photo */}
-        {canComment && currentPhoto && (
-          <div className="absolute bottom-4 right-4 z-20">
-            <CommentButton
-              label="Comment"
-              target={{
-                type: mediaLikeType(currentPhoto),
-                ref: currentPhoto,
-                label: mediaLikeType(currentPhoto) === 'VIDEO' ? 'Video' : 'Photo',
-              }}
-            />
+  const pillsEl = (title: string, values?: string[]) => {
+    const items = (values || []).filter((v) => !!v);
+    if (items.length === 0) return null;
+    return <ElementCard title={title}>{chipRow(items.map(humanize))}</ElementCard>;
+  };
+
+  // ── Interleave assembly (mirrors iOS renderAllSections order) ─────────────────
+  const media = photos.map((k, i) => ({ k, i }));
+  let mi = 0;
+  const nextPhoto = () => (mi < media.length ? media[mi++] : null);
+  const promptList = (candidate.prompts || []).filter((p) => p.answer && p.answer.trim().length > 0);
+  let pi = 0;
+  const nextPrompt = () => (pi < promptList.length ? promptList[pi++] : null);
+
+  const photoNode = (m: { k: string; i: number } | null) =>
+    m ? (
+      <PhotoBlock
+        photoKey={m.k}
+        index={m.i}
+        candidateId={candidate.id}
+        transform={candidate.pictureTransforms?.[m.k]}
+        isPreview={isPreview}
+        onComment={onComment}
+        displayName={displayName}
+      />
+    ) : null;
+  const promptNode = () => {
+    const p = nextPrompt();
+    return p ? (
+      <PromptBlock prompt={p} candidateId={candidate.id} isPreview={isPreview} onComment={onComment} displayName={displayName} />
+    ) : null;
+  };
+
+  const entries: Array<{ node: React.ReactNode; marker?: Section }> = [];
+  const placed = new Set<Section>();
+  const add = (node: React.ReactNode | null, section?: Section) => {
+    if (!node) return;
+    let marker: Section | undefined;
+    if (section && !placed.has(section)) {
+      placed.add(section);
+      marker = section;
+    }
+    entries.push({ node, marker });
+  };
+
+  add(photoNode(nextPhoto()), 'PHOTOS'); // 1. Photo 1
+  add(vitalsEl, 'BIO'); // 2. Vitals (marks "about")
+  add(promptNode()); // 3. Prompt 1
+  add(photoNode(nextPhoto())); // 4. Photo 2
+  add(bioEl, 'BIO'); // 5. Bio (marks about if there were no vitals)
+  add(voiceEl); // 6. Voice
+  add(photoNode(nextPhoto())); // 7. Photo 3
+  add(promptNode()); // 8. Prompt 2
+  add(interestsEl, 'INTERESTS'); // 9. Interests
+  add(photoNode(nextPhoto())); // 10. Photo 4
+  add(lifestyleEl); // 11. Lifestyle
+  add(promptNode()); // 12. Prompt 3
+  let takeMedia = true;
+  while (mi < media.length || pi < promptList.length) {
+    add(takeMedia ? photoNode(nextPhoto()) ?? promptNode() : promptNode() ?? photoNode(nextPhoto()));
+    takeMedia = !takeMedia;
+  }
+  add(pillsEl('Causes', candidate.causes));
+  add(pillsEl('Communities', candidate.communities));
+  add(pillsEl('Qualities', candidate.qualities));
+
+  const anchorRefFor = (s: Section) => (s === 'PHOTOS' ? photosAnchor : s === 'BIO' ? bioAnchor : interestsAnchor);
+
+  return (
+    <article className={`w-full max-w-[470px] mx-auto bg-surface-card sm:border sm:border-border sm:rounded-xl flex flex-col overflow-hidden select-none ${className}`}>
+      {/* Recommendation banner */}
+      {((candidate.score && candidate.score >= 0.9) || candidate.recommendationReason) && (
+        <div className="bg-ig-blue/5 border-b border-border px-4 py-3 text-[11px] text-text-secondary leading-relaxed italic">
+          {candidate.recommendationReason || 'Handpicked for you — high compatibility and shared vibe.'}
+        </div>
+      )}
+
+      {/* Header (name / age / location + Rose super-like) — chrome, not a section. */}
+      <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-3 border-b border-border">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl font-semibold text-text truncate">{displayName}</h2>
+          <div className="text-xs text-text-secondary flex items-center gap-1.5 mt-0.5">
+            {age && age > 0 ? <span>{age}</span> : null}
+            {location && (
+              <span className="flex items-center gap-1 truncate">
+                <MapPin className="w-3 h-3 shrink-0" /> {location}
+              </span>
+            )}
+            {candidate.verified && <CheckCircle2 className="w-3.5 h-3.5 text-ig-blue shrink-0" />}
           </div>
+        </div>
+        {onRose && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (rosesRemaining !== 0) onRose();
+            }}
+            disabled={rosesRemaining === 0}
+            aria-label={rosesRemaining == null ? 'Send a rose' : `Send a rose, ${rosesRemaining} left today`}
+            title={rosesRemaining == null ? 'Send a rose' : `Send a rose · ${rosesRemaining} left today`}
+            className="relative shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RoseIcon spent={rosesRemaining === 0} size={40} />
+            {rosesRemaining != null && rosesRemaining > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-black/75 text-[9px] font-bold text-white flex items-center justify-center">
+                {rosesRemaining}
+              </span>
+            )}
+          </button>
         )}
       </div>
 
-      {/* Action bar below photo */}
-      <div className="px-3 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          {canComment && currentPhoto && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onComment?.({
-                  type: mediaLikeType(currentPhoto),
-                  ref: currentPhoto,
-                  label: mediaLikeType(currentPhoto) === 'VIDEO' ? 'Video' : 'Photo',
-                });
-              }}
-              className="text-gray-900 hover:text-gray-500 transition-colors"
-            >
-              <Heart className="w-6 h-6" />
-            </button>
-          )}
-          {onPass && (
+      {/* Interleaved element scroll */}
+      <div className="p-4 space-y-4 flex-1">
+        {entries.length === 0 ? (
+          <p className="text-xs text-text-muted italic text-center py-8">Nothing shared here yet.</p>
+        ) : (
+          entries.map((e, idx) => (
+            <React.Fragment key={idx}>
+              {e.marker && <div ref={anchorRefFor(e.marker)} className="h-0" aria-hidden />}
+              {e.node}
+            </React.Fragment>
+          ))
+        )}
+
+        {onPass ? (
+          <div className="pt-2">
             <button
               type="button"
               onClick={onPass}
-              className="text-gray-900 hover:text-gray-500 transition-colors"
+              className="w-full py-3.5 border border-border rounded-full text-sm font-semibold text-text hover:bg-surface-hover transition-colors cursor-pointer"
             >
-              <X className="w-7 h-7" />
+              Pass
             </button>
-          )}
-        </div>
-        {distanceDisplay && (
-          <div className="flex items-center gap-1 text-xs text-gray-500 font-medium">
-            <MapPin className="w-3.5 h-3.5" /> {distanceDisplay}
+            <p className="pt-3 text-center text-[11px] text-text-muted">To like, comment on something above</p>
           </div>
-        )}
-      </div>
-
-      {/* Content below action bar */}
-      <div className="px-3 pb-5 space-y-4">
-        {/* Caption (Name, Age, Bio) */}
-        <div className="text-sm">
-          <span className="font-semibold text-gray-900 mr-2">
-            {displayName} {age && <span>{age}</span>}
-          </span>
-          {candidate.bio && (
-            <span className="text-gray-900">
-              {candidate.bio}
+        ) : isPreview ? (
+          <div className="pt-3 border-t border-border flex items-center justify-between text-[11px] font-semibold text-text-secondary">
+            <span className="flex items-center gap-1.5">
+              <Heart className="w-3.5 h-3.5 text-red-500" /> Ready for matching
             </span>
-          )}
-          {canComment && candidate.bio && (
-            <div className="mt-2">
-              <CommentButton
-                target={{ type: 'BIO', label: 'Bio', preview: candidate.bio }}
-                label="Reply to bio"
-                className="!text-[11px] !py-1 !px-2.5"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Work & Education */}
-        {(candidate.work || candidate.education || candidate.hometown) && (
-          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
-            {candidate.work && (
-              <span className="flex items-center gap-1">
-                <Briefcase className="w-3.5 h-3.5" /> {candidate.work}
-              </span>
-            )}
-            {candidate.education && (
-              <span className="flex items-center gap-1">
-                <GraduationCap className="w-3.5 h-3.5" /> {candidate.education}
-              </span>
-            )}
-            {candidate.hometown && (
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5" /> {candidate.hometown}
-              </span>
-            )}
+            <span className="text-ig-blue font-mono">OneHook Feed Preview</span>
           </div>
-        )}
-
-        {/* Voice Note Player */}
-        {audioKey && (
-          <div className="space-y-2">
-            <div className="p-3 bg-gray-50 rounded-xl flex items-center gap-3">
-              <button
-                type="button"
-                onClick={togglePlayAudio}
-                className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-sm shrink-0 cursor-pointer"
-              >
-                {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-              </button>
-              <div className="flex-1 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-900 flex items-center gap-1.5">
-                    <Volume2 className="w-3.5 h-3.5" /> Voice Note
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {formatAudioTime(playbackProgress)} / {formatAudioTime(audioDuration)}
-                  </span>
-                </div>
-                <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 transition-all duration-100 ease-linear"
-                    style={{
-                      width: `${audioDuration > 0 ? (playbackProgress / audioDuration) * 100 : 0}%`,
-                    }}
-                  />
-                </div>
-              </div>
-              <audio
-                ref={audioRef}
-                src={audioSrc}
-                onTimeUpdate={handleAudioTimeUpdate}
-                onLoadedMetadata={handleAudioLoadedMetadata}
-                onEnded={() => {
-                  setIsPlayingAudio(false);
-                  setPlaybackProgress(0);
-                }}
-                className="hidden"
-              />
-            </div>
-            {canComment && (
-              <CommentButton
-                target={{ type: 'VOICE', ref: audioKey, label: 'Voice note' }}
-                label="Reply to voice note"
-                className="!text-[11px] !py-1 !px-2.5"
-              />
-            )}
-          </div>
-        )}
-
-        {/* Written Prompts */}
-        {prompts.length > 0 && (
-          <div className="space-y-3">
-            {prompts.map((p, idx) => (
-              <div key={idx} className="p-3 bg-gray-50 rounded-xl space-y-1.5">
-                <span className="text-xs font-semibold text-gray-500 block">
-                  {p.promptId}
-                </span>
-                <p className="text-sm text-gray-900 leading-relaxed font-medium">
-                  {p.answer}
-                </p>
-                {canComment && (
-                  <div className="pt-1">
-                    <CommentButton
-                      target={{
-                        type: 'PROMPT',
-                        ref: p.promptId,
-                        label: 'Prompt',
-                        preview: p.answer,
-                      }}
-                      label="Reply"
-                      className="!text-[11px] !py-1 !px-2.5"
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Lifestyle & Vibe Badges */}
-        {(candidate.relationshipType ||
-          candidate.starSign ||
-          candidate.religion ||
-          candidate.wantsKids ||
-          candidate.smokingStatus ||
-          candidate.drinkingStatus) && (
-          <div className="flex flex-wrap gap-2">
-            {candidate.relationshipType && (
-              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
-                {candidate.relationshipType.replace(/_/g, ' ')}
-              </span>
-            )}
-            {candidate.starSign && (
-              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
-                ⭐ {candidate.starSign}
-              </span>
-            )}
-            {candidate.religion && (
-              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
-                {candidate.religion}
-              </span>
-            )}
-            {candidate.wantsKids && (
-              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
-                Kids: {candidate.wantsKids}
-              </span>
-            )}
-            {candidate.smokingStatus && (
-              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
-                Smoke: {candidate.smokingStatus}
-              </span>
-            )}
-            {candidate.drinkingStatus && (
-              <span className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
-                Drink: {candidate.drinkingStatus}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Interests */}
-        {interests.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              {interests.map((interest: string, i: number) =>
-                canComment ? (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onComment?.({
-                        type: 'INTEREST',
-                        ref: interest,
-                        label: 'Interest',
-                        preview: interest,
-                      });
-                    }}
-                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 transition-colors rounded-full text-xs font-medium text-gray-700 inline-flex items-center gap-1.5 cursor-pointer"
-                  >
-                    {interest}
-                  </button>
-                ) : (
-                  <span
-                    key={i}
-                    className="px-3 py-1.5 bg-gray-100 rounded-full text-xs font-medium text-gray-700"
-                  >
-                    {interest}
-                  </span>
-                )
-              )}
-            </div>
-          </div>
-        )}
+        ) : null}
       </div>
-    </div>
+    </article>
   );
 }
-

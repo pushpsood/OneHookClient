@@ -1,15 +1,23 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Playfair Display", serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+@custom-variant dark (&:where(.app-theme-dark, .app-theme-dark *));
 
+/* Original theme for all non-app routes (Landing, Login, Careers, Legal, Onboarding) */
+:root {
   --color-bg: #FDFDFD;
   --color-text: #1A1A1A;
   --color-border: #EBEBEB;
   --color-accent: #1A1A1A;
   --color-status-hooked: #22C55E;
+
+  --color-surface: #FAFAFA;
+  --color-surface-card: #FFFFFF;
+  --color-surface-hover: #F2F2F2;
+  --color-text-secondary: #737373;
+  --color-text-muted: #8E8E8E;
+  --color-tab-active: #1A1A1A;
+  --color-tab-inactive: #737373;
+  --color-ig-blue: #0095F6;
 
   --animate-oh-flip: oh-flip 1.8s ease-in-out infinite;
 }
@@ -17,6 +25,68 @@
 @keyframes oh-flip {
   from { transform: rotateY(0deg); }
   to { transform: rotateY(360deg); }
+}
+
+/* App Route Scoped Themes: Light Mode */
+.app-theme-light {
+  --color-bg: #FFFFFF;
+  --color-surface: #FAFAFA;
+  --color-surface-card: #FFFFFF;
+  --color-surface-hover: #F2F2F2;
+  --color-text: #262626;
+  --color-text-secondary: #737373;
+  --color-text-muted: #8E8E8E;
+  --color-border: #DBDBDB;
+  --color-border-subtle: #EFEFEF;
+  --color-accent: #262626;
+  --color-accent-hover: #000000;
+  --color-tab-active: #262626;
+  --color-tab-inactive: #737373;
+  --color-status-hooked: #22C55E;
+  --color-ig-blue: #0095F6;
+  color-scheme: light;
+}
+
+/* App Route Scoped Themes: Dark Mode */
+.app-theme-dark {
+  --color-bg: #000000;
+  --color-surface: #121212;
+  --color-surface-card: #000000;
+  --color-surface-hover: #1A1A1A;
+  --color-text: #F5F5F5;
+  --color-text-secondary: #A8A8A8;
+  --color-text-muted: #737373;
+  --color-border: #262626;
+  --color-border-subtle: #1C1C1C;
+  --color-accent: #F5F5F5;
+  --color-accent-hover: #FFFFFF;
+  --color-tab-active: #F5F5F5;
+  --color-tab-inactive: #A8A8A8;
+  --color-status-hooked: #22C55E;
+  --color-ig-blue: #0095F6;
+  color-scheme: dark;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-card: var(--color-surface-card);
+  --color-surface-hover: var(--color-surface-hover);
+  --color-text: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-border: var(--color-border);
+  --color-border-subtle: var(--color-border-subtle);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-status-hooked: var(--color-status-hooked);
+  --color-tab-active: var(--color-tab-active);
+  --color-tab-inactive: var(--color-tab-inactive);
+  --color-ig-blue: var(--color-ig-blue);
 }
 
 html {
@@ -29,7 +99,9 @@ html {
 body {
   min-height: 100vh;
   margin: 0;
-  @apply bg-bg text-text font-sans antialiased selection:bg-accent selection:text-white;
+  background-color: #FDFDFD;
+  color: #1A1A1A;
+  @apply font-sans antialiased selection:bg-accent selection:text-white;
 }
 
 #root {
@@ -49,7 +121,7 @@ body {
 }
 
 .field-input {
-  @apply w-full border border-border bg-white px-3 py-3 text-sm outline-none transition-colors focus:border-accent;
+  @apply w-full border border-border bg-surface text-text px-3 py-3 text-sm outline-none transition-colors focus:border-accent;
 }
 
 .career-input {

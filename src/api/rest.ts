@@ -280,6 +280,8 @@ export const SwipeApi = {
     likeTargetType: LikeTargetType;
     likeTargetRef?: string;
     viewedSection?: string;
+    /** ROSE = a daily-limited super-like (mirrors iOS `likeKind:"ROSE"`); defaults to a normal LIKE. */
+    likeKind?: 'LIKE' | 'ROSE';
   }): Promise<SwipeResult> =>
     request<SwipeResult>('POST', '/matching/swipe', {
       targetId: input.targetId,
@@ -288,7 +290,19 @@ export const SwipeApi = {
       likeTargetType: input.likeTargetType,
       likeTargetRef: input.likeTargetRef,
       viewedSection: input.viewedSection,
+      likeKind: input.likeKind,
     }),
+};
+
+/** Remaining daily rose (super-like) quota. Mirrors iOS `GET /matching/roses`. */
+export interface RoseQuota {
+  remaining: number;
+  limit: number;
+  resetsAt?: string;
+}
+
+export const RosesApi = {
+  remaining: (): Promise<RoseQuota> => request<RoseQuota>('GET', '/matching/roses'),
 };
 
 export const ReceivedLikesApi = {

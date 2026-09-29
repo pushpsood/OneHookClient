@@ -13,11 +13,14 @@ function isMobileDevice(): boolean {
 }
 
 /**
- * Lightweight top header used on standalone pages (login, redeem). The brand
+ * Lightweight top header used on standalone pages (login, redeem, legal pages). The brand
  * mark returns to the landing page. On mobile devices an "Open in app" action
  * appears on the right so users can jump into the native app.
+ * 
+ * @param pageTitle - Optional page title to display in the center (e.g., "Privacy", "Terms", "Pricing")
+ * @param onApply - Optional callback for Apply button (e.g., on Careers page). Shows button next to close button.
  */
-export function SiteHeader() {
+export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply?: () => void }) {
   const navigate = useNavigate();
   const mobile = isMobileDevice();
 
@@ -33,16 +36,16 @@ export function SiteHeader() {
           <BrandWordmark className="text-xl sm:text-2xl font-bold tracking-tighter uppercase" />
         </button>
 
+        {/* Optional page title in center */}
+        {pageTitle && (
+          <div className="absolute left-1/2 -translate-x-1/2 text-xs sm:text-sm font-black uppercase tracking-[0.2em] opacity-70">
+            {pageTitle}
+          </div>
+        )}
+
         {mobile ? (
           <div className="flex items-center gap-3">
-            {/* Mobile menu: Pricing link + Open-in-app */}
-            <button
-              type="button"
-              onClick={() => navigate('/pricing')}
-              className="text-[11px] font-black uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity"
-            >
-              Pricing
-            </button>
+            {/* Mobile menu: Open-in-app */}
             <a
               href={APP_DOWNLOAD_URL}
               target="_blank"
@@ -55,13 +58,15 @@ export function SiteHeader() {
         ) : (
           <div className="flex items-center gap-4">
             {/* Desktop nav */}
-            <button
-              type="button"
-              onClick={() => navigate('/pricing')}
-              className="text-xs font-black uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity"
-            >
-              Pricing
-            </button>
+            {onApply && (
+              <button
+                type="button"
+                onClick={onApply}
+                className="text-[10px] font-black uppercase tracking-[0.25em] px-4 py-2 bg-accent text-white rounded-full hover:opacity-90 transition-opacity"
+              >
+                Apply
+              </button>
+            )}
             <button
               type="button"
               onClick={() => navigate('/')}

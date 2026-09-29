@@ -91,7 +91,7 @@ export function DeviceManagementCard() {
   const canRestoreHistory = overview != null && overview.historyStatus !== 'holding';
 
   return (
-    <div className="border border-border p-8 space-y-8 bg-white">
+    <div className="border border-border p-8 space-y-8 bg-surface-card text-text">
       <div className="flex items-center gap-3">
         <MonitorSmartphone className="w-4 h-4 text-accent" />
         <div>
@@ -106,7 +106,7 @@ export function DeviceManagementCard() {
 
       {/* History key status */}
       <div className="flex items-start gap-3 pt-4 border-t border-border">
-        <History className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+        <History className="w-4 h-4 mt-0.5 text-text-muted shrink-0" />
         <div className="space-y-2">
           <span className="text-[9px] uppercase tracking-[0.25em] font-black opacity-60 block">
             History Recovery Key
@@ -121,7 +121,7 @@ export function DeviceManagementCard() {
             // unreadable history actually loads.
             <button
               onClick={() => setRecoveryOpen(true)}
-              className="mt-1 py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
+              className="mt-1 py-2 px-4 border border-border text-text hover:bg-surface-hover text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
             >
               <History className="w-3 h-3" aria-hidden="true" />
               Restore earlier messages
@@ -152,7 +152,7 @@ export function DeviceManagementCard() {
             {overview.devices.map((device) => (
               <li
                 key={device.deviceId}
-                className="flex items-center justify-between gap-4 p-4 border border-border bg-bg/40"
+                className="flex items-center justify-between gap-4 p-4 border border-border bg-surface"
               >
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -178,7 +178,7 @@ export function DeviceManagementCard() {
                   <button
                     onClick={() => handleRevoke(device.deviceId)}
                     disabled={revoking === device.deviceId}
-                    className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-red-500 hover:text-red-500 transition-colors disabled:opacity-50 inline-flex items-center gap-2 shrink-0"
+                    className="py-2 px-4 border border-border text-text hover:bg-surface-hover text-[10px] uppercase tracking-[0.2em] font-bold hover:border-red-500 hover:text-red-500 transition-colors disabled:opacity-50 inline-flex items-center gap-2 shrink-0"
                   >
                     {revoking === device.deviceId ? (
                       <Loader className="w-3 h-3 animate-spin" />

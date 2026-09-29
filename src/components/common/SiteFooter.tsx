@@ -46,9 +46,6 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] opacity-50">
           <p>© 2026 OneHook. All rights reserved.</p>
           <div className="flex items-center gap-6">
-            <button onClick={() => navigate('/pricing')} className="hover:opacity-100 transition-opacity">
-              Pricing
-            </button>
             <button onClick={() => navigate('/privacy')} className="hover:opacity-100 transition-opacity">
               Privacy
             </button>

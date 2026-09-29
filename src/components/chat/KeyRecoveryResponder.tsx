@@ -91,7 +91,7 @@ export function KeyRecoveryResponder() {
         aria-modal="true"
         aria-labelledby="recovery-unable-title"
       >
-        <div className="bg-white border border-border w-full max-w-sm p-8 space-y-5">
+        <div className="bg-surface-card text-text border border-border w-full max-w-sm p-8 space-y-5 rounded-2xl shadow-2xl">
           <div className="flex items-start gap-3">
             <ShieldAlert className="w-4 h-4 mt-0.5 text-amber-600 shrink-0" aria-hidden="true" />
             <div>
@@ -132,7 +132,7 @@ export function KeyRecoveryResponder() {
         aria-modal="true"
         aria-labelledby="recovery-error-title"
       >
-        <div className="bg-white border border-border w-full max-w-sm p-8 space-y-5">
+        <div className="bg-surface-card text-text border border-border w-full max-w-sm p-8 space-y-5 rounded-2xl shadow-2xl">
           <div className="flex items-start gap-3">
             <ShieldAlert className="w-4 h-4 mt-0.5 text-red-600 shrink-0" aria-hidden="true" />
             <div>
@@ -165,7 +165,7 @@ export function KeyRecoveryResponder() {
       aria-modal="true"
       aria-labelledby="recovery-responder-title"
     >
-      <div className="bg-white border border-border w-full max-w-sm max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface-card text-text border border-border w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl">
         <div className="flex items-start justify-between gap-4 p-8 border-b border-border">
           <div>
             <h2

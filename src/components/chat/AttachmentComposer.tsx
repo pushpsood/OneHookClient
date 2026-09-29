@@ -65,7 +65,7 @@ export function AttachmentComposer({ disabled, onPickFile, onVoiceNote }: Attach
             <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} aria-hidden="true" />
             <div
               role="menu"
-              className="absolute bottom-full left-0 mb-2 w-40 bg-white border border-border shadow-xl z-40 py-1"
+              className="absolute bottom-full left-0 mb-2 w-40 bg-surface-card border border-border shadow-xl z-40 py-1 rounded-xl text-text overflow-hidden"
             >
               <MenuItem icon={<ImageIcon className="w-4 h-4" />} label="Photo" onClick={() => pick(imageInputRef)} />
               <MenuItem icon={<Film className="w-4 h-4" />} label="Video" onClick={() => pick(videoInputRef)} />
@@ -91,7 +91,7 @@ function MenuItem({ icon, label, onClick }: { icon: ReactNode; label: string; on
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-bg transition-colors text-accent"
+      className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-hover transition-colors text-text cursor-pointer"
     >
       {icon}
       {label}

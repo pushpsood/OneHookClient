@@ -28,7 +28,7 @@ export function SetPasswordCard() {
   };
 
   return (
-    <div className="border border-border p-8 space-y-5 bg-white">
+    <div className="border border-border p-8 space-y-5 bg-surface-card text-text">
       <div className="flex items-center gap-3">
         <KeyRound className="w-4 h-4 text-accent" />
         <div>
@@ -42,14 +42,14 @@ export function SetPasswordCard() {
       </div>
 
       <div className="space-y-4">
-        <p className="text-xs opacity-70 leading-relaxed bg-bg/50 p-4 border border-border">
+        <p className="text-xs opacity-70 leading-relaxed bg-surface p-4 border border-border">
           Because your account is passwordless, AWS security requires you to be signed out to set a password for the first time. 
           <br /><br />
           Click below to securely sign out, then use the <strong>Forgot Password</strong> option on the login screen to set your new password.
         </p>
         <button
           onClick={handleSignOutToSetPassword}
-          className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity"
+          className="w-full py-4 bg-accent text-bg text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity"
         >
           Sign Out & Set Password
         </button>

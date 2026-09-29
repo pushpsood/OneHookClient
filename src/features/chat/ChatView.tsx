@@ -1,4 +1,6 @@
+import { trackConversationOpened, trackProfileRevisit, trackSafetyUiOpen } from '../../lib/analytics/analytics';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { MessageStatus } from 'onehook-api-client/graphql';
 import {
@@ -119,6 +121,41 @@ export function ChatView({
   const [profileOpen, setProfileOpen] = useState(false);
   const [reportReason, setReportReason] = useState<BlockReason | null>(null);
   const [reporting, setReporting] = useState(false);
+
+  const [portalNode, setPortalNode] = useState<HTMLElement | null>(() => {
+    if (typeof document !== 'undefined') {
+      return document.getElementById('topbar-center-slot');
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (!portalNode && typeof document !== 'undefined') {
+      setPortalNode(document.getElementById('topbar-center-slot'));
+    }
+  }, [portalNode]);
+
+  // Analytics: a conversation was opened (investment / return signal). No-op unless analytics is
+  // enabled + consented; the mascot (MR_ONEHOOK) is not a real match so it's excluded.
+  useEffect(() => {
+    if (selection && selection !== MR_ONEHOOK) {
+      trackConversationOpened(String(selection));
+    }
+  }, [selection]);
+
+  // Analytics: the peer's profile was re-opened from chat (sustained-interest signal).
+  useEffect(() => {
+    if (profileOpen && selection && selection !== MR_ONEHOOK) {
+      const peerId = matches.find((m) => m.matchId === selection)?.peerId;
+      trackProfileRevisit(peerId || String(selection), 'chat');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileOpen]);
+
+  // Analytics: the safety / report panel was opened (intent — the action itself stays server-side).
+  useEffect(() => {
+    if (shieldOpen) trackSafetyUiOpen('report');
+  }, [shieldOpen]);
 
   const matchIds = useMemo(() => userState?.matchIds || [], [userState?.matchIds]);
 
@@ -294,140 +331,330 @@ export function ChatView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="flex-1 flex flex-col h-full min-h-0 overflow-hidden bg-white"
+      className="flex-1 flex flex-col h-full min-h-0 overflow-hidden bg-bg text-text"
     >
-      {/* ── ONE-ROW HEADER ─────────────────────────────────────────────────
-          LEFT: brand lockup. RIGHT (left→right): shield, gear, add (largest),
-          then the conversation-picker avatar pinned to the extreme right. No
-          name / distance text lives here — it is announced via the avatar. */}
-      <header className="px-4 md:px-8 h-20 border-b border-border flex items-center justify-between bg-white shrink-0 relative z-20">
-        <BrandWordmark className="text-lg md:text-xl font-bold tracking-tighter uppercase" />
+      {/* ── CHAT CONTROLS in Main Header Center (or local fallback) ── */}
+      {portalNode ? (
+        createPortal(
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Conversation avatar + name */}
+            <div className="relative group/picker flex items-center">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="h-9 px-2.5 flex items-center gap-2 min-w-0 group cursor-pointer rounded-xl hover:bg-surface-hover text-text transition-colors"
+                title={avatarLabel}
+                aria-label={avatarLabel}
+                aria-haspopup="dialog"
+              >
+                <span className="block w-6 h-6 rounded-full overflow-hidden border border-border group-hover:ring-2 group-hover:ring-accent/30 transition-all bg-surface shrink-0">
+                  {isMrOneHook ? (
+                    <span className="w-full h-full flex items-center justify-center bg-gradient-to-br from-rose-100 to-white dark:from-neutral-800 dark:to-neutral-900 ring-1 ring-accent/20">
+                      <Mascot mood="Happy" className="w-5 h-5" />
+                    </span>
+                  ) : (
+                    <MediaImage
+                      src={peerPhoto}
+                      alt=""
+                      aria-hidden="true"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </span>
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="text-sm font-semibold truncate text-text max-w-[80px] xs:max-w-[120px] sm:max-w-[160px]">
+                    {isMrOneHook ? 'Mr.OneHook' : peerName}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 stroke-[2] text-text/70 shrink-0" />
+                </div>
+              </button>
+              <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/picker:opacity-100 transition-all duration-150 shadow-md z-50">
+                Switch conversation
+              </div>
+            </div>
 
-        <div className="flex items-center gap-2 md:gap-3">
-          {/* Shield / safety menu */}
-          <div className="relative">
-            <button
-              onClick={() => setShieldOpen((v) => !v)}
-              className="p-2 border border-border hover:border-accent hover:bg-bg transition-colors text-accent"
-              title="Safety & report"
-              aria-haspopup="menu"
-              aria-expanded={shieldOpen}
-              aria-label="Safety and report options"
-            >
-              <Shield className="w-4 h-4" />
-            </button>
-            <AnimatePresence>
-              {shieldOpen && (
-                <>
-                  <div className="fixed inset-0 z-30" onClick={() => setShieldOpen(false)} />
-                  <motion.div
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    role="menu"
-                    className="absolute right-0 mt-2 w-56 bg-white border border-border shadow-xl z-40 py-2"
-                  >
-                    <button
-                      role="menuitem"
-                      onClick={() => {
-                        setShieldOpen(false);
-                        setProfileOpen(true);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-xs hover:bg-bg transition-colors"
-                    >
-                      {isMrOneHook ? 'About Mr.OneHook' : 'View profile'}
-                    </button>
-                    {!isMrOneHook && (
-                      <>
+            <div className="h-4 w-[1px] bg-border/60 mx-0.5 hidden xs:block" />
+
+            <div className="flex items-center gap-0.5 sm:gap-1">
+              {/* Shield / safety menu */}
+              <div className="relative group/shield flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setShieldOpen((v) => !v)}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                  title="Safety & report"
+                  aria-haspopup="menu"
+                  aria-expanded={shieldOpen}
+                  aria-label="Safety and report options"
+                >
+                  <Shield className="w-5 h-5 stroke-[1.75]" />
+                </button>
+                {!shieldOpen && (
+                  <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/shield:opacity-100 transition-all duration-150 shadow-md z-50">
+                    Safety &amp; report
+                  </div>
+                )}
+                <AnimatePresence>
+                  {shieldOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShieldOpen(false)} />
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        role="menu"
+                        className="absolute right-0 mt-2 w-52 bg-surface-card border border-border rounded-xl shadow-xl z-50 py-1 overflow-hidden"
+                      >
                         <button
+                          type="button"
                           role="menuitem"
-                          disabled={reporting}
                           onClick={() => {
                             setShieldOpen(false);
-                            void runReportAndBlock('SPAM');
+                            setProfileOpen(true);
                           }}
-                          className="w-full text-left px-4 py-2.5 text-xs hover:bg-bg transition-colors text-red-600 disabled:opacity-40"
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
                         >
-                          Report spam
+                          {isMrOneHook ? 'About Mr.OneHook' : 'View profile'}
                         </button>
+                        {!isMrOneHook && (
+                          <>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              disabled={reporting}
+                              onClick={() => {
+                                setShieldOpen(false);
+                                void runReportAndBlock('SPAM');
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
+                            >
+                              Report spam
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              disabled={reporting}
+                              onClick={() => {
+                                setShieldOpen(false);
+                                setReportReason('OTHER');
+                              }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
+                            >
+                              Report &amp; block
+                            </button>
+                          </>
+                        )}
+                        <div className="my-0.5 border-t border-border" />
                         <button
+                          type="button"
                           role="menuitem"
-                          disabled={reporting}
                           onClick={() => {
                             setShieldOpen(false);
-                            setReportReason('OTHER');
+                            setWallpaperOpen(true);
                           }}
-                          className="w-full text-left px-4 py-2.5 text-xs hover:bg-bg transition-colors text-red-600 disabled:opacity-40"
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
                         >
-                          Report &amp; block
+                          Choose wallpaper
                         </button>
-                      </>
-                    )}
-                    <div className="my-1 border-t border-border" />
-                    <button
-                      role="menuitem"
-                      onClick={() => {
-                        setShieldOpen(false);
-                        setWallpaperOpen(true);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-xs hover:bg-bg transition-colors"
-                    >
-                      Choose wallpaper
-                    </button>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Chat settings (gear) */}
+              <div className="relative group/settings flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                  title="Chat settings"
+                  aria-label="Chat settings"
+                >
+                  <Settings className="w-5 h-5 stroke-[1.75]" />
+                </button>
+                <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/settings:opacity-100 transition-all duration-150 shadow-md z-50">
+                  Chat settings
+                </div>
+              </div>
+
+              {/* Add by username */}
+              <div className="relative group/add flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setAddOpen(true)}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                  title="Add by username"
+                  aria-label="Add someone by username"
+                >
+                  <Plus className="w-5 h-5 stroke-[1.75]" />
+                </button>
+                <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/add:opacity-100 transition-all duration-150 shadow-md z-50">
+                  Add by username
+                </div>
+              </div>
+            </div>
+          </div>,
+          portalNode
+        )
+      ) : (
+        /* Standalone fallback when TopBar is not present */
+        <header className="px-4 h-12 border-b border-border flex items-center justify-between bg-surface-card shrink-0 relative z-20">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative group/picker flex items-center">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="h-9 px-2.5 flex items-center gap-2 min-w-0 group cursor-pointer rounded-xl hover:bg-surface-hover text-text transition-colors"
+                title={avatarLabel}
+                aria-label={avatarLabel}
+                aria-haspopup="dialog"
+              >
+                <span className="block w-6 h-6 rounded-full overflow-hidden border border-border group-hover:ring-2 group-hover:ring-accent/30 transition-all bg-surface shrink-0">
+                  {isMrOneHook ? (
+                    <span className="w-full h-full flex items-center justify-center bg-gradient-to-br from-rose-100 to-white dark:from-neutral-800 dark:to-neutral-900 ring-1 ring-accent/20">
+                      <Mascot mood="Happy" className="w-5 h-5" />
+                    </span>
+                  ) : (
+                    <MediaImage
+                      src={peerPhoto}
+                      alt=""
+                      aria-hidden="true"
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </span>
+                <div className="flex items-center gap-1 min-w-0">
+                  <span className="text-sm font-semibold truncate text-text">
+                    {isMrOneHook ? 'Mr.OneHook' : peerName}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 stroke-[2] text-text/70 shrink-0" />
+                </div>
+              </button>
+              <div className="pointer-events-none absolute left-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/picker:opacity-100 transition-all duration-150 shadow-md z-50">
+                Switch conversation
+              </div>
+            </div>
           </div>
 
-          {/* Chat settings (gear) */}
-          <button
-            onClick={() => setSettingsOpen(true)}
-            className="p-2 border border-border hover:border-accent hover:bg-bg transition-colors text-accent"
-            title="Chat settings"
-            aria-label="Chat settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-
-          {/* Add by username — visually the LARGEST of the three controls */}
-          <button
-            onClick={() => setAddOpen(true)}
-            className="p-2.5 border border-accent bg-accent text-white hover:opacity-90 transition-opacity"
-            title="Add by username"
-            aria-label="Add someone by username"
-          >
-            <Plus className="w-6 h-6" />
-          </button>
-
-          {/* Conversation picker avatar — extreme right, with a chevron badge. */}
-          <button
-            onClick={() => setPickerOpen(true)}
-            className="relative ml-1 md:ml-2 group"
-            title={avatarLabel}
-            aria-label={avatarLabel}
-            aria-haspopup="dialog"
-          >
-            <span className="block w-11 h-11 rounded-full overflow-hidden border border-border group-hover:ring-2 group-hover:ring-accent transition-all bg-border">
-              {isMrOneHook ? (
-                <span className="w-full h-full flex items-center justify-center bg-gradient-to-br from-rose-100 to-white ring-1 ring-accent/20">
-                  <Mascot mood="Happy" className="w-9 h-9" />
-                </span>
-              ) : (
-                <MediaImage
-                  src={peerPhoto}
-                  alt=""
-                  aria-hidden="true"
-                  className="w-full h-full object-cover"
-                />
+          <div className="flex items-center gap-1">
+            <div className="relative group/shield flex items-center">
+              <button
+                type="button"
+                onClick={() => setShieldOpen((v) => !v)}
+                className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                title="Safety & report"
+                aria-haspopup="menu"
+                aria-expanded={shieldOpen}
+                aria-label="Safety and report options"
+              >
+                <Shield className="w-5 h-5 stroke-[1.75]" />
+              </button>
+              {!shieldOpen && (
+                <div className="pointer-events-none absolute right-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/shield:opacity-100 transition-all duration-150 shadow-md z-50">
+                  Safety &amp; report
+                </div>
               )}
-            </span>
-            <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-accent text-white flex items-center justify-center border-2 border-white">
-              <ChevronDown className="w-2.5 h-2.5" />
-            </span>
-          </button>
-        </div>
-      </header>
+              <AnimatePresence>
+                {shieldOpen && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShieldOpen(false)} />
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      role="menu"
+                      className="absolute right-0 mt-2 w-52 bg-surface-card border border-border rounded-xl shadow-xl z-40 py-1 overflow-hidden"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setShieldOpen(false);
+                          setProfileOpen(true);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                      >
+                        {isMrOneHook ? 'About Mr.OneHook' : 'View profile'}
+                      </button>
+                      {!isMrOneHook && (
+                        <>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={reporting}
+                            onClick={() => {
+                              setShieldOpen(false);
+                              void runReportAndBlock('SPAM');
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
+                          >
+                            Report spam
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={reporting}
+                            onClick={() => {
+                              setShieldOpen(false);
+                              setReportReason('OTHER');
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
+                          >
+                            Report &amp; block
+                          </button>
+                        </>
+                      )}
+                      <div className="my-0.5 border-t border-border" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setShieldOpen(false);
+                          setWallpaperOpen(true);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                      >
+                        Choose wallpaper
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <div className="relative group/settings flex items-center">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                title="Chat settings"
+                aria-label="Chat settings"
+              >
+                <Settings className="w-5 h-5 stroke-[1.75]" />
+              </button>
+              <div className="pointer-events-none absolute right-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/settings:opacity-100 transition-all duration-150 shadow-md z-50">
+                Chat settings
+              </div>
+            </div>
+
+            <div className="relative group/add flex items-center">
+              <button
+                type="button"
+                onClick={() => setAddOpen(true)}
+                className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
+                title="Add by username"
+                aria-label="Add someone by username"
+              >
+                <Plus className="w-5 h-5 stroke-[1.75]" />
+              </button>
+              <div className="pointer-events-none absolute right-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/add:opacity-100 transition-all duration-150 shadow-md z-50">
+                Add by username
+              </div>
+            </div>
+          </div>
+        </header>
+      )}
 
       {/* ── ACTIVE CONVERSATION (in-place; header + composer are constant) ── */}
       {isMrOneHook ? (
@@ -536,7 +763,7 @@ function Composer({
   leading?: ReactNode;
 }) {
   return (
-    <div className="p-6 md:p-8 border-t border-border bg-white shrink-0">
+    <div className="p-4 md:p-6 border-t border-border bg-surface-card shrink-0">
       <div className="relative flex items-center">
         {leading}
         <input
@@ -545,18 +772,18 @@ function Composer({
           onKeyDown={(e) => e.key === 'Enter' && onSend()}
           type="text"
           placeholder={placeholder || 'Write a message…'}
-          className="w-full py-3 pr-20 pl-0 border-b border-accent focus:border-b-2 transition-all outline-none text-sm bg-transparent placeholder:opacity-30 italic font-serif"
+          className="w-full py-3 pr-20 pl-0 border-b border-border focus:border-accent transition-all outline-none text-sm bg-transparent placeholder:text-text-muted text-text"
         />
         <button
           onClick={onSend}
           disabled={disabled || !value.trim()}
-          className="absolute right-0 bottom-3 text-[10px] font-black uppercase tracking-[0.3em] hover:opacity-50 transition-opacity disabled:opacity-20 flex items-center gap-1 text-accent"
+          className="absolute right-0 bottom-3 text-xs font-semibold text-ig-blue hover:opacity-80 transition-opacity disabled:opacity-30 flex items-center gap-1 cursor-pointer"
         >
           Send
         </button>
       </div>
-      <div className="mt-3 flex items-center justify-between text-[8px] opacity-20 uppercase tracking-[0.3em] font-mono">
-        <span>Connected</span>
+      <div className="mt-2 flex items-center justify-between text-[10px] text-text-muted font-mono">
+        <span>Encrypted</span>
         <span>{footerRight || 'One Connection at a Time'}</span>
       </div>
     </div>
@@ -895,10 +1122,10 @@ function MatchConversation({
                   {statusIcon(m)}
                 </div>
                 <div
-                  className={`p-5 text-sm leading-relaxed ${
+                  className={`p-4 md:p-5 rounded-2xl text-sm leading-relaxed ${
                     m.senderId === 'me'
-                      ? 'bg-accent text-white shadow-md'
-                      : 'bg-[#F2F2F2] text-accent'
+                      ? 'bg-ig-blue text-white shadow-sm rounded-br-sm'
+                      : 'bg-surface text-text border border-border/60 rounded-bl-sm'
                   }`}
                 >
                   {/*
@@ -1009,12 +1236,12 @@ function MrOneHookConversation({
                   {m.role === 'user' ? 'You' : 'Mr.OneHook'}
                 </div>
                 <div
-                  className={`p-5 text-sm leading-relaxed ${
+                  className={`p-4 md:p-5 rounded-2xl text-sm leading-relaxed ${
                     m.role === 'user'
-                      ? 'bg-accent text-white shadow-md'
+                      ? 'bg-ig-blue text-white shadow-sm rounded-br-sm'
                       : m.isError
-                        ? 'bg-orange-50 text-orange-700 border border-orange-200'
-                        : 'bg-[#F2F2F2] text-accent'
+                        ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20 rounded-bl-sm'
+                        : 'bg-surface text-text border border-border/60 rounded-bl-sm'
                   }`}
                 >
                   {m.content}
@@ -1025,7 +1252,7 @@ function MrOneHookConversation({
           {loading && (
             <div className="max-w-md">
               <div className="text-[9px] uppercase tracking-widest opacity-40 mb-1">Mr.OneHook</div>
-              <div className="p-5 bg-[#F2F2F2] text-accent inline-flex items-center gap-1">
+              <div className="p-4 rounded-2xl bg-surface text-text border border-border/60 inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-accent/50 animate-bounce [animation-delay:-0.2s]" />
                 <span className="w-1.5 h-1.5 rounded-full bg-accent/50 animate-bounce [animation-delay:-0.1s]" />
                 <span className="w-1.5 h-1.5 rounded-full bg-accent/50 animate-bounce" />
@@ -1061,24 +1288,24 @@ function EmptyState({
   onOpenPicker: () => void;
 }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-[#F9F9F9]">
-      <div className="max-w-md w-full bg-white border border-border p-12 space-y-6 shadow-sm">
-        <h3 className="text-2xl font-serif italic">Pick a conversation</h3>
-        <p className="text-xs opacity-60 leading-relaxed italic">
+    <div className="flex-1 flex flex-col items-center justify-center p-8 md:p-12 text-center bg-bg text-text">
+      <div className="max-w-md w-full bg-surface-card border border-border p-8 md:p-12 space-y-6 shadow-sm rounded-2xl">
+        <h3 className="text-xl font-bold text-text">Pick a conversation</h3>
+        <p className="text-xs text-text-secondary leading-relaxed">
           Open the picker to chat with a connection or with Mr.OneHook, or explore Discovery for new
           connections.
         </p>
         <div className="flex flex-col gap-3">
           <button
             onClick={onOpenPicker}
-            className="w-full py-3 bg-accent text-white text-[10px] uppercase tracking-[0.25em] font-black hover:opacity-90 transition-opacity"
+            className="w-full py-3 bg-accent text-bg text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
           >
             Open conversations
           </button>
           {onNavigateToDiscovery && (
             <button
               onClick={onNavigateToDiscovery}
-              className="w-full py-3 border border-border text-accent text-[10px] uppercase tracking-[0.25em] font-black hover:bg-bg transition-colors"
+              className="w-full py-3 border border-border text-text text-xs font-semibold rounded-xl hover:bg-surface-hover transition-colors cursor-pointer"
             >
               Go to Discovery
             </button>
@@ -1133,17 +1360,17 @@ function ConversationPickerModal({
             exit={{ opacity: 0, y: 12 }}
             role="dialog"
             aria-label="Conversations"
-            className="w-full max-w-md bg-white border border-border shadow-2xl max-h-[80vh] flex flex-col"
+            className="w-full max-w-md bg-surface-card text-text border border-border shadow-2xl max-h-[80vh] flex flex-col rounded-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header: title, sort control immediately LEFT of the ✕ */}
             <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
-              <h2 className="text-lg font-serif italic font-bold">Conversations</h2>
+              <h2 className="text-lg font-bold text-text">Conversations</h2>
               <div className="flex items-center gap-1">
                 <div className="relative">
                   <button
                     onClick={() => setSortOpen((v) => !v)}
-                    className="p-2 border border-border hover:border-accent hover:bg-bg transition-colors flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold"
+                    className="p-2 border border-border hover:border-accent hover:bg-surface-hover transition-colors flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold rounded-lg cursor-pointer text-text"
                     title="Sort conversations"
                     aria-haspopup="menu"
                     aria-expanded={sortOpen}
@@ -1159,7 +1386,7 @@ function ConversationPickerModal({
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -4 }}
                           role="menu"
-                          className="absolute right-0 mt-2 w-56 bg-white border border-border shadow-xl z-20 py-2"
+                          className="absolute right-0 mt-2 w-56 bg-surface-card border border-border rounded-xl shadow-xl z-20 py-2 text-text overflow-hidden"
                         >
                           {CONVERSATION_SORTS.map((opt) => (
                             <button
@@ -1170,10 +1397,10 @@ function ConversationPickerModal({
                                 setSort(opt.id);
                                 setSortOpen(false);
                               }}
-                              className="w-full text-left px-4 py-2 text-xs hover:bg-bg transition-colors flex items-center justify-between"
+                              className="w-full text-left px-4 py-2 text-xs hover:bg-surface-hover transition-colors flex items-center justify-between text-text cursor-pointer"
                             >
                               <span>{opt.label}</span>
-                              {sort === opt.id && <Check className="w-3.5 h-3.5 text-accent" />}
+                              {sort === opt.id && <Check className="w-3.5 h-3.5 text-ig-blue" />}
                             </button>
                           ))}
                         </motion.div>
@@ -1208,8 +1435,8 @@ function ConversationPickerModal({
                   <button
                     key={row.id}
                     onClick={() => onSelect(row.isMrOneHook ? MR_ONEHOOK : row.id)}
-                    className={`w-full flex items-center gap-3 p-3 text-left transition-colors relative ${
-                      isActive ? 'bg-bg' : 'hover:bg-bg/60'
+                    className={`w-full flex items-center gap-3 p-3 text-left transition-colors relative cursor-pointer ${
+                      isActive ? 'bg-surface font-semibold text-text' : 'hover:bg-surface-hover text-text'
                     }`}
                   >
                     {/* Avatar */}
@@ -1300,16 +1527,16 @@ function AddByUsernameModal({ open, onClose }: { open: boolean; onClose: () => v
           onClick={onClose}
         >
           <div
-            className="max-w-md w-full bg-white border border-accent p-8 space-y-6 shadow-2xl"
+            className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-6 shadow-2xl rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-serif italic tracking-tight">Add by username</h3>
-              <button onClick={onClose} className="p-1 hover:opacity-60" aria-label="Close">
-                <X className="w-4 h-4" />
+              <h3 className="text-xl font-bold text-text">Add by username</h3>
+              <button onClick={onClose} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-xs opacity-60 leading-relaxed italic">
+            <p className="text-xs text-text-secondary leading-relaxed">
               Enter someone&rsquo;s username to send a connection request.
             </p>
             <input
@@ -1319,20 +1546,20 @@ function AddByUsernameModal({ open, onClose }: { open: boolean; onClose: () => v
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && submit()}
               placeholder="@username"
-              className="w-full p-3 border border-border text-sm bg-bg outline-none focus:border-accent"
+              className="w-full p-3 border border-border text-sm bg-surface text-text rounded-xl outline-none focus:border-accent"
             />
             <div className="flex items-center gap-4">
               <button
                 onClick={onClose}
                 disabled={submitting}
-                className="flex-1 py-3 border border-border text-[10px] uppercase tracking-widest font-bold hover:bg-bg transition-colors"
+                className="flex-1 py-3 border border-border text-xs font-semibold rounded-xl hover:bg-surface-hover transition-colors text-text cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={submit}
                 disabled={submitting || !username.trim()}
-                className="flex-1 py-3 bg-accent text-white text-[10px] uppercase tracking-widest font-black hover:opacity-90 transition-opacity disabled:opacity-30 flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-accent text-bg text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-30 flex items-center justify-center gap-2 cursor-pointer"
               >
                 {submitting ? <LoadingSpinner size="sm" /> : 'Send request'}
               </button>
@@ -1371,13 +1598,13 @@ function WallpaperPickerModal({
           onClick={onClose}
         >
           <div
-            className="max-w-md w-full bg-white border border-accent p-8 space-y-6 shadow-2xl"
+            className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-6 shadow-2xl rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-serif italic tracking-tight">Choose wallpaper</h3>
-              <button onClick={onClose} className="p-1 hover:opacity-60" aria-label="Close">
-                <X className="w-4 h-4" />
+              <h3 className="text-xl font-bold text-text">Choose wallpaper</h3>
+              <button onClick={onClose} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
+                <X className="w-5 h-5" />
               </button>
             </div>
             <WallpaperGrid current={current} onChoose={onChoose} />
@@ -1420,15 +1647,15 @@ function ProfileInspectorModal({
           onClick={onClose}
         >
           <div
-            className="max-w-md w-full bg-white border border-accent p-8 space-y-5 shadow-2xl max-h-[85vh] overflow-y-auto"
+            className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-5 shadow-2xl max-h-[85vh] overflow-y-auto rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-2xl font-serif italic tracking-tight">
+              <h3 className="text-xl font-bold text-text">
                 {isMrOneHook ? 'About Mr.OneHook' : 'Profile'}
               </h3>
-              <button onClick={onClose} className="p-1 hover:opacity-60" aria-label="Close">
-                <X className="w-4 h-4" />
+              <button onClick={onClose} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1522,23 +1749,23 @@ function ReportBlockModal({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6"
         >
-          <div className="max-w-md w-full bg-white border border-accent p-8 space-y-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-red-600">
+          <div className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-6 shadow-2xl rounded-2xl">
+            <div className="flex items-center gap-3 text-red-500">
               <AlertTriangle className="w-6 h-6" />
-              <h3 className="text-2xl font-serif italic tracking-tight">Report &amp; block</h3>
+              <h3 className="text-xl font-bold text-text">Report &amp; block</h3>
             </div>
-            <p className="text-xs opacity-70 leading-relaxed">
+            <p className="text-xs text-text-secondary leading-relaxed">
               Blocking {peerName} ends this connection and prevents further contact. Your chat history
               is archived. This can&rsquo;t be undone from here.
             </p>
             <div className="space-y-2">
-              <label className="text-[10px] uppercase tracking-widest font-bold opacity-60 block">
+              <label className="text-[10px] uppercase tracking-widest font-bold text-text-secondary block">
                 Reason
               </label>
               <select
                 value={reason}
                 onChange={(e) => onReason(e.target.value as BlockReason)}
-                className="w-full p-3 border border-border text-xs bg-bg outline-none focus:border-accent"
+                className="w-full p-3 border border-border text-xs bg-surface text-text rounded-xl outline-none focus:border-accent"
               >
                 {BLOCK_REASONS.map((r) => (
                   <option key={r.value} value={r.value}>
@@ -1551,14 +1778,14 @@ function ReportBlockModal({
               <button
                 onClick={onCancel}
                 disabled={submitting}
-                className="flex-1 py-3 border border-border text-[10px] uppercase tracking-widest font-bold hover:bg-bg transition-colors"
+                className="flex-1 py-3 border border-border text-xs font-semibold rounded-xl hover:bg-surface-hover transition-colors text-text cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={() => onConfirm(reason)}
                 disabled={submitting}
-                className="flex-1 py-3 bg-red-600 text-white text-[10px] uppercase tracking-widest font-black hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-red-600 text-white text-xs font-semibold rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 {submitting ? <LoadingSpinner size="sm" /> : 'Block & report'}
               </button>

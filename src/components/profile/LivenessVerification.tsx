@@ -186,7 +186,7 @@ export function LivenessVerification({
     !effectiveVerified && (status === 'NONE' || status === null || failed) && phase === 'idle';
 
   return (
-    <div className="border border-border p-8 space-y-5">
+    <div className="border border-border p-8 space-y-5 bg-surface-card text-text">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <ShieldCheck className="w-4 h-4 text-accent" />
@@ -252,7 +252,7 @@ export function LivenessVerification({
       {canVerify && (
         <button
           onClick={start}
-          className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2"
+          className="w-full py-4 bg-accent text-bg text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2"
         >
           <Camera className="w-4 h-4" /> {failed ? 'Try again' : 'Verify with a selfie'}
         </button>
@@ -283,7 +283,7 @@ export function LivenessVerification({
           <p className="text-sm text-red-600 italic">{errorMsg}</p>
           <button
             onClick={start}
-            className="inline-flex items-center gap-2 px-6 py-3 border border-accent text-[10px] font-black uppercase tracking-[0.24em] hover:bg-accent hover:text-white transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 border border-accent text-[10px] font-black uppercase tracking-[0.24em] hover:bg-accent hover:text-bg transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Retry
           </button>

@@ -28,7 +28,7 @@ export function WallpaperGrid({
           aria-pressed={current.id === w.id}
         >
           <span className={`absolute inset-0 ${w.swatchClass}`} aria-hidden="true" />
-          <span className="absolute bottom-0 inset-x-0 bg-white/80 text-[9px] uppercase tracking-widest font-bold py-1 text-center">
+          <span className="absolute bottom-0 inset-x-0 bg-surface-card/90 text-text text-[9px] uppercase tracking-widest font-bold py-1 text-center backdrop-blur-sm">
             {w.label}
           </span>
           {current.id === w.id && (

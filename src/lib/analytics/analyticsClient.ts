@@ -28,7 +28,13 @@ export type SignalType =
   | 'notification_opened'
   | 'session_heartbeat'
   | 'like_composer_open'
-  | 'like_comment_abandoned';
+  | 'like_comment_abandoned'
+  | 'conversation_opened'
+  | 'compose_abandoned'
+  | 'profile_revisit'
+  | 'hooked_state_view'
+  | 'likes_you_view'
+  | 'safety_ui_open';
 
 export interface Signal {
   clientEventId: string;

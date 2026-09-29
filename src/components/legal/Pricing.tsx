@@ -173,7 +173,7 @@ export function Pricing() {
 
   return (
     <div className="min-h-screen bg-white">
-      <SiteHeader />
+      <SiteHeader pageTitle="Pricing" />
 
       {/* Hero */}
       <section className="py-16 px-6 bg-gradient-to-b from-bg to-white">

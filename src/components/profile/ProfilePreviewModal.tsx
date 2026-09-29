@@ -56,23 +56,23 @@ export function ProfilePreviewModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 16 }}
             transition={{ type: 'spring', duration: 0.35, bounce: 0.05 }}
-            className="relative w-full max-w-[460px] max-h-[92vh] z-10 flex flex-col bg-white border border-border shadow-2xl overflow-hidden"
+            className="relative w-full max-w-[460px] max-h-[92vh] z-10 flex flex-col bg-surface-card text-text border border-border shadow-2xl overflow-hidden"
           >
             {/* Sleek integrated header */}
-            <div className="bg-accent text-white px-5 py-3 flex items-center justify-between shrink-0 select-none">
+            <div className="bg-accent text-bg px-5 py-3 flex items-center justify-between shrink-0 select-none">
               <div className="flex items-center gap-2">
                 <Eye className="w-4 h-4 text-green-400" />
                 <span className="text-[10px] uppercase font-black tracking-[0.25em]">
                   Discovery Feed Preview
                 </span>
-                <span className="text-[8px] font-mono px-1.5 py-0.5 bg-white/20 rounded text-white tracking-normal">
+                <span className="text-[8px] font-mono px-1.5 py-0.5 bg-bg/20 rounded text-bg tracking-normal">
                   Live
                 </span>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1 text-white/70 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer"
+                className="p-1 text-bg/70 hover:text-bg hover:bg-bg/10 rounded transition-colors cursor-pointer"
                 title="Close (Esc)"
               >
                 <X className="w-4 h-4" />

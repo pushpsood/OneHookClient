@@ -188,15 +188,15 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
       {!audioBlob ? (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            <span className="text-xs font-bold uppercase tracking-widest text-text-muted">
               {isRecording ? 'Recording...' : 'Ready to record'}
             </span>
-            <span className={`text-xs font-bold font-mono ${isRecording ? 'text-red-500' : 'text-foreground'}`}>
+            <span className={`text-xs font-bold font-mono ${isRecording ? 'text-red-500' : 'text-text'}`}>
               {formatTime(recordingTime)} / {formatTime(MAX_RECORDING_TIME)}
             </span>
           </div>
           
-          <div className="h-16 w-full bg-white border border-border overflow-hidden rounded relative flex items-center justify-center">
+          <div className="h-16 w-full bg-surface border border-border overflow-hidden rounded relative flex items-center justify-center">
             {isRecording ? (
               <>
                 <canvas ref={canvasRef} width="400" height="64" className="w-full h-full object-cover" />
@@ -206,7 +206,7 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
                 />
               </>
             ) : (
-              <div className="text-muted-foreground opacity-30">
+              <div className="text-text-muted opacity-30">
                 <Mic className="w-6 h-6" />
               </div>
             )}
@@ -223,14 +223,14 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
             ) : (
               <button
                 onClick={stopRecording}
-                className="py-2 px-4 bg-black text-white text-[10px] font-black uppercase tracking-widest hover:bg-black/80 transition-all flex items-center gap-2 shadow animate-pulse"
+                className="py-2 px-4 bg-accent text-bg text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all flex items-center gap-2 shadow animate-pulse"
               >
                 <Square className="w-3.5 h-3.5" /> Stop Recording
               </button>
             )}
             <button
               onClick={onCancel}
-              className="text-[10px] uppercase font-bold text-muted-foreground hover:text-foreground"
+              className="text-[10px] uppercase font-bold text-text-muted hover:text-text"
             >
               Cancel
             </button>
@@ -241,17 +241,17 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
           <div className="flex items-center gap-4 w-full">
             <button
               onClick={togglePlayback}
-              className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow hover:bg-accent/90 shrink-0"
+              className="w-10 h-10 rounded-full bg-accent text-bg flex items-center justify-center shadow hover:bg-accent/90 shrink-0"
             >
               {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-1" />}
             </button>
             
             <div className="flex-1 flex flex-col gap-1.5">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-foreground opacity-70">
+                <span className="text-xs font-bold text-text opacity-70">
                   Preview Voice Note
                 </span>
-                <span className="text-[10px] font-mono text-muted-foreground">
+                <span className="text-[10px] font-mono text-text-muted">
                   {formatTime(playbackTime)} / {formatTime(recordingTime)}
                 </span>
               </div>
@@ -275,13 +275,13 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={handleSave}
-              className="py-2 px-4 bg-accent text-white text-[10px] font-black uppercase tracking-widest hover:bg-accent/90 transition-all flex items-center gap-2 shadow"
+              className="py-2 px-4 bg-accent text-bg text-[10px] font-black uppercase tracking-widest hover:bg-accent/90 transition-all flex items-center gap-2 shadow"
             >
               <Check className="w-3.5 h-3.5" /> Save
             </button>
             <button
               onClick={handleDiscard}
-              className="py-2 px-4 border border-border text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center gap-2"
+              className="py-2 px-4 border border-border text-text hover:bg-surface-hover text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
             >
               <Trash2 className="w-3.5 h-3.5" /> Discard
             </button>

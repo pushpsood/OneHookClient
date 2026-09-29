@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
-  ArrowLeft,
+  ArrowRight,
   Server,
   MonitorSmartphone,
   Megaphone,
@@ -21,7 +21,7 @@ import {
   Users,
   IndianRupee,
 } from 'lucide-react';
-import { BrandWordmark } from '../common/BrandWordmark';
+import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 
 /**
@@ -269,24 +269,7 @@ export function Careers() {
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
-      <nav className="border-b border-border sticky top-0 z-40 bg-white/80 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] hover:opacity-60 transition-opacity"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back
-          </button>
-          <BrandWordmark className="text-2xl font-bold tracking-tighter uppercase" />
-          <button
-            onClick={() => scrollToForm()}
-            className="hidden sm:inline-flex text-[10px] font-black uppercase tracking-[0.25em] px-4 py-2 bg-accent text-white rounded-full hover:opacity-90 transition-opacity"
-          >
-            Apply
-          </button>
-        </div>
-      </nav>
+      <SiteHeader pageTitle="Careers" onApply={scrollToForm} />
 
       {/* Hero */}
       <section className="relative overflow-hidden py-24 px-6 bg-gradient-to-b from-bg to-white">
@@ -384,7 +367,7 @@ export function Careers() {
                   onClick={() => scrollToForm(role.id)}
                   className="mt-auto self-start text-[10px] font-black uppercase tracking-[0.3em] text-accent inline-flex items-center gap-2 hover:gap-3 transition-all"
                 >
-                  Apply for this role <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                  Apply for this role <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </motion.div>
             ))}
