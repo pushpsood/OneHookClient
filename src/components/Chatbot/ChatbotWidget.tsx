@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mascot } from './Mascot';
 import { chatbotUrl } from '../../utils/env.config';
+import { PUBLIC_PRODUCT_CHAT_PATH } from '../../lib/mr-onehook-contract';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 import './ChatbotWidget.css'; // Add a little standard CSS or use tailwind
 
@@ -160,7 +161,7 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
     setMood('Thinking');
 
     try {
-      const response = await fetch(`${chatbotUrl}/api/chat`, {
+      const response = await fetch(`${chatbotUrl}${PUBLIC_PRODUCT_CHAT_PATH}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
