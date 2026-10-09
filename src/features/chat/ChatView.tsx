@@ -55,7 +55,18 @@ import {
   getSortOption,
   type SortableConversation,
 } from '../../lib/chat-sort';
-import { useMrOneHookChat, type MrOneHookMessage } from '../../lib/mr-onehook';
+import {
+  useMrOneHookChat,
+  type MrOneHookMessage,
+  type MrOneHookScope,
+  type PendingExcerptReview,
+} from '../../lib/mr-onehook';
+import {
+  selectEphemeralExcerpts,
+  toSelectableMessages,
+  type ExcerptSelectionRequest,
+} from '../../lib/mr-onehook-excerpts';
+import { SubscriptionTier } from '../../types';
 import { ChatSettingsSheet } from '../../components/chat/ChatSettingsSheet';
 import { AttachmentBubble } from '../../components/chat/AttachmentBubble';
 import { AttachmentComposer } from '../../components/chat/AttachmentComposer';
@@ -658,7 +669,12 @@ export function ChatView({
 
       {/* ── ACTIVE CONVERSATION (in-place; header + composer are constant) ── */}
       {isMrOneHook ? (
-        <MrOneHookConversation currentUser={currentUser} wallpaper={wallpaper} />
+        <MrOneHookConversation
+          currentUser={currentUser}
+          wallpaper={wallpaper}
+          matches={matches}
+          tier={userState?.subscriptionTier ?? SubscriptionTier.FREE}
+        />
       ) : loadingMatches && !activeMatch ? (
         <div className="flex-1 flex items-center justify-center">
           <LoadingSpinner size="lg" />
@@ -1181,30 +1197,217 @@ function MatchConversation({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mr.OneHook conversation — local-only transcript, never touches E2EE APIs.
+// Mr.OneHook conversation — authenticated member chat. Local-only transcript; it
+// never writes to the E2EE match APIs and is never surfaced as a match. A scope
+// is either product-only or exactly ONE authorized match; match scope can ground
+// answers in locally-decrypted history, but only after the model asks for context
+// and the user explicitly approves the excerpts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function MrOneHookConversation({
   currentUser,
   wallpaper,
+  matches,
+  tier,
 }: {
   currentUser: UserProfile;
   wallpaper: ChatWallpaper;
+  matches: HydratedMatch[];
+  tier: SubscriptionTier;
 }) {
-  const demographics = useMemo(
-    () => ({
-      gender: currentUser.gender || 'man',
-      sexualPreference: (currentUser.interestedIn || []).join(', '),
-    }),
-    [currentUser.gender, currentUser.interestedIn]
+  // Scope the conversation to product-only (default) or a single match the user picks here.
+  const [scope, setScope] = useState<MrOneHookScope>({ type: 'product' });
+  const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
+
+  const activeMatch =
+    scope.type === 'match' ? matches.find((m) => m.matchId === scope.matchId) ?? null : null;
+
+  // If the chosen match disappears (unmatch/block), fall back to product scope.
+  useEffect(() => {
+    if (scope.type === 'match' && !matches.some((m) => m.matchId === scope.matchId)) {
+      setScope({ type: 'product' });
+    }
+  }, [scope, matches]);
+
+  const activeMatchName =
+    activeMatch?.peerProfile?.displayName || activeMatch?.peerProfile?.name || 'your match';
+
+  return (
+    <>
+      {/* Scope selector: Product-only, or ground answers in one authorized match's local history. */}
+      <div className="shrink-0 px-4 md:px-6 pt-3 pb-2 border-b border-border/60 bg-surface-card/60">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] uppercase tracking-widest font-bold text-text-muted">
+            Context
+          </span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setScopeMenuOpen((v) => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-xs font-semibold text-text hover:bg-surface-hover transition-colors cursor-pointer"
+              aria-haspopup="menu"
+              aria-expanded={scopeMenuOpen}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-accent" />
+              <span className="max-w-[160px] truncate">
+                {scope.type === 'product' ? 'OneHook (product only)' : activeMatchName}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+            </button>
+            <AnimatePresence>
+              {scopeMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setScopeMenuOpen(false)} />
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    role="menu"
+                    className="absolute left-0 mt-2 w-64 max-h-72 overflow-y-auto bg-surface-card border border-border rounded-xl shadow-xl z-50 py-1"
+                  >
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={scope.type === 'product'}
+                      onClick={() => {
+                        setScope({ type: 'product' });
+                        setScopeMenuOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors flex items-center justify-between text-text cursor-pointer"
+                    >
+                      <span>OneHook (product only)</span>
+                      {scope.type === 'product' && <Check className="w-3.5 h-3.5 text-accent" />}
+                    </button>
+                    {matches.length > 0 && <div className="my-0.5 border-t border-border" />}
+                    {matches.map((m) => {
+                      const name = m.peerProfile?.displayName || m.peerProfile?.name || 'Your Match';
+                      const checked = scope.type === 'match' && scope.matchId === m.matchId;
+                      return (
+                        <button
+                          key={m.matchId}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={checked}
+                          onClick={() => {
+                            setScope({ type: 'match', matchId: m.matchId });
+                            setScopeMenuOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors flex items-center justify-between text-text cursor-pointer"
+                        >
+                          <span className="truncate">{name}</span>
+                          {checked && <Check className="w-3.5 h-3.5 text-accent shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+          {scope.type === 'match' && (
+            <span className="text-[10px] text-text-muted italic">
+              Mr.OneHook can reference this chat only after you review &amp; approve excerpts.
+            </span>
+          )}
+        </div>
+      </div>
+
+      {scope.type === 'match' && activeMatch ? (
+        <MrOneHookMatchScope
+          key={activeMatch.matchId}
+          currentUser={currentUser}
+          wallpaper={wallpaper}
+          match={activeMatch}
+          matchName={activeMatchName}
+          tier={tier}
+        />
+      ) : (
+        <MrOneHookProductScope currentUser={currentUser} wallpaper={wallpaper} tier={tier} />
+      )}
+    </>
   );
-  const { messages, loading, send } = useMrOneHookChat(currentUser.id, demographics);
+}
+
+/** Product-only Mr.OneHook: no match, no excerpts — the always-available baseline. */
+function MrOneHookProductScope({
+  currentUser,
+  wallpaper,
+  tier,
+}: {
+  currentUser: UserProfile;
+  wallpaper: ChatWallpaper;
+  tier: SubscriptionTier;
+}) {
+  const chat = useMrOneHookChat({
+    userId: currentUser.id,
+    scope: { type: 'product' },
+    tier,
+  });
+  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} />;
+}
+
+/**
+ * Match-scoped Mr.OneHook. Reads the match's decrypted messages via the SAME `useChatMessages` hook
+ * the real conversation uses, and exposes a pure local-search resolver so a `needsMoreContext` turn
+ * can select bounded excerpts from that already-decrypted history for the user to review.
+ */
+function MrOneHookMatchScope({
+  currentUser,
+  wallpaper,
+  match,
+  matchName,
+  tier,
+}: {
+  key?: string;
+  currentUser: UserProfile;
+  wallpaper: ChatWallpaper;
+  match: HydratedMatch;
+  matchName: string;
+  tier: SubscriptionTier;
+}) {
+  const { messages } = useChatMessages(match.matchId, match.peerId || undefined);
+
+  // Stable snapshot of the decrypted turns for the pure selector; recomputed as history changes.
+  const selectable = useMemo(() => toSelectableMessages(messages), [messages]);
+  const selectableRef = useRef(selectable);
+  selectableRef.current = selectable;
+
+  const resolveLocalExcerpts = useCallback(
+    (request: ExcerptSelectionRequest) => selectEphemeralExcerpts(selectableRef.current, request),
+    [],
+  );
+
+  const chat = useMrOneHookChat({
+    userId: currentUser.id,
+    scope: { type: 'match', matchId: match.matchId },
+    tier,
+    resolveLocalExcerpts,
+  });
+
+  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} matchName={matchName} />;
+}
+
+/**
+ * Shared presentational body for both scopes: transcript, typing indicator, the inline excerpt
+ * review panel (shown only when the model asked for more context AND the device found some), and the
+ * composer. The review panel is the explicit consent gate — nothing is shared until the user approves.
+ */
+function MrOneHookChatBody({
+  chat,
+  wallpaper,
+  matchName,
+}: {
+  chat: ReturnType<typeof useMrOneHookChat>;
+  wallpaper: ChatWallpaper;
+  matchName?: string;
+}) {
+  const { messages, loading, mood, pendingReview, send, confirmReview, cancelReview } = chat;
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [messages, loading, pendingReview]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -1249,6 +1452,18 @@ function MrOneHookConversation({
               </div>
             ))
           )}
+
+          {/* Inline excerpt review — explicit consent before any match message leaves the device. */}
+          {pendingReview && (
+            <ExcerptReviewPanel
+              review={pendingReview}
+              matchName={matchName}
+              onConfirm={() => void confirmReview()}
+              onCancel={cancelReview}
+              disabled={loading}
+            />
+          )}
+
           {loading && (
             <div className="max-w-md">
               <div className="text-[9px] uppercase tracking-widest opacity-40 mb-1">Mr.OneHook</div>
@@ -1267,11 +1482,80 @@ function MrOneHookConversation({
         value={input}
         onChange={setInput}
         onSend={handleSend}
-        disabled={loading}
-        placeholder="Say something to Mr.OneHook…"
+        disabled={loading || pendingReview !== null}
+        placeholder={
+          pendingReview ? 'Review the excerpts above first…' : 'Say something to Mr.OneHook…'
+        }
         footerRight="OneHook AI · Always Here"
       />
     </>
+  );
+}
+
+/**
+ * The consent gate. Shows the EXACT excerpts that would be shared (speaker, time, text) and sends
+ * nothing until the user approves. Mirrors the privacy contract: the user sees precisely what leaves
+ * the device.
+ */
+function ExcerptReviewPanel({
+  review,
+  matchName,
+  onConfirm,
+  onCancel,
+  disabled,
+}: {
+  review: PendingExcerptReview;
+  matchName?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="max-w-md rounded-2xl border border-accent/40 bg-accent/5 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Sparkles className="w-4 h-4 text-accent shrink-0" />
+        <p className="text-xs font-semibold text-text">
+          Share these {review.excerpts.length} message
+          {review.excerpts.length === 1 ? '' : 's'}
+          {matchName ? ` with ${matchName}'s chat` : ''} with Mr.OneHook?
+        </p>
+      </div>
+      <p className="text-[11px] text-text-muted leading-relaxed">
+        Only the excerpts below are sent, just for this answer. They&rsquo;re never stored or logged.
+      </p>
+      <ul className="space-y-2 max-h-56 overflow-y-auto">
+        {review.excerpts.map((excerpt, i) => (
+          <li
+            key={`${excerpt.sentAt}-${i}`}
+            className="rounded-xl bg-surface border border-border/60 p-3 text-xs"
+          >
+            <div className="flex items-center justify-between mb-1 text-[9px] uppercase tracking-widest opacity-50">
+              <span>{excerpt.speaker === 'self' ? 'You' : matchName || 'Match'}</span>
+              <span>{new Date(excerpt.sentAt).toLocaleString()}</span>
+            </div>
+            <p className="text-text leading-relaxed break-words">{excerpt.text}</p>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={disabled}
+          className="flex-1 py-2 border border-border text-xs font-semibold rounded-xl hover:bg-surface-hover transition-colors text-text disabled:opacity-40 cursor-pointer"
+        >
+          Don&rsquo;t share
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={disabled}
+          className="flex-1 py-2 bg-accent text-bg text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer"
+        >
+          Share &amp; continue
+        </button>
+      </div>
+    </div>
   );
 }
 
