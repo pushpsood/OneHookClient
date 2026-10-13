@@ -27,6 +27,7 @@ import { pictureTransformStyle } from '../../utils/photo-transform';
 import { FALLBACK_PROFILE_IMAGE } from '../../utils/profile-image';
 import { useToast } from '../../components/common/Toast';
 import { HistoryRecoveryModal } from '../../components/chat/HistoryRecoveryModal';
+import { usePhotoLightbox } from '../../components/common/PhotoLightbox';
 import {
   HistoryHorizonMarker,
   HistoryLockedBanner,
@@ -173,6 +174,12 @@ export function MatchesView({
 
   const activeMatch = matches.find((m) => m.matchId === selectedMatchId) || null;
   const peerProfile = activeMatch?.peerProfile;
+  const { open: openPeerPhoto, lightbox: peerPhotoLightbox } = usePhotoLightbox({
+    photos: (peerProfile?.photos ?? []).filter((p: string) => !/\.(mp4|mov|webm|m4v)$/i.test(p)),
+    ownerName: peerProfile?.displayName || 'Your match',
+    trackContext: 'matches',
+    viewedUserId: activeMatch?.peerId ?? peerProfile?.id,
+  });
   const recipientId = activeMatch?.peerId;
 
   const handleSelectMatch = (matchId: string) => {
@@ -381,13 +388,20 @@ export function MatchesView({
                 >
                   <div className="p-6 flex-1 overflow-y-auto space-y-6 min-h-0">
                     <div className="relative">
-                      <div className="aspect-[3/4] w-full bg-border overflow-hidden grayscale grayscale-hover border border-border">
+                      <button
+                        type="button"
+                        onClick={() => peerProfile?.photos?.length && openPeerPhoto(0)}
+                        disabled={!peerProfile?.photos?.length}
+                        aria-label={`View ${peerProfile?.displayName || 'your match'}'s photos full screen`}
+                        className="block aspect-[3/4] w-full bg-border overflow-hidden grayscale grayscale-hover border border-border cursor-zoom-in disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                      >
                         <MediaImage
                           src={peerProfile?.photos?.[0] || FALLBACK_PROFILE_IMAGE}
                           alt={peerProfile?.displayName || 'Peer'}
                           className="w-full h-full object-cover"
                         />
-                      </div>
+                      </button>
+                      {peerPhotoLightbox}
                       <div className="absolute bottom-3 left-3 bg-black/80 px-2 py-1 text-[8px] font-mono text-white tracking-widest uppercase flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-status-hooked animate-pulse" />
                         <span>Hooked</span>

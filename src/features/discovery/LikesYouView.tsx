@@ -1,4 +1,5 @@
 import { useEffect, useState, type ComponentType } from 'react';
+import { usePhotoLightbox } from '../../components/common/PhotoLightbox';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
@@ -58,6 +59,17 @@ function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?
     icon: Heart,
   };
   const name = profile?.displayName || like.fromUserId;
+  // The liker's photo (counted for them) and your own liked photo (not counted: it's yours).
+  const liker = usePhotoLightbox({
+    photos: profile?.photo ? [profile.photo] : [],
+    ownerName: name,
+    trackContext: 'likes_you',
+    viewedUserId: like.fromUserId,
+  });
+  const likedOwn = usePhotoLightbox({
+    photos: like.likeTargetType === 'PHOTO' && like.likeTargetRef ? [like.likeTargetRef] : [],
+    ownerName: 'Your photo',
+  });
   const isMediaTarget =
     like.likeTargetType === 'PHOTO' || like.likeTargetType === 'VIDEO';
 
@@ -65,7 +77,13 @@ function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?
 
   return (
     <div className="flex items-center gap-3 px-4 py-3 hover:bg-surface-hover cursor-pointer transition-colors select-none">
-      <div className="w-11 h-11 shrink-0 rounded-full overflow-hidden bg-surface border border-border">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); if (profile?.photo) liker.open(0); }}
+        disabled={!profile?.photo}
+        aria-label={`View ${name}'s photo full screen`}
+        className="w-11 h-11 shrink-0 rounded-full overflow-hidden bg-surface border border-border cursor-zoom-in disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      >
         <MediaImage
           src={profile?.photo}
           alt={name}
@@ -73,7 +91,9 @@ function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?
           decoding="async"
           className="w-full h-full object-cover"
         />
-      </div>
+      </button>
+      {liker.lightbox}
+      {likedOwn.lightbox}
 
       <div className="flex-1 min-w-0">
         <p className="text-sm text-text leading-snug">
@@ -89,7 +109,14 @@ function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?
       </div>
 
       {isMediaTarget && like.likeTargetRef && (
-        <div className="shrink-0 ml-3 w-11 h-11 rounded-lg overflow-hidden border border-border">
+        <div
+          className="shrink-0 ml-3 w-11 h-11 rounded-lg overflow-hidden border border-border cursor-zoom-in"
+          onClick={(e) => { if (like.likeTargetType === 'PHOTO') { e.stopPropagation(); likedOwn.open(0); } }}
+          role={like.likeTargetType === 'PHOTO' ? 'button' : undefined}
+          tabIndex={like.likeTargetType === 'PHOTO' ? 0 : undefined}
+          onKeyDown={(e) => { if (like.likeTargetType === 'PHOTO' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); likedOwn.open(0); } }}
+          aria-label={like.likeTargetType === 'PHOTO' ? 'View your liked photo full screen' : undefined}
+        >
           <MediaImage
             src={like.likeTargetRef}
             alt="Liked media"

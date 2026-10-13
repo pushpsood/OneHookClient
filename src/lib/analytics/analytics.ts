@@ -139,6 +139,14 @@ export function trackMediaView(
   getAnalytics().track('media_view', { mediaId, mediaType, ...opts });
 }
 
+/** A photo was opened full screen (owner-facing "opened full screen" stat). */
+export function trackMediaFullscreenOpen(
+  mediaId: string,
+  opts?: { index?: number; viewedUserId?: string; context?: string }
+): void {
+  getAnalytics().track('media_fullscreen_open', { mediaId, mediaType: 'image', ...opts });
+}
+
 /** The comment-to-like composer was opened on a specific profile element. */
 export function trackLikeComposerOpen(likeTargetType?: string, likeTargetRef?: string): void {
   getAnalytics().track('like_composer_open', { likeTargetType, likeTargetRef });

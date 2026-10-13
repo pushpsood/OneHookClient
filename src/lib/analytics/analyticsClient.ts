@@ -24,6 +24,7 @@ export type SignalType =
   | 'card_swipe_ui'
   | 'prompt_view'
   | 'media_view'
+  | 'media_fullscreen_open'
   | 'section_view'
   | 'notification_opened'
   | 'session_heartbeat'

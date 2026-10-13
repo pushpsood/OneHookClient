@@ -97,3 +97,33 @@ export async function sendSignals(batch: Signal[]): Promise<void> {
 export const signalsTransport: AnalyticsTransport = {
   send: (batch) => sendSignals(batch),
 };
+
+/** Owner-facing stats for one of the caller's photos (see GET /signals/media-stats). */
+export interface PhotoStats {
+  mediaId: string;
+  /** Distinct people who viewed it (each person counts once; your own views never count). */
+  uniqueViewers: number;
+  viewersMoreThanOnce: number;
+  viewersMoreThan10: number;
+  viewersMoreThan100: number;
+  /** Distinct people who opened it full screen. */
+  fullscreenViewers: number;
+  totalViews: number;
+  totalFullscreenOpens: number;
+  updatedAt: number | null;
+}
+
+/**
+ * Stats for the CALLER's own photos. No user id is sent: the server derives the owner from the
+ * Cognito JWT, so a client can never read someone else's stats. Returns mediaId → stats.
+ */
+export async function getMyPhotoStats(): Promise<Record<string, PhotoStats>> {
+  const token = await getAuthToken();
+  const res = await fetch(resolveUrl('/signals/media-stats'), {
+    method: 'GET',
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) throw new ApiError(`media stats failed: ${res.status}`, res.status);
+  const body = (await res.json()) as { photos?: PhotoStats[] };
+  return Object.fromEntries((body.photos ?? []).map((p) => [p.mediaId, p]));
+}

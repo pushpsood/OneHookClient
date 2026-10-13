@@ -5,6 +5,7 @@ import { useMediaSrc } from '../../utils/media-url';
 import { pictureTransformStyle } from '../../utils/photo-transform';
 import { mediaLikeType, type LikeTarget } from './like-target';
 import { trackMediaView, trackSectionView, trackPromptView } from '../../lib/analytics/analytics';
+import { usePhotoLightbox } from '../../components/common/PhotoLightbox';
 
 /**
  * DiscoveryCard — the canonical profile surface, matched to the iOS app (the UI source of truth,
@@ -145,6 +146,7 @@ function PhotoBlock({
   isPreview,
   onComment,
   displayName,
+  onOpen,
 }: {
   photoKey: string;
   index: number;
@@ -153,6 +155,8 @@ function PhotoBlock({
   isPreview: boolean;
   onComment?: (t: LikeTarget) => void;
   displayName: string;
+  /** Open this photo full screen. */
+  onOpen?: (index: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const startRef = useRef<number | null>(null);
@@ -194,14 +198,22 @@ function PhotoBlock({
 
   return (
     <div ref={ref} className="relative aspect-[3/4] overflow-hidden rounded-xl border border-border bg-surface group">
-      <MediaImage
-        src={photoKey}
-        alt={displayName}
-        loading={index === 0 ? 'eager' : 'lazy'}
-        decoding="async"
-        style={pictureTransformStyle(transform)}
-        className="w-full h-full object-cover"
-      />
+      <button
+        type="button"
+        onClick={() => onOpen?.(index)}
+        disabled={!onOpen || mediaTypeOf(photoKey) !== 'image'}
+        aria-label={`View ${displayName}'s photo ${index + 1} full screen`}
+        className="block w-full h-full cursor-zoom-in disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <MediaImage
+          src={photoKey}
+          alt={displayName}
+          loading={index === 0 ? 'eager' : 'lazy'}
+          decoding="async"
+          style={pictureTransformStyle(transform)}
+          className="w-full h-full object-cover"
+        />
+      </button>
       <div className="absolute bottom-3 right-3 z-10">
         <CommentButton
           onComment={onComment}
@@ -343,6 +355,14 @@ export function DiscoveryCard({
       ? candidate.pictures
       : [];
   const displayName = candidate.displayName || candidate.name || 'Anonymous';
+  // Full screen shows still photos only (videos play inline).
+  const fullscreenPhotos = photos.filter((p: string) => mediaTypeOf(p) === 'image');
+  const { open: openPhoto, lightbox } = usePhotoLightbox({
+    photos: fullscreenPhotos,
+    ownerName: displayName,
+    trackContext: 'discovery',
+    viewedUserId: candidate.id,
+  });
   const age = candidate.age ? Number(candidate.age) : null;
   const location =
     typeof candidate.location === 'string'
@@ -559,6 +579,7 @@ export function DiscoveryCard({
         isPreview={isPreview}
         onComment={onComment}
         displayName={displayName}
+        onOpen={isPreview ? undefined : (i) => openPhoto(fullscreenPhotos.indexOf(photos[i]))}
       />
     ) : null;
   const promptNode = () => {
@@ -681,6 +702,7 @@ export function DiscoveryCard({
           </div>
         ) : null}
       </div>
+      {lightbox}
     </article>
   );
 }

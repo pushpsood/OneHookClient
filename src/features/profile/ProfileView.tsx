@@ -35,6 +35,8 @@ import { ProfilePreviewModal } from '../../components/profile/ProfilePreviewModa
 import { ProfilePreviewHoverCard } from '../../components/profile/ProfilePreviewHoverCard';
 import { AppearanceCard } from '../../components/profile/AppearanceCard';
 import type { DiscoveryProfileData } from '../discovery/DiscoveryCard';
+import { PhotoStatsBadge, useMyPhotoStats } from '../../components/profile/PhotoStatsBadge';
+import { usePhotoLightbox } from '../../components/common/PhotoLightbox';
 
 
 const LivenessVerification = lazy(() =>
@@ -185,6 +187,10 @@ export function ProfileView({
   const { prefs, save: savePreferences, saving } = usePreferences(user.id);
   const fieldStatus = user.fieldModerationStatus || {};
 
+  // Owner-only photo stats (identity from the JWT server-side) + full-screen viewer for own photos.
+  // No trackContext: the owner's own full-screen opens are not counted.
+  const photoStats = useMyPhotoStats(user.pictures);
+
   // Keep the local photo grid in sync with the authoritative store
   useEffect(() => {
     const next =
@@ -208,6 +214,15 @@ export function ProfileView({
       ? user.photos
       : []
   );
+  const ownStillPhotos = photos.filter((p) => !/\.(mp4|mov|webm|m4v)$/i.test(p));
+  const { open: openOwnPhotoAt, lightbox: ownPhotoLightbox } = usePhotoLightbox({
+    photos: ownStillPhotos,
+    ownerName: user.displayName || user.name || 'Your profile',
+  });
+  const openOwnPhoto = (gridIndex: number) => {
+    const i = ownStillPhotos.indexOf(photos[gridIndex]);
+    if (i >= 0) openOwnPhotoAt(i);
+  };
 
   const [audioPromptKey, setAudioPromptKey] = useState<string>(user.audioPrompt || '');
   // Resolve the private audio-prompt object key to a presigned URL for playback.
@@ -766,6 +781,7 @@ export function ProfileView({
       animate={{ opacity: 1, y: 0 }}
       className="max-w-4xl mx-auto space-y-12 pb-24"
     >
+      {ownPhotoLightbox}
       <input
         type="file"
         ref={fileInputRef}
@@ -906,12 +922,20 @@ export function ProfileView({
                 key={index}
                 className="relative aspect-square overflow-hidden bg-surface group"
               >
-                <MediaImage
-                  src={photo}
-                  style={pictureTransformStyle(user.pictureTransforms?.[photo])}
-                  alt={`Photo ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
+                <button
+                  type="button"
+                  onClick={() => openOwnPhoto(index)}
+                  aria-label={`View photo ${index + 1} full screen`}
+                  className="block w-full h-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                >
+                  <MediaImage
+                    src={photo}
+                    style={pictureTransformStyle(user.pictureTransforms?.[photo])}
+                    alt={`Photo ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+                <PhotoStatsBadge stats={photoStats[photo]} />
                 <ModerationBadge
                   status={fieldStatus[photo]}
                   className="absolute top-2 left-2 z-10 shadow"

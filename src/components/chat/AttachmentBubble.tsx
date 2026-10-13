@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePhotoLightbox } from '../common/PhotoLightbox';
 import {
   AlertTriangle,
   Download,
@@ -333,10 +334,27 @@ function ImageAttachment({
       <DownloadProgress progress={progress} label={`Loading image ${label}`} />
     );
   }
+  return <ChatImageFullscreen url={url} label={label} />;
+}
+
+/**
+ * Decrypted chat image with an in-app full-screen viewer (previously a new browser tab). Local only:
+ * chat media is E2EE, so nothing about it is ever sent to analytics (no trackContext).
+ */
+function ChatImageFullscreen({ url, label }: { url: string; label: string }) {
+  const { open, lightbox } = usePhotoLightbox({ photos: [url], ownerName: label });
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="block">
-      <img src={url} alt={label} className="max-w-[16rem] max-h-80 rounded object-contain" />
-    </a>
+    <>
+      <button
+        type="button"
+        onClick={() => open(0)}
+        aria-label={`View ${label} full screen`}
+        className="block cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent rounded"
+      >
+        <img src={url} alt={label} className="max-w-[16rem] max-h-80 rounded object-contain" />
+      </button>
+      {lightbox}
+    </>
   );
 }
 
