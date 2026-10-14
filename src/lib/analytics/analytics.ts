@@ -105,9 +105,13 @@ export function trackScreenView(screen: string): void {
   getAnalytics().track('screen_view', { screen });
 }
 
-/** A discovery card was shown to the user. */
-export function trackCardImpression(candidateId: string, index: number): void {
-  getAnalytics().track('card_impression', { candidateId, index });
+/** A discovery card was shown to the user. `dwellMs` (time on screen) enables GCP dwell velocity. */
+export function trackCardImpression(candidateId: string, index: number, dwellMs?: number): void {
+  getAnalytics().track('card_impression', {
+    candidateId,
+    index,
+    ...(dwellMs !== undefined && dwellMs > 0 ? { dwellMs: Math.round(dwellMs) } : {}),
+  });
 }
 
 /** A discovery card swipe/decision UI action (`left` = pass, `right` = like, `up` = super). */

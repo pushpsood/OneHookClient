@@ -4,7 +4,7 @@
  * Mr.OneHook is NOT a person and has no match record: this transcript is local-only (React state +
  * per-user/per-scope localStorage) and must never be surfaced as a match. The only network call is
  * the authenticated member endpoint `POST ${chatbotUrl}/api/member/product-connection-chat`, sent
- * with the Amplify Cognito ACCESS token as a Bearer credential.
+ * with the Amplify Cognito ID token as a Bearer credential.
  *
  * A conversation has one scope: product-only (no matchId) or exactly one authorized match. Match
  * scope can ground answers in locally-decrypted history, but ONLY after the model asks for more
@@ -20,8 +20,10 @@ import { chatbotUrl } from '../utils/env.config';
 import { SubscriptionTier } from '../types';
 import {
   buildMemberChatRequestBody,
+  classifyMemberChatAvailability,
   isSessionErrorCode,
   MEMBER_CHAT_PATH,
+  type MemberChatAvailability,
   parseMemberChatResponse,
   type MemberChatResponse,
   type MemberSessionMetadata,
@@ -37,6 +39,32 @@ const SERVER_ERROR_COPY =
   'Sorry — I got a little overwhelmed there. Give me a moment and try again.';
 const NETWORK_ERROR_COPY =
   "Hmm, I can't connect right now. Check your connection and try again in a moment.";
+// Terminal availability copy — shown once, not retryable, and used to gate the entry point.
+const NOT_ENTITLED_COPY =
+  'Mr.OneHook isn’t available on your account yet. It’s rolling out gradually — check back soon.';
+const NOT_AUTHENTICATED_COPY =
+  'Please sign in again to chat with Mr.OneHook.';
+const NOT_CONFIGURED_COPY =
+  'Mr.OneHook is temporarily unavailable. Please try again later.';
+
+function availabilityCopy(outcome: Exclude<MemberChatAvailability, 'AVAILABLE'>): string {
+  switch (outcome) {
+    case 'NOT_ENTITLED':
+      return NOT_ENTITLED_COPY;
+    case 'NOT_AUTHENTICATED':
+      return NOT_AUTHENTICATED_COPY;
+    case 'NOT_CONFIGURED':
+      return NOT_CONFIGURED_COPY;
+  }
+}
+
+/** A terminal (non-retryable) member-chat failure carrying its classified availability outcome. */
+class MemberChatTerminalError extends Error {
+  constructor(readonly outcome: Exclude<MemberChatAvailability, 'AVAILABLE'>) {
+    super(outcome);
+    this.name = 'MemberChatTerminalError';
+  }
+}
 
 /** Product-only scope, or a single authorized match. */
 export type MrOneHookScope = { type: 'product' } | { type: 'match'; matchId: string };
@@ -74,6 +102,12 @@ export interface UseMrOneHookChat {
   mood: MrOneHookMood;
   session: MemberSessionMetadata | null;
   pendingReview: PendingExcerptReview | null;
+  /**
+   * Terminal availability of Mr.OneHook for this member. 'AVAILABLE' until the backend reports a
+   * non-retryable auth/permission/config outcome; the UI should hide or disable the entry point and
+   * stop accepting input once this is anything else.
+   */
+  availability: MemberChatAvailability;
   send: (text: string) => Promise<void>;
   confirmReview: () => Promise<void>;
   cancelReview: () => void;
@@ -136,12 +170,16 @@ function persistSessionId(userId: string, scope: MrOneHookScope, sessionId: stri
   }
 }
 
-/** Reads the Cognito ACCESS token (not the id token) from the current Amplify session. */
-async function fetchAccessToken(): Promise<string | null> {
+/**
+ * Reads the Cognito ID token from the current Amplify session. The member route verifies the ID
+ * token (it checks `aud` and reads the member's roles/tier from claims the ACCESS token does not
+ * carry), so the ID token — not the access token — is the correct bearer here.
+ */
+async function fetchIdToken(): Promise<string | null> {
   try {
     const { fetchAuthSession } = await import('aws-amplify/auth');
     const session = await fetchAuthSession();
-    return session.tokens?.accessToken?.toString() || null;
+    return session.tokens?.idToken?.toString() || null;
   } catch {
     return null;
   }
@@ -165,6 +203,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   const [mood, setMood] = useState<MrOneHookMood>('Happy');
   const [session, setSession] = useState<MemberSessionMetadata | null>(null);
   const [pendingReview, setPendingReview] = useState<PendingExcerptReview | null>(null);
+  const [availability, setAvailability] = useState<MemberChatAvailability>('AVAILABLE');
 
   const sessionIdRef = useRef<string | undefined>(loadSessionId(userId, scope));
   const resolveRef = useRef<LocalExcerptResolver | undefined>(resolveLocalExcerpts);
@@ -178,6 +217,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     setPendingReview(null);
     setHasError(false);
     setMood('Happy');
+    setAvailability('AVAILABLE');
     // scope is reconstructed each render; key is its stable identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, key]);
@@ -194,6 +234,27 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   }, []);
 
   /**
+   * Routes a thrown error to the right surface: a terminal availability outcome latches
+   * `availability` (so the entry point is gated) and shows its one-time copy; everything else is a
+   * transient, retryable error bubble.
+   */
+  const handleFailure = useCallback(
+    (err: unknown) => {
+      if (err instanceof MemberChatTerminalError) {
+        setAvailability(err.outcome);
+        pushError(availabilityCopy(err.outcome));
+        return;
+      }
+      pushError(
+        err instanceof Error && err.message === 'NOT_AUTHENTICATED'
+          ? NETWORK_ERROR_COPY
+          : SERVER_ERROR_COPY,
+      );
+    },
+    [pushError],
+  );
+
+  /**
    * Posts one member request, transparently retrying WITHOUT a session when the server reports a
    * session-level denial (tier not eligible, limit reached, unknown/expired session, storage off).
    */
@@ -205,7 +266,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       userConfirmed?: boolean;
       contextRequestId?: string;
     }): Promise<MemberChatResponse> => {
-      const token = await fetchAccessToken();
+      const token = await fetchIdToken();
       if (!token) throw new Error('NOT_AUTHENTICATED');
 
       const attempt = async (useSession: boolean): Promise<Response> => {
@@ -241,7 +302,15 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         }
       }
 
-      if (!response.ok) throw new Error('SERVER_ERROR');
+      if (!response.ok) {
+        // Distinguish a terminal auth/permission/config outcome (not retryable, gates the entry)
+        // from a transient server error (retryable bubble). The structured `error` code is the
+        // tie-breaker over the HTTP status.
+        const errorBody = (await response.clone().json().catch(() => ({}))) as { error?: unknown };
+        const outcome = classifyMemberChatAvailability(response.status, errorBody.error);
+        if (outcome) throw new MemberChatTerminalError(outcome);
+        throw new Error('SERVER_ERROR');
+      }
       return parseMemberChatResponse(await response.json());
     },
     // scope captured via key + matchId; persistAllowed derived from tier.
@@ -302,6 +371,8 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || loading || pendingReview) return;
+      // Terminal availability (not entitled / signed out / not configured) — stop accepting input.
+      if (availability !== 'AVAILABLE') return;
 
       const userMessage: MrOneHookMessage = { role: 'user', content: trimmed };
       setMessages((prev) => [...prev.filter((m) => !m.isError), userMessage]);
@@ -314,12 +385,12 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         const result = await postOnce({ message: trimmed });
         handleResult(result, trimmed);
       } catch (err) {
-        pushError(err instanceof Error && err.message === 'NOT_AUTHENTICATED' ? NETWORK_ERROR_COPY : SERVER_ERROR_COPY);
+        handleFailure(err);
       } finally {
         setLoading(false);
       }
     },
-    [loading, pendingReview, postOnce, handleResult, pushError],
+    [loading, pendingReview, availability, postOnce, handleResult, handleFailure],
   );
 
   const confirmReview = useCallback(async () => {
@@ -340,11 +411,11 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       });
       handleResult(result, review.message);
     } catch (err) {
-      pushError(err instanceof Error && err.message === 'NOT_AUTHENTICATED' ? NETWORK_ERROR_COPY : SERVER_ERROR_COPY);
+      handleFailure(err);
     } finally {
       setLoading(false);
     }
-  }, [pendingReview, loading, postOnce, handleResult, pushError]);
+  }, [pendingReview, loading, postOnce, handleResult, handleFailure]);
 
   const cancelReview = useCallback(() => {
     setPendingReview(null);
@@ -369,6 +440,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     mood,
     session,
     pendingReview,
+    availability,
     send,
     confirmReview,
     cancelReview,

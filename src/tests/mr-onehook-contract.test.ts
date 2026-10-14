@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildMemberChatRequestBody,
+  classifyMemberChatAvailability,
   isSessionErrorCode,
   MEMBER_CHAT_PATH,
   parseMemberChatResponse,
@@ -24,6 +25,37 @@ describe('endpoint paths', () => {
   it('match the OneHook UX Enhancement backend routes', () => {
     expect(PUBLIC_PRODUCT_CHAT_PATH).toBe('/api/public/product-chat');
     expect(MEMBER_CHAT_PATH).toBe('/api/member/product-connection-chat');
+  });
+});
+
+describe('classifyMemberChatAvailability — entitlement/auth gating', () => {
+  it('classifies 403 INSUFFICIENT_PERMISSION as NOT_ENTITLED', () => {
+    expect(classifyMemberChatAvailability(403, 'INSUFFICIENT_PERMISSION')).toBe('NOT_ENTITLED');
+    // Status alone is enough even if the code is absent/changed.
+    expect(classifyMemberChatAvailability(403, undefined)).toBe('NOT_ENTITLED');
+  });
+
+  it('classifies 401 auth codes as NOT_AUTHENTICATED', () => {
+    expect(classifyMemberChatAvailability(401, 'AUTH_REQUIRED')).toBe('NOT_AUTHENTICATED');
+    expect(classifyMemberChatAvailability(401, 'INVALID_ACCESS_TOKEN')).toBe('NOT_AUTHENTICATED');
+  });
+
+  it('classifies 404/503 config outcomes as NOT_CONFIGURED', () => {
+    expect(classifyMemberChatAvailability(404, 'ENDPOINT_NOT_FOUND')).toBe('NOT_CONFIGURED');
+    expect(classifyMemberChatAvailability(503, 'CONTEXT_NOT_CONFIGURED')).toBe('NOT_CONFIGURED');
+  });
+
+  it('returns undefined for transient/server errors (retryable, not terminal)', () => {
+    expect(classifyMemberChatAvailability(500, undefined)).toBeUndefined();
+    expect(classifyMemberChatAvailability(429, 'RATE_LIMITED')).toBeUndefined();
+    // A plain 503 with a session-storage code is transient (handled by session retry), NOT a terminal
+    // availability outcome — only the explicit CONTEXT_NOT_CONFIGURED code maps a 503 to NOT_CONFIGURED.
+    expect(
+      classifyMemberChatAvailability(503, 'CHAT_SESSION_STORAGE_TEMPORARILY_UNAVAILABLE'),
+    ).toBeUndefined();
+    // A recognised-but-unrelated 403 (a per-request validation failure) must NOT gate the feature.
+    expect(classifyMemberChatAvailability(403, 'MESSAGE_CONTEXT_NOT_ALLOWED')).toBeUndefined();
+    expect(classifyMemberChatAvailability(403, 'CHAT_SESSION_NOT_INCLUDED_IN_TIER')).toBeUndefined();
   });
 });
 

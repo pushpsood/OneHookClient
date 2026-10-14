@@ -287,3 +287,58 @@ export const SESSION_ERROR_CODES: ReadonlySet<string> = new Set([
 export function isSessionErrorCode(code: unknown): boolean {
   return typeof code === 'string' && SESSION_ERROR_CODES.has(code);
 }
+
+/**
+ * Why a member request was refused in a way the UI must treat as terminal (not a transient "try
+ * again"). These map to the backend auth/permission gate on `POST .../product-connection-chat`:
+ *
+ *   • NOT_ENTITLED      — HTTP 403 `INSUFFICIENT_PERMISSION`: the signed-in member is not entitled to
+ *                         Mr.OneHook (not in the `mr-onehook` group / lacks the `context.chat`
+ *                         permission). Retrying will not help; the entry point should be hidden or
+ *                         disabled and a clear "not available for your account" message shown.
+ *   • NOT_AUTHENTICATED — HTTP 401 `AUTH_REQUIRED` / `INVALID_ACCESS_TOKEN`: the session is missing or
+ *                         expired; prompt the user to sign in again.
+ *   • NOT_CONFIGURED    — HTTP 404 `ENDPOINT_NOT_FOUND` / 503 `CONTEXT_NOT_CONFIGURED`: the feature is
+ *                         not enabled in this environment. Treat as unavailable, not as a user error.
+ */
+export type MemberChatAvailability =
+  | 'AVAILABLE'
+  | 'NOT_ENTITLED'
+  | 'NOT_AUTHENTICATED'
+  | 'NOT_CONFIGURED';
+
+const NOT_ENTITLED_CODES: ReadonlySet<string> = new Set(['INSUFFICIENT_PERMISSION']);
+const NOT_AUTHENTICATED_CODES: ReadonlySet<string> = new Set([
+  'AUTH_REQUIRED',
+  'INVALID_ACCESS_TOKEN',
+]);
+const NOT_CONFIGURED_CODES: ReadonlySet<string> = new Set([
+  'ENDPOINT_NOT_FOUND',
+  'CONTEXT_NOT_CONFIGURED',
+]);
+
+/**
+ * Classifies a failed member-chat HTTP response into a terminal availability outcome, or returns
+ * undefined when the failure is NOT one of these (i.e. a transient/server error, OR a
+ * recognised-but-unrelated per-request error such as a validation/session code the caller handles
+ * elsewhere). The structured `error` code is authoritative; the HTTP status is only a fallback when
+ * no recognised code is present, so a bare 403 is treated as not-entitled only when the server sent
+ * no code at all.
+ */
+export function classifyMemberChatAvailability(
+  status: number,
+  errorCode: unknown,
+): Exclude<MemberChatAvailability, 'AVAILABLE'> | undefined {
+  const code = typeof errorCode === 'string' ? errorCode : '';
+  if (code) {
+    if (NOT_ENTITLED_CODES.has(code)) return 'NOT_ENTITLED';
+    if (NOT_AUTHENTICATED_CODES.has(code)) return 'NOT_AUTHENTICATED';
+    if (NOT_CONFIGURED_CODES.has(code)) return 'NOT_CONFIGURED';
+    // A recognised-but-unrelated code (session/validation) is not a feature-availability outcome.
+    return undefined;
+  }
+  if (status === 403) return 'NOT_ENTITLED';
+  if (status === 401) return 'NOT_AUTHENTICATED';
+  if (status === 404) return 'NOT_CONFIGURED';
+  return undefined;
+}

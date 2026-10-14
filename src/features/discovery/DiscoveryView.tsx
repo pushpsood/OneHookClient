@@ -71,9 +71,15 @@ export function DiscoveryView({
     };
   }, []);
 
-  // Impression for the currently shown profile.
+  // Impression for the currently shown profile, emitted with its dwell (time on screen) when the
+  // card is replaced or the view unmounts — this `durationMs` drives GCP's dwell-velocity scoring.
   useEffect(() => {
-    if (currentCandidate) trackCardImpression(currentCandidate.id, 0);
+    if (!currentCandidate) return;
+    const id = currentCandidate.id;
+    const shownAt = Date.now();
+    return () => {
+      trackCardImpression(id, 0, Date.now() - shownAt);
+    };
   }, [currentCandidate?.id]);
 
   const nameOf = (c: DiscoveryCandidate) =>

@@ -1401,9 +1401,12 @@ function MrOneHookChatBody({
   wallpaper: ChatWallpaper;
   matchName?: string;
 }) {
-  const { messages, loading, mood, pendingReview, send, confirmReview, cancelReview } = chat;
+  const { messages, loading, mood, pendingReview, availability, send, confirmReview, cancelReview } = chat;
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+  // Terminal availability (not entitled / signed out / not configured): block input entirely. The
+  // reason is already surfaced as an assistant bubble by the hook, so the composer just locks.
+  const unavailable = availability !== 'AVAILABLE';
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1482,9 +1485,17 @@ function MrOneHookChatBody({
         value={input}
         onChange={setInput}
         onSend={handleSend}
-        disabled={loading || pendingReview !== null}
+        disabled={loading || pendingReview !== null || unavailable}
         placeholder={
-          pendingReview ? 'Review the excerpts above first…' : 'Say something to Mr.OneHook…'
+          unavailable
+            ? availability === 'NOT_ENTITLED'
+              ? 'Mr.OneHook isn’t available on your account yet.'
+              : availability === 'NOT_AUTHENTICATED'
+                ? 'Sign in again to chat with Mr.OneHook.'
+                : 'Mr.OneHook is temporarily unavailable.'
+            : pendingReview
+              ? 'Review the excerpts above first…'
+              : 'Say something to Mr.OneHook…'
         }
         footerRight="OneHook AI · Always Here"
       />
