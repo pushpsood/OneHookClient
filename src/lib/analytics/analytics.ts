@@ -20,6 +20,24 @@ import {
 } from './analyticsClient';
 import { signalsTransport } from '../../api/analytics';
 import { config } from '../../utils/env.config';
+import {
+  Screen,
+  type CardVariant,
+  type HookedStateAction,
+  type LikeTargetType,
+  type MediaType,
+  type NotificationChannel,
+  type NotificationType,
+  type ProfileSection,
+  type SafetyAction,
+  type SwipeDirection,
+  type UiElementId,
+  type ViewableScreen,
+} from './generated/telemetryCatalog';
+import { installUiTracking, resolveUiInteraction, type UiTrackOptions } from './uiTracking';
+
+export * from './generated/telemetryCatalog';
+export { trackProps, type UiTrackOptions } from './uiTracking';
 
 const CONSENT_STORAGE_KEY = 'onehook.analytics.consent';
 const SESSION_HEARTBEAT_MS = 60_000;
@@ -63,6 +81,7 @@ export function setAnalyticsConsent(consented: boolean): void {
 
 let instance: AnalyticsClient | null = null;
 let heartbeat: ReturnType<typeof setInterval> | undefined;
+let uninstallUiTracking: (() => void) | undefined;
 
 /** The shared client, constructed lazily and gated by {@link isAnalyticsConsented}. */
 export function getAnalytics(): AnalyticsClient {
@@ -87,6 +106,8 @@ export function startAnalytics(): void {
     heartbeat = setInterval(() => client.track('session_heartbeat'), SESSION_HEARTBEAT_MS);
     (heartbeat as unknown as { unref?: () => void }).unref?.();
   }
+  // One delegated listener emits ui_interaction for every element carrying trackProps(...).
+  uninstallUiTracking ??= installUiTracking((i) => client.track('ui_interaction', { ...i }));
 }
 
 /** Stop heartbeats and flush a final batch. Call on logout / app teardown. */
@@ -95,14 +116,62 @@ export async function stopAnalytics(): Promise<void> {
     clearInterval(heartbeat);
     heartbeat = undefined;
   }
+  uninstallUiTracking?.();
+  uninstallUiTracking = undefined;
   await instance?.stop();
 }
 
 // ── Typed convenience helpers (the call sites the app uses) ──────────────────────
 
-/** A screen/tab was shown. `screen` is a stable, non-PII identifier (e.g. "DISCOVERY"). */
-export function trackScreenView(screen: string): void {
+/** A screen was shown. Only catalog screens are accepted (same ids on iOS / Android). */
+export function trackScreenView(screen: ViewableScreen): void {
   getAnalytics().track('screen_view', { screen });
+}
+
+/** Main-shell tab (web routing state) -> canonical catalog screen. */
+export const APP_TAB_SCREEN = {
+  DISCOVERY: Screen.DISCOVER,
+  MATCHES: Screen.CHAT,
+  LIKES: Screen.LIKES_YOU,
+  PROFILE: Screen.PROFILE,
+  SETTINGS: Screen.SETTINGS,
+} as const satisfies Record<string, ViewableScreen>;
+
+/** Signed-out routes mapped to their catalog screen (for SHARED-element `context`). */
+const PATH_HOST_SCREEN: Record<string, ViewableScreen> = {
+  '/': Screen.LANDING,
+  '/login': Screen.LOGIN,
+  '/redeem': Screen.REDEEM_INVITE,
+  '/privacy': Screen.LANDING,
+  '/terms': Screen.LANDING,
+  '/pricing': Screen.LANDING,
+  '/contact': Screen.LANDING,
+  '/careers': Screen.LANDING,
+  '/science': Screen.LANDING,
+  '/auth/setup': Screen.LOGIN,
+  '/onboarding': Screen.ONBOARDING,
+};
+
+/**
+ * Best-effort host screen for globally-mounted SHARED components (toasts, the crash boundary) that
+ * have no router context. Precise hosts (phone field in login, voice recorder in onboarding) should
+ * pass their known `context` explicitly instead. An unknown value is dropped server-side.
+ */
+export function hostScreen(): ViewableScreen {
+  if (typeof window === 'undefined') return Screen.LANDING;
+  const path = window.location.pathname;
+  if (PATH_HOST_SCREEN[path]) return PATH_HOST_SCREEN[path];
+  return path.startsWith('/app') ? Screen.DISCOVER : Screen.LANDING;
+}
+
+/**
+ * A registered UI element was interacted with — the standard way to track any click/tap. Prefer the
+ * declarative `trackProps(...)` on DOM elements; use this for non-click handlers. Invalid uses
+ * (wrong action / missing or unknown value) are dropped with a dev warning.
+ */
+export function trackUi(elementId: UiElementId, opts?: UiTrackOptions): void {
+  const interaction = resolveUiInteraction(elementId, opts);
+  if (interaction) getAnalytics().track('ui_interaction', { ...interaction });
 }
 
 /** A discovery card was shown to the user. `dwellMs` (time on screen) enables GCP dwell velocity. */
@@ -115,14 +184,14 @@ export function trackCardImpression(candidateId: string, index: number, dwellMs?
 }
 
 /** A discovery card swipe/decision UI action (`left` = pass, `right` = like, `up` = super). */
-export function trackCardSwipe(direction: 'left' | 'right' | 'up', candidateId?: string): void {
+export function trackCardSwipe(direction: SwipeDirection, candidateId?: string): void {
   getAnalytics().track('card_swipe_ui', { direction, candidateId });
 }
 
 /** A profile section (photos/prompts/bio/interests/voice) was viewed. `dwellMs` optional. */
 export function trackSectionView(
-  sectionId: string,
-  opts?: { viewedUserId?: string; dwellMs?: number; context?: string; cardVariant?: string }
+  sectionId: ProfileSection,
+  opts?: { viewedUserId?: string; dwellMs?: number; context?: ViewableScreen; cardVariant?: CardVariant }
 ): void {
   getAnalytics().track('section_view', { sectionId, ...opts });
 }
@@ -130,13 +199,13 @@ export function trackSectionView(
 /** A photo/video/voice element was viewed (attraction-depth signal). */
 export function trackMediaView(
   mediaId: string,
-  mediaType: 'image' | 'video' | 'voice',
+  mediaType: MediaType,
   opts?: {
     dwellMs?: number;
     index?: number;
     viewedUserId?: string;
-    context?: string;
-    cardVariant?: string;
+    context?: ViewableScreen;
+    cardVariant?: CardVariant;
     playedToCompletion?: boolean;
   }
 ): void {
@@ -146,19 +215,19 @@ export function trackMediaView(
 /** A photo was opened full screen (owner-facing "opened full screen" stat). */
 export function trackMediaFullscreenOpen(
   mediaId: string,
-  opts?: { index?: number; viewedUserId?: string; context?: string }
+  opts?: { index?: number; viewedUserId?: string; context?: ViewableScreen }
 ): void {
   getAnalytics().track('media_fullscreen_open', { mediaId, mediaType: 'image', ...opts });
 }
 
 /** The comment-to-like composer was opened on a specific profile element. */
-export function trackLikeComposerOpen(likeTargetType?: string, likeTargetRef?: string): void {
+export function trackLikeComposerOpen(likeTargetType?: LikeTargetType, likeTargetRef?: string): void {
   getAnalytics().track('like_composer_open', { likeTargetType, likeTargetRef });
 }
 
 /** The composer was closed WITHOUT sending — intent-without-follow-through (hesitation) signal. */
 export function trackLikeCommentAbandoned(
-  likeTargetType: string | undefined,
+  likeTargetType: LikeTargetType | undefined,
   composeDurationMs: number,
   hadDraft: boolean
 ): void {
@@ -173,14 +242,14 @@ export function track(type: SignalType, attributes?: Record<string, unknown>): v
 // ── Tier 2: conversation-centric + engagement signals ────────────────────────
 
 /** A specific prompt was viewed (conversation-seed signal). */
-export function trackPromptView(promptId: string, opts?: { viewedUserId?: string; cardVariant?: string }): void {
+export function trackPromptView(promptId: string, opts?: { viewedUserId?: string; cardVariant?: CardVariant }): void {
   getAnalytics().track('prompt_view', { promptId, ...opts });
 }
 
 /** A push/in-app notification was opened (re-engagement). `notifType` e.g. new_match|new_message|new_like. */
 export function trackNotificationOpened(
-  notifType: string,
-  opts?: { matchId?: string; openLatencyMs?: number; channel?: 'push' | 'in_app' }
+  notifType: NotificationType,
+  opts?: { matchId?: string; openLatencyMs?: number; channel?: NotificationChannel }
 ): void {
   getAnalytics().track('notification_opened', { notifType, ...opts });
 }
@@ -199,14 +268,14 @@ export function trackComposeAbandoned(matchId: string, composeDurationMs: number
 }
 
 /** A candidate's/match's profile was re-opened (sustained-interest signal). */
-export function trackProfileRevisit(viewedUserId: string, context?: string): void {
+export function trackProfileRevisit(viewedUserId: string, context?: ViewableScreen): void {
   getAnalytics().track('profile_revisit', { viewedUserId, context });
 }
 
 // ── Tier 3: differentiator / engagement / safety signals ─────────────────────
 
 /** Reaction to the "one connection at a time" exclusivity overlay. `action` e.g. shown|go_to_chat|dismiss. */
-export function trackHookedStateView(action?: string): void {
+export function trackHookedStateView(action?: HookedStateAction): void {
   getAnalytics().track('hooked_state_view', { action });
 }
 
@@ -216,7 +285,7 @@ export function trackLikesYouView(opts?: { count?: number; index?: number }): vo
 }
 
 /** Unmatch/block/report UI was opened (intent; the action itself is server-authoritative). */
-export function trackSafetyUiOpen(action: 'unmatch' | 'block' | 'report', abandoned?: boolean): void {
+export function trackSafetyUiOpen(action: SafetyAction, abandoned?: boolean): void {
   getAnalytics().track('safety_ui_open', { action, abandoned });
 }
 

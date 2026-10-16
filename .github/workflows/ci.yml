@@ -32,6 +32,10 @@ jobs:
         working-directory: OneHookClient
         run: npm run lint
 
+      - name: Telemetry contract (every interaction reported, backend-controlled ids) - HARD GATE
+        working-directory: OneHookClient
+        run: npm run telemetry:contract
+
       - name: Test
         working-directory: OneHookClient
         run: npm test
