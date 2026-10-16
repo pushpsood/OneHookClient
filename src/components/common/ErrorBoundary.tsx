@@ -1,5 +1,6 @@
 import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { UiElement, trackProps, hostScreen } from '../../lib/analytics/analytics';
 
 interface Props {
   children: ReactNode;
@@ -107,12 +108,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
             <div className="flex gap-4">
               <button
                 onClick={this.handleReset}
+                {...trackProps(UiElement.SHARED_ERROR_RECOVER, { value: 'retry', context: hostScreen() })}
                 className="flex-1 py-4 border border-border text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-bg transition-colors"
               >
                 Try Again
               </button>
               <button
                 onClick={this.handleGoHome}
+                {...trackProps(UiElement.SHARED_ERROR_RECOVER, { value: 'home', context: hostScreen() })}
                 className="flex-1 py-4 bg-accent text-white text-[10px] font-bold uppercase tracking-[0.3em] hover:opacity-90 transition-opacity"
               >
                 Back to Home

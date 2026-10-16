@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { KeyRound, X } from 'lucide-react';
 import { ChatEncryptionManager } from '../../lib/chat-encryption';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * Dismissible nudge to add a second passkey.
@@ -93,6 +94,7 @@ export function SecondPasskeyNudge({ userId }: { userId?: string }) {
         <button
           onClick={dismiss}
           aria-label="Dismiss"
+          {...trackProps(UiElement.SETTINGS_PASSKEY_ADD, { action: 'dismiss' })}
           className="p-1 opacity-40 hover:opacity-100 transition-opacity shrink-0"
         >
           <X className="w-4 h-4" />
@@ -105,12 +107,14 @@ export function SecondPasskeyNudge({ userId }: { userId?: string }) {
         <button
           onClick={() => void addPasskey()}
           disabled={busy}
+          {...trackProps(UiElement.SETTINGS_PASSKEY_ADD)}
           className="py-3 px-6 bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black hover:opacity-90 disabled:opacity-50 transition-opacity"
         >
           Add a passkey
         </button>
         <button
           onClick={dismiss}
+          {...trackProps(UiElement.SETTINGS_PASSKEY_ADD, { action: 'dismiss' })}
           className="py-3 px-6 border border-border text-text hover:bg-surface-hover text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent transition-colors"
         >
           Not now

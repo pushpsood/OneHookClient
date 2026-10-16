@@ -1,4 +1,5 @@
 import { Lock } from 'lucide-react';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * The two pieces of UI that stand in for messages this device cannot decrypt.
@@ -37,6 +38,7 @@ export function LockedMessageNotice({
       </div>
       <button
         onClick={onRestore}
+        {...trackProps(UiElement.CHAT_HISTORY_RECOVER)}
         className={`text-[10px] uppercase tracking-[0.2em] font-black underline hover:opacity-70 transition-opacity ${
           inverted ? 'text-white' : 'text-accent'
         }`}
@@ -89,6 +91,7 @@ export function HistoryLockedBanner({ onRestore }: { onRestore: () => void }) {
       </div>
       <button
         onClick={onRestore}
+        {...trackProps(UiElement.CHAT_HISTORY_RECOVER)}
         className="shrink-0 py-2 px-4 bg-amber-600 text-white text-[10px] uppercase tracking-[0.2em] font-black hover:opacity-90 transition-opacity"
       >
         Restore

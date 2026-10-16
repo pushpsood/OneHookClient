@@ -5,6 +5,7 @@ import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
 import { HistoryRecoveryModal } from '../chat/HistoryRecoveryModal';
 import { SecondPasskeyNudge } from './SecondPasskeyNudge';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * Shows the devices registered for end-to-end encrypted chat (wire v2), the account-history key
@@ -121,6 +122,7 @@ export function DeviceManagementCard() {
             // unreadable history actually loads.
             <button
               onClick={() => setRecoveryOpen(true)}
+              {...trackProps(UiElement.SETTINGS_RECOVERY_SETUP)}
               className="mt-1 py-2 px-4 border border-border text-text hover:bg-surface-hover text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
             >
               <History className="w-3 h-3" aria-hidden="true" />
@@ -178,6 +180,7 @@ export function DeviceManagementCard() {
                   <button
                     onClick={() => handleRevoke(device.deviceId)}
                     disabled={revoking === device.deviceId}
+                    {...trackProps(UiElement.SETTINGS_DEVICE_REVOKE, { targetId: device.deviceId })}
                     className="py-2 px-4 border border-border text-text hover:bg-surface-hover text-[10px] uppercase tracking-[0.2em] font-bold hover:border-red-500 hover:text-red-500 transition-colors disabled:opacity-50 inline-flex items-center gap-2 shrink-0"
                   >
                     {revoking === device.deviceId ? (

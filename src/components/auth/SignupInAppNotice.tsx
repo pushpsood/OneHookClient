@@ -6,6 +6,13 @@ import { AppleIcon, AndroidIcon } from '../common/BrandIcons';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { SOCIALS } from '../common/socials';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
+
+/** Map a social label to the catalog's landing.social_link value set. */
+function socialValue(label: string): string {
+  const v = label.toLowerCase();
+  return ['instagram', 'facebook', 'x', 'youtube', 'linkedin', 'tiktok', 'threads'].includes(v) ? v : 'other';
+}
 
 /**
  * Shown instead of the web registration flow, because accounts are created in the app.
@@ -34,6 +41,7 @@ export function SignupInAppNotice() {
     <a
       key="ios"
       href={APP_STORE_LINKS.ios}
+      {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
       className={androidFirst ? secondaryClass : primaryClass}
     >
       <AppleIcon className="w-4 h-4" /> Download for iPhone
@@ -44,6 +52,7 @@ export function SignupInAppNotice() {
     <a
       key="android"
       href={APP_STORE_LINKS.android}
+      {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
       className={androidFirst ? primaryClass : secondaryClass}
     >
       <AndroidIcon className="w-4 h-4" /> Download for Android
@@ -90,6 +99,7 @@ export function SignupInAppNotice() {
             <button
               type="button"
               onClick={() => navigate('/login')}
+              {...trackProps(UiElement.LANDING_LOGIN)}
               className={secondaryClass}
             >
               Already have an account? Sign In
@@ -110,6 +120,7 @@ export function SignupInAppNotice() {
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`OneHook on ${label}`}
+                  {...trackProps(UiElement.LANDING_SOCIAL_LINK, { value: socialValue(label) })}
                   className="hover:opacity-100 transition-opacity"
                 >
                   <Icon className="w-[18px] h-[18px]" />

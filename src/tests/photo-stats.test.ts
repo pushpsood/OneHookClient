@@ -38,13 +38,13 @@ describe('Full-screen signal', () => {
     const analytics = await import('../lib/analytics/analytics');
     const client = analytics.getAnalytics();
     const spy = vi.spyOn(client, 'track');
-    analytics.trackMediaFullscreenOpen('media/u2/p.jpg', { index: 1, viewedUserId: 'u2', context: 'discovery' });
+    analytics.trackMediaFullscreenOpen('media/u2/p.jpg', { index: 1, viewedUserId: 'u2', context: 'DISCOVER' });
     expect(spy).toHaveBeenCalledWith('media_fullscreen_open', {
       mediaId: 'media/u2/p.jpg',
       mediaType: 'image',
       index: 1,
       viewedUserId: 'u2',
-      context: 'discovery',
+      context: 'DISCOVER',
     });
   });
 });

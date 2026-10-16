@@ -28,6 +28,7 @@ import { FALLBACK_PROFILE_IMAGE } from '../../utils/profile-image';
 import { useToast } from '../../components/common/Toast';
 import { HistoryRecoveryModal } from '../../components/chat/HistoryRecoveryModal';
 import { usePhotoLightbox } from '../../components/common/PhotoLightbox';
+import { Screen, UiElement, trackProps, APP_TAB_SCREEN } from '../../lib/analytics/analytics';
 import {
   HistoryHorizonMarker,
   HistoryLockedBanner,
@@ -177,7 +178,7 @@ export function MatchesView({
   const { open: openPeerPhoto, lightbox: peerPhotoLightbox } = usePhotoLightbox({
     photos: (peerProfile?.photos ?? []).filter((p: string) => !/\.(mp4|mov|webm|m4v)$/i.test(p)),
     ownerName: peerProfile?.displayName || 'Your match',
-    trackContext: 'matches',
+    trackContext: Screen.CHAT,
     viewedUserId: activeMatch?.peerId ?? peerProfile?.id,
   });
   const recipientId = activeMatch?.peerId;
@@ -292,13 +293,14 @@ export function MatchesView({
               </div>
               <button
                 onClick={onNavigateToDiscovery}
+                {...trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN.DISCOVERY })}
                 className="w-full py-3 bg-accent text-white text-[9px] uppercase tracking-[0.25em] font-black hover:opacity-90 transition-opacity"
               >
                 Go to Discovery
               </button>
             </div>
           ) : (
-            matches.map((m) => {
+            matches.map((m, matchIndex) => {
               const profile = m.peerProfile;
               const displayName = profile?.displayName || profile?.name || 'Your Match';
               const photo = profile?.photos?.[0] || FALLBACK_PROFILE_IMAGE;
@@ -308,6 +310,7 @@ export function MatchesView({
                 <div
                   key={m.matchId}
                   onClick={() => handleSelectMatch(m.matchId)}
+                  {...trackProps(UiElement.CHAT_CONVERSATION_SWITCH, { index: matchIndex, targetId: m.matchId })}
                   className={`w-full p-4 border transition-all text-left flex items-center gap-4 cursor-pointer relative ${
                     isSelected
                       ? 'bg-white border-accent shadow-sm'
@@ -393,6 +396,7 @@ export function MatchesView({
                         onClick={() => peerProfile?.photos?.length && openPeerPhoto(0)}
                         disabled={!peerProfile?.photos?.length}
                         aria-label={`View ${peerProfile?.displayName || 'your match'}'s photos full screen`}
+                        {...trackProps(UiElement.CHAT_MEDIA_OPEN)}
                         className="block aspect-[3/4] w-full bg-border overflow-hidden grayscale grayscale-hover border border-border cursor-zoom-in disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                       >
                         <MediaImage
@@ -457,6 +461,7 @@ export function MatchesView({
                   <div className="p-6 border-t border-border bg-white shrink-0">
                     <button
                       onClick={() => setUnhookingMatchId(selectedMatchId)}
+                      {...trackProps(UiElement.CHAT_UNMATCH)}
                       className="w-full py-3 px-4 border border-red-200 text-red-600 text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
                     >
                       <UserX className="w-3.5 h-3.5" />
@@ -539,6 +544,7 @@ export function MatchesView({
                     setCustomReason('');
                   }}
                   disabled={isUnhooking}
+                  data-track-exempt="Cancels the unhook confirmation; abandonment, not a positive intent."
                   className="flex-1 py-3 border border-border text-[10px] uppercase tracking-widest font-bold hover:bg-bg transition-colors"
                 >
                   Cancel
@@ -546,6 +552,7 @@ export function MatchesView({
                 <button
                   onClick={handleUnhook}
                   disabled={isUnhooking}
+                  {...trackProps(UiElement.CHAT_UNMATCH_CONFIRM)}
                   className="flex-1 py-3 bg-red-600 text-white text-[10px] uppercase tracking-widest font-black hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
                 >
                   {isUnhooking ? <LoadingSpinner size="sm" /> : 'Confirm Unhook'}
@@ -661,6 +668,7 @@ function ChatConversationPanel({
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
+            data-track-exempt="Mobile back to the connections list; same CHAT screen scope, no distinct intent."
             className="p-2 border border-border hover:border-accent hover:bg-bg transition-colors md:hidden"
             title="Back to Connections"
           >
@@ -685,6 +693,7 @@ function ChatConversationPanel({
         <div className="flex items-center gap-3">
           <button
             onClick={onToggleProfile}
+            {...trackProps(UiElement.CHAT_PROFILE_OPEN)}
             className="p-2 border border-border hover:border-accent text-accent text-[10px] uppercase font-bold tracking-wider hover:bg-bg transition-colors lg:hidden flex items-center gap-1.5"
             title="Profile info"
           >
@@ -693,6 +702,7 @@ function ChatConversationPanel({
           </button>
           <button
             onClick={onUnhookClick}
+            {...trackProps(UiElement.CHAT_UNMATCH)}
             className="py-2 px-3 border border-border text-red-600 text-[9px] uppercase tracking-wider font-bold hover:bg-red-50 hover:border-red-200 transition-colors flex items-center gap-1"
             title="Unhook this connection"
           >
@@ -763,6 +773,7 @@ function ChatConversationPanel({
                     <span>Didn&rsquo;t send</span>
                     <button
                       onClick={() => sendMessage(m.ciphertext)}
+                      {...trackProps(UiElement.CHAT_RETRY)}
                       className="underline hover:opacity-70"
                     >
                       Try again
@@ -790,6 +801,7 @@ function ChatConversationPanel({
           <button
             onClick={handleSend}
             disabled={!input.trim()}
+            {...trackProps(UiElement.CHAT_SEND_BUTTON)}
             className="absolute right-0 bottom-3 text-[10px] font-black uppercase tracking-[0.3em] hover:opacity-50 transition-opacity disabled:opacity-20 flex items-center gap-1 text-accent"
           >
             Send

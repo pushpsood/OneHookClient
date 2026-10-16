@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
@@ -23,6 +23,7 @@ import { UserState } from '../../types';
 import { MediaImage } from '../common/MediaImage';
 import { useMediaSrc, isMediaKey } from '../../utils/media-url';
 import { getCognitoAuth } from '../../lib/cognito-auth';
+import { UiElement, trackProps, trackUi, trackScreenView, Screen } from '../../lib/analytics/analytics';
 
 /** Step order, so the label and the progress bar cannot disagree about where the user is. */
 const STEP_INDEX: Record<string, number> = { basics: 0, photos: 1, prompts: 2, lifestyle: 3 };
@@ -183,6 +184,11 @@ export function OnboardingWizard() {
 
   const [step, setStep] = useState<Step>('basics');
   const [saving, setSaving] = useState(false);
+
+  // Analytics: the onboarding wizard was shown (one screen_view on mount).
+  useEffect(() => {
+    trackScreenView(Screen.ONBOARDING);
+  }, []);
   const [loggingOut, setLoggingOut] = useState(false);
   const [uploadingPhotoIndex, setUploadingPhotoIndex] = useState<number | null>(null);
   const [uploadingAudio, setUploadingAudio] = useState(false);
@@ -208,6 +214,7 @@ export function OnboardingWizard() {
   );
 
   const [selectedPromptId, setSelectedPromptId] = useState(PROMPT_PRESETS[0]);
+  const [pendingRemoveIndex, setPendingRemoveIndex] = useState<number | null>(null);
   const [promptAnswer, setPromptAnswer] = useState('');
   const [promptsList, setPromptsList] = useState<Array<{ promptId: string; answer: string }>>([]);
   const [audioPromptKey, setAudioPromptKey] = useState<string>(currentUser?.audioPrompt || '');
@@ -304,7 +311,14 @@ export function OnboardingWizard() {
 
   const removePhoto = (index: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    setPendingRemoveIndex(index);
+  };
+
+  const confirmRemovePhoto = () => {
+    if (pendingRemoveIndex === null) return;
+    const index = pendingRemoveIndex;
     setPhotos((prev) => prev.filter((_, i) => i !== index));
+    setPendingRemoveIndex(null);
   };
 
   const handleAudioChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -546,6 +560,7 @@ export function OnboardingWizard() {
               type="button"
               onClick={handleSkipAndLogout}
               disabled={loggingOut}
+              {...trackProps(UiElement.ONBOARDING_SKIP_SIGN_OUT)}
               className="flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:text-foreground border border-border hover:border-accent transition-all disabled:opacity-40"
               title="Sign out and continue later"
             >
@@ -595,6 +610,7 @@ export function OnboardingWizard() {
                     key={g.value}
                     type="button"
                     onClick={() => setGender(g.value)}
+                    {...trackProps(UiElement.ONBOARDING_CHOICE_SELECT, { targetId: g.value })}
                     className={`py-3.5 px-4 text-xs font-bold uppercase tracking-widest border transition-all ${
                       gender === g.value
                         ? 'bg-accent text-white border-accent shadow-md'
@@ -617,6 +633,7 @@ export function OnboardingWizard() {
                     key={g.value}
                     type="button"
                     onClick={() => toggleInterestedIn(g.value)}
+                    {...trackProps(UiElement.ONBOARDING_CHOICE_SELECT, { targetId: g.value })}
                     className={`py-3.5 px-4 text-xs font-bold uppercase tracking-widest border transition-all flex items-center justify-center gap-2 ${
                       interestedInGenders.includes(g.value)
                         ? 'bg-accent text-white border-accent shadow-md'
@@ -695,6 +712,7 @@ export function OnboardingWizard() {
 
             <button
               onClick={handleNextFromBasics}
+              {...trackProps(UiElement.ONBOARDING_NEXT, { value: 'basics' })}
               className="w-full py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 transition-all shadow-md mt-6"
             >
               Continue to Photos
@@ -726,6 +744,7 @@ export function OnboardingWizard() {
                   <div
                     key={index}
                     onClick={() => handlePhotoClick(index)}
+                    {...trackProps(UiElement.ONBOARDING_PHOTO_ADD)}
                     className={`relative aspect-[3/4] border-2 border-dashed rounded-none flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden group ${
                       photoSrc
                         ? 'border-solid border-border bg-black/5'
@@ -754,6 +773,7 @@ export function OnboardingWizard() {
                         <button
                           type="button"
                           onClick={(e) => removePhoto(index, e)}
+                          {...trackProps(UiElement.ONBOARDING_PHOTO_REMOVE)}
                           className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-red-600 text-white transition-all shadow-md"
                           title="Remove photo"
                         >
@@ -782,10 +802,48 @@ export function OnboardingWizard() {
               </span>
             </div>
 
+            {pendingRemoveIndex !== null && (
+              <div
+                className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-6"
+                onClick={() => setPendingRemoveIndex(null)}
+                data-track-exempt="backdrop: click-away that cancels the remove-photo dialog."
+              >
+                <div
+                  className="max-w-sm w-full bg-white border border-border p-6 space-y-4 shadow-2xl rounded-lg"
+                  onClick={(e) => e.stopPropagation()}
+                  data-track-exempt="backdrop: modal container; stops backdrop dismissal, not an interactive control."
+                >
+                  <h3 className="text-base font-black uppercase tracking-widest">Remove this photo?</h3>
+                  <p className="text-xs opacity-60 leading-relaxed">
+                    This photo will be removed from your profile. You can add it again later.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPendingRemoveIndex(null)}
+                      {...trackProps(UiElement.ONBOARDING_PHOTO_REMOVE_CONFIRM, { action: 'dismiss' })}
+                      className="flex-1 py-2.5 border border-border text-xs font-bold uppercase tracking-widest hover:bg-surface-hover transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmRemovePhoto}
+                      {...trackProps(UiElement.ONBOARDING_PHOTO_REMOVE_CONFIRM)}
+                      className="flex-1 py-2.5 bg-red-600 text-white text-xs font-bold uppercase tracking-widest hover:bg-red-700 transition-colors"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-4 pt-4">
               <button
                 type="button"
                 onClick={() => setStep('basics')}
+                {...trackProps(UiElement.ONBOARDING_BACK)}
                 className="py-4 px-6 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all"
               >
                 Back
@@ -794,6 +852,7 @@ export function OnboardingWizard() {
                 type="button"
                 onClick={handleNextFromPhotos}
                 disabled={photos.length < 3}
+                {...trackProps(UiElement.ONBOARDING_NEXT, { value: 'photos' })}
                 className="flex-1 py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md"
               >
                 Continue ({photos.length}/3 photos added)
@@ -817,7 +876,10 @@ export function OnboardingWizard() {
                 </label>
                 <select
                   value={selectedPromptId}
-                  onChange={(e) => setSelectedPromptId(e.target.value)}
+                  onChange={(e) => {
+                    trackUi(UiElement.SHARED_PROMPT_PRESET_SELECT, { context: Screen.ONBOARDING });
+                    setSelectedPromptId(e.target.value);
+                  }}
                   className="field-input"
                 >
                   {PROMPT_PRESETS.map((p) => (
@@ -838,6 +900,7 @@ export function OnboardingWizard() {
                   <button
                     type="button"
                     onClick={addPrompt}
+                    {...trackProps(UiElement.ONBOARDING_PROMPT_ADD)}
                     className="py-2.5 px-5 bg-border/60 hover:bg-accent hover:text-white text-xs font-bold uppercase tracking-widest transition-all"
                   >
                     Save Prompt
@@ -866,6 +929,7 @@ export function OnboardingWizard() {
                       <button
                         type="button"
                         onClick={() => removePrompt(p.promptId)}
+                        {...trackProps(UiElement.ONBOARDING_PROMPT_REMOVE)}
                         className="text-muted-foreground hover:text-red-600 p-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -891,6 +955,7 @@ export function OnboardingWizard() {
                     <button
                       type="button"
                       onClick={togglePlayAudio}
+                      {...trackProps(UiElement.SHARED_VOICE_RECORDER, { value: isPlayingAudio ? 'pause' : 'play', context: Screen.ONBOARDING })}
                       className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow-md hover:bg-accent/90"
                     >
                       {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
@@ -912,6 +977,7 @@ export function OnboardingWizard() {
                   />
                   <button
                     type="button"
+                    {...trackProps(UiElement.ONBOARDING_VOICE_REMOVE)}
                     onClick={() => {
                       setAudioPromptKey('');
                       setAudioPreviewUrl('');
@@ -925,6 +991,7 @@ export function OnboardingWizard() {
                 <button
                   type="button"
                   onClick={() => audioInputRef.current?.click()}
+                  {...trackProps(UiElement.ONBOARDING_VOICE_ADD)}
                   disabled={uploadingAudio}
                   className="w-full py-4 border-2 border-dashed border-border hover:border-accent flex items-center justify-center gap-3 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-accent transition-all"
                 >
@@ -945,6 +1012,7 @@ export function OnboardingWizard() {
               <button
                 type="button"
                 onClick={() => setStep('photos')}
+                {...trackProps(UiElement.ONBOARDING_BACK)}
                 className="py-4 px-6 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all"
               >
                 Back
@@ -952,6 +1020,7 @@ export function OnboardingWizard() {
               <button
                 type="button"
                 onClick={handleNextFromPrompts}
+                {...trackProps(UiElement.ONBOARDING_NEXT, { value: 'prompts' })}
                 className="flex-1 py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 transition-all shadow-md"
               >
                 Continue to Lifestyle
@@ -1066,6 +1135,7 @@ export function OnboardingWizard() {
                       key={lang.value}
                       type="button"
                       onClick={() => toggleLanguage(lang.value)}
+                      {...trackProps(UiElement.ONBOARDING_CHOICE_SELECT, { targetId: lang.value })}
                       className={`py-2 px-3.5 text-xs font-bold rounded-full border transition-all ${
                         active
                           ? 'bg-accent text-white border-accent shadow-sm'
@@ -1092,6 +1162,7 @@ export function OnboardingWizard() {
                       key={interest}
                       type="button"
                       onClick={() => toggleInterest(interest)}
+                      {...trackProps(UiElement.ONBOARDING_CHOICE_SELECT, { targetId: interest })}
                       className={`py-2 px-3.5 text-xs font-bold rounded-full border transition-all ${
                         active
                           ? 'bg-accent text-white border-accent shadow-sm'
@@ -1109,6 +1180,7 @@ export function OnboardingWizard() {
               <button
                 type="button"
                 onClick={() => setStep('prompts')}
+                {...trackProps(UiElement.ONBOARDING_BACK)}
                 className="py-4 px-6 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all"
               >
                 Back
@@ -1116,6 +1188,7 @@ export function OnboardingWizard() {
               <button
                 type="button"
                 onClick={finishOnboarding}
+                {...trackProps(UiElement.ONBOARDING_FINISH)}
                 className="flex-1 py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 transition-all shadow-md"
               >
                 Finish & Enter OneHook

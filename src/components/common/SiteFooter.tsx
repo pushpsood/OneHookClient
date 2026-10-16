@@ -3,8 +3,15 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Smartphone } from 'lucide-react';
 import { BrandWordmark } from './BrandWordmark';
 import { SOCIALS } from './socials';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 type SocialIcon = ComponentType<{ className?: string }>;
+
+/** Map a social label to the catalog's landing.social_link value set. */
+function socialValue(label: string): string {
+  const v = label.toLowerCase();
+  return ['instagram', 'facebook', 'x', 'youtube', 'linkedin', 'tiktok', 'threads'].includes(v) ? v : 'other';
+}
 
 function renderSocial({ label, href, Icon }: { label: string; href: string; Icon: SocialIcon }) {
   return (
@@ -14,6 +21,7 @@ function renderSocial({ label, href, Icon }: { label: string; href: string; Icon
       target="_blank"
       rel="noreferrer"
       aria-label={`OneHook on ${label}`}
+      {...trackProps(UiElement.LANDING_SOCIAL_LINK, { value: socialValue(label) })}
       className="hover:opacity-100 transition-opacity"
     >
       <Icon className="w-[18px] h-[18px]" />
@@ -46,13 +54,13 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] opacity-50">
           <p>© 2026 OneHook. All rights reserved.</p>
           <div className="flex items-center gap-6">
-            <button onClick={() => navigate('/privacy')} className="hover:opacity-100 transition-opacity">
+            <button onClick={() => navigate('/privacy')} {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
               Privacy
             </button>
-            <button onClick={() => navigate('/terms')} className="hover:opacity-100 transition-opacity">
+            <button onClick={() => navigate('/terms')} {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
               Terms
             </button>
-            <button onClick={() => navigate('/contact')} className="hover:opacity-100 transition-opacity">
+            <button onClick={() => navigate('/contact')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'contact' })} className="hover:opacity-100 transition-opacity">
               Contact
             </button>
           </div>
@@ -73,26 +81,33 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
         </div>
 
         <div className="flex flex-wrap justify-center items-center gap-6 md:gap-8">
-          <button onClick={() => goToSection('philosophy')} className="hover:opacity-100 transition-opacity">
+          <button onClick={() => goToSection('philosophy')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'philosophy' })} className="hover:opacity-100 transition-opacity">
             Philosophy
           </button>
-          <button onClick={() => goToSection('features')} className="hover:opacity-100 transition-opacity">
+          <button onClick={() => goToSection('features')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'how_it_works' })} className="hover:opacity-100 transition-opacity">
             How it works
           </button>
-          <button onClick={() => navigate('/pricing')} className="hover:opacity-100 transition-opacity">
+          <button onClick={() => navigate('/pricing')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className="hover:opacity-100 transition-opacity">
             Pricing
           </button>
-          <button onClick={() => navigate('/privacy')} className="hover:opacity-100 transition-opacity">
+          <button onClick={() => navigate('/privacy')} {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
             Privacy
           </button>
-          <button onClick={() => navigate('/terms')} className="hover:opacity-100 transition-opacity">
+          <button onClick={() => navigate('/terms')} {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
             Terms
           </button>
-          <button onClick={() => navigate('/contact')} className="hover:opacity-100 transition-opacity">
+          <button onClick={() => navigate('/contact')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'contact' })} className="hover:opacity-100 transition-opacity">
             Contact
           </button>
-          <button onClick={() => navigate('/careers')} className="hover:opacity-100 transition-opacity">
+          <button onClick={() => navigate('/careers')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'careers' })} className="hover:opacity-100 transition-opacity">
             Careers
+          </button>
+          <button
+            onClick={() => navigate('/science')}
+            {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
+            className="hover:opacity-100 transition-opacity"
+          >
+            Science
           </button>
 
           {/* Socials (4) + highlighted app-flow CTA + socials (4) */}
@@ -105,6 +120,7 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
             {/* Get the app button - separate line on mobile, inline on desktop */}
             <button
               onClick={() => goToSection('get-app')}
+              {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
               className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent text-white rounded-full text-[11px] font-black uppercase tracking-[0.2em] opacity-100 hover:opacity-90 transition-opacity md:order-first"
             >
               <Smartphone className="w-3.5 h-3.5" /> Get the app

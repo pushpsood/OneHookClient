@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * Careers page — showcases the open roles with an engaging, on-brand UI
@@ -291,6 +292,7 @@ export function Careers() {
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <button
               onClick={() => scrollToForm()}
+              {...trackProps(UiElement.LANDING_CAREERS_APPLY)}
               className="px-8 py-4 bg-accent text-white text-[11px] font-black uppercase tracking-[0.3em] rounded-full hover:scale-[1.03] transition-transform"
             >
               See open roles
@@ -365,6 +367,7 @@ export function Careers() {
                 </div>
                 <button
                   onClick={() => scrollToForm(role.id)}
+                  {...trackProps(UiElement.LANDING_CAREERS_APPLY, { targetId: role.id })}
                   className="mt-auto self-start text-[10px] font-black uppercase tracking-[0.3em] text-accent inline-flex items-center gap-2 hover:gap-3 transition-all"
                 >
                   Apply for this role <ArrowRight className="w-3.5 h-3.5" />
@@ -612,6 +615,7 @@ export function Careers() {
                     <button
                       type="button"
                       onClick={() => navigate('/privacy')}
+                      {...trackProps(UiElement.LANDING_POLICY_LINK)}
                       className="text-accent hover:underline"
                     >
                       Privacy Policy
@@ -676,6 +680,7 @@ export function Careers() {
                 <button
                   type="button"
                   onClick={() => navigate('/privacy')}
+                  {...trackProps(UiElement.LANDING_POLICY_LINK)}
                   className="text-accent hover:underline"
                 >
                   Privacy Policy

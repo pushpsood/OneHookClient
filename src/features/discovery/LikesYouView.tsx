@@ -13,7 +13,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useReceivedLikes } from '../../hooks/use-api';
-import { trackLikesYouView } from '../../lib/analytics/analytics';
+import { trackLikesYouView, Screen, UiElement, trackProps } from '../../lib/analytics/analytics';
 import { ProfileApi } from '../../api/profile';
 import { MediaImage } from '../../components/common/MediaImage';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -53,7 +53,7 @@ function timeAgo(iso: string): string {
   return new Date(then).toLocaleDateString();
 }
 
-function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?: LikerProfile }) {
+function LikeRow({ like, profile, index }: { key?: string; like: ReceivedLike; profile?: LikerProfile; index?: number }) {
   const meta = (like.likeTargetType && TYPE_META[like.likeTargetType]) || {
     label: 'your profile',
     icon: Heart,
@@ -63,7 +63,7 @@ function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?
   const liker = usePhotoLightbox({
     photos: profile?.photo ? [profile.photo] : [],
     ownerName: name,
-    trackContext: 'likes_you',
+    trackContext: Screen.LIKES_YOU,
     viewedUserId: like.fromUserId,
   });
   const likedOwn = usePhotoLightbox({
@@ -82,6 +82,7 @@ function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?
         onClick={(e) => { e.stopPropagation(); if (profile?.photo) liker.open(0); }}
         disabled={!profile?.photo}
         aria-label={`View ${name}'s photo full screen`}
+        {...trackProps(UiElement.LIKES_YOU_PROFILE_OPEN, { ...(index !== undefined ? { index } : {}), targetId: like.fromUserId })}
         className="w-11 h-11 shrink-0 rounded-full overflow-hidden bg-surface border border-border cursor-zoom-in disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
       >
         <MediaImage
@@ -116,6 +117,9 @@ function LikeRow({ like, profile }: { key?: string; like: ReceivedLike; profile?
           tabIndex={like.likeTargetType === 'PHOTO' ? 0 : undefined}
           onKeyDown={(e) => { if (like.likeTargetType === 'PHOTO' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); likedOwn.open(0); } }}
           aria-label={like.likeTargetType === 'PHOTO' ? 'View your liked photo full screen' : undefined}
+          {...(like.likeTargetType === 'PHOTO'
+            ? trackProps(UiElement.LIKES_YOU_LIKED_ITEM_OPEN, index !== undefined ? { index } : {})
+            : {})}
         >
           <MediaImage
             src={like.likeTargetRef}
@@ -205,6 +209,7 @@ export function LikesYouView() {
           <p className="text-sm text-text-secondary">{error.message}</p>
           <button
             onClick={refresh}
+            {...trackProps(UiElement.LIKES_YOU_RETRY)}
             className="w-full py-3 bg-accent text-bg text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
           >
             Try Again
@@ -246,6 +251,7 @@ export function LikesYouView() {
               key={`${like.fromUserId}-${like.createdAt}-${i}`}
               like={like}
               profile={profiles[like.fromUserId]}
+              index={i}
             />
           ))}
         </div>
@@ -264,6 +270,7 @@ export function LikesYouView() {
               onClick={refresh}
               title="Refresh notifications"
               aria-label="Refresh notifications"
+              {...trackProps(UiElement.LIKES_YOU_REFRESH)}
               className="h-9 px-3 flex items-center gap-2 rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer text-sm font-semibold"
             >
               <RefreshCw className={`w-4 h-4 stroke-[2] ${loading ? 'animate-spin' : ''}`} />

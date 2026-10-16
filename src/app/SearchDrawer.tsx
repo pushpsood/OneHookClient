@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, X, CheckCircle2, MapPin, Sparkles, Volume2 } from 'lucide-react';
 import { MediaImage } from '../components/common/MediaImage';
 import type { DiscoveryCandidate } from '../types';
+import { UiElement, trackProps } from '../lib/analytics/analytics';
 
 interface SearchDrawerProps {
   isOpen: boolean;
@@ -67,6 +68,7 @@ export function SearchDrawer({
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
         onClick={onClose}
+        data-track-exempt="backdrop: click-away that closes search; search.close tracks the explicit control."
       />
 
       {/* Drawer Panel */}
@@ -78,6 +80,7 @@ export function SearchDrawer({
             <button
               type="button"
               onClick={onClose}
+              {...trackProps(UiElement.SEARCH_CLOSE, { action: 'dismiss' })}
               className="p-1 rounded-full text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
               title="Close search"
             >
@@ -100,6 +103,7 @@ export function SearchDrawer({
               <button
                 type="button"
                 onClick={() => setQuery('')}
+                {...trackProps(UiElement.SEARCH_QUERY_CLEAR)}
                 className="absolute right-3 w-4 h-4 rounded-full bg-surface-hover text-text-muted hover:text-text flex items-center justify-center text-xs cursor-pointer"
               >
                 ✕
@@ -117,6 +121,7 @@ export function SearchDrawer({
                   key={item.id}
                   type="button"
                   onClick={() => setFilter(item.id)}
+                  {...trackProps(UiElement.SEARCH_FILTER_SELECT)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                     active
                       ? 'bg-accent text-bg shadow-sm'
@@ -141,6 +146,7 @@ export function SearchDrawer({
               <button
                 type="button"
                 onClick={() => setQuery('')}
+                {...trackProps(UiElement.SEARCH_QUERY_CLEAR)}
                 className="text-xs font-semibold text-ig-blue hover:opacity-80 cursor-pointer"
               >
                 Clear
@@ -155,7 +161,7 @@ export function SearchDrawer({
               <p className="text-xs">Try searching by a different name, city, or interest.</p>
             </div>
           ) : (
-            filtered.map((candidate) => {
+            filtered.map((candidate, i) => {
               const photo = candidate.photos?.[0] || (candidate as any).pictures?.[0];
               const name = (candidate as any).displayName || candidate.name || 'Member';
               const loc =
@@ -172,6 +178,7 @@ export function SearchDrawer({
                     onSelectCandidate(candidate);
                     onClose();
                   }}
+                  {...trackProps(UiElement.SEARCH_RESULT_OPEN, { index: i, targetId: candidate.id })}
                   className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-surface-hover transition-colors cursor-pointer group"
                 >
                   {/* Avatar with Story Ring */}

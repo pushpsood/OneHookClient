@@ -8,6 +8,7 @@ import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
 import { requestGoogleIdToken } from '../../lib/google-identity';
 import { googleClientId } from '../../utils/env.config';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 export function AccountSettingsCard() {
   const { showToast } = useToast();
@@ -190,6 +191,7 @@ export function AccountSettingsCard() {
                     <button
                       onClick={handleAddEmailRequest}
                       disabled={loading === 'email_request'}
+                      {...trackProps(UiElement.SETTINGS_EMAIL_MANAGE)}
                       className="py-2 px-4 bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 shrink-0"
                     >
                       {loading === 'email_request' ? <Loader className="w-3 h-3 animate-spin" /> : 'Add'}
@@ -207,12 +209,14 @@ export function AccountSettingsCard() {
                     <button
                       onClick={handleAddEmailVerify}
                       disabled={loading === 'email_verify'}
+                      {...trackProps(UiElement.SETTINGS_EMAIL_MANAGE)}
                       className="py-2 px-4 bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 shrink-0"
                     >
                       {loading === 'email_verify' ? <Loader className="w-3 h-3 animate-spin" /> : 'Verify'}
                     </button>
                     <button
                       onClick={() => setEmailStep('input')}
+                      {...trackProps(UiElement.SETTINGS_EMAIL_MANAGE, { action: 'dismiss' })}
                       className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-surface-hover text-text shrink-0"
                     >
                       Cancel
@@ -232,6 +236,7 @@ export function AccountSettingsCard() {
               <button
                 onClick={handleLinkGoogle}
                 disabled={loading === 'google'}
+                {...trackProps(UiElement.SETTINGS_GOOGLE_LINK, { value: 'link' })}
                 className="py-3 px-6 border border-border bg-surface hover:bg-surface-hover text-text hover:border-accent transition-colors text-[10px] uppercase tracking-[0.2em] font-black disabled:opacity-50 inline-flex items-center justify-center gap-2 flex-1"
               >
                 {loading === 'google' ? <Loader className="w-4 h-4 animate-spin" /> : <Chrome className="w-4 h-4" />}
@@ -240,6 +245,7 @@ export function AccountSettingsCard() {
               <button
                 onClick={handleLinkApple}
                 disabled={loading === 'apple'}
+                {...trackProps(UiElement.SETTINGS_APPLE_LINK, { value: 'link' })}
                 className="py-3 px-6 border border-border bg-black text-white dark:bg-white dark:text-black hover:opacity-90 transition-opacity text-[10px] uppercase tracking-[0.2em] font-black disabled:opacity-50 inline-flex items-center justify-center gap-2 flex-1"
               >
                 {loading === 'apple' ? <Loader className="w-4 h-4 animate-spin" /> : <Apple className="w-4 h-4" />}
@@ -265,6 +271,7 @@ export function AccountSettingsCard() {
             <button
               onClick={handleAddPasskey}
               disabled={loading === 'passkey'}
+              {...trackProps(UiElement.SETTINGS_PASSKEY_ADD)}
               className="py-3 px-6 w-full sm:w-auto bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 inline-flex justify-center items-center gap-2"
             >
               {loading === 'passkey' ? <Loader className="w-4 h-4 animate-spin" /> : <Fingerprint className="w-4 h-4" />}
@@ -291,6 +298,7 @@ export function AccountSettingsCard() {
         {!showDeleteConfirm ? (
           <button
             onClick={() => setShowDeleteConfirm(true)}
+            {...trackProps(UiElement.SETTINGS_DELETE_ACCOUNT_OPEN)}
             className="py-3 px-6 border-2 border-destructive/30 text-destructive hover:bg-destructive/10 transition-colors text-[10px] uppercase tracking-[0.2em] font-black inline-flex items-center gap-2"
           >
             <Trash2 className="w-4 h-4" />
@@ -313,6 +321,7 @@ export function AccountSettingsCard() {
               <button
                 onClick={handleDeleteProfile}
                 disabled={loading === 'delete' || deleteConfirmText !== 'DELETE'}
+                {...trackProps(UiElement.SETTINGS_DELETE_ACCOUNT_CONFIRM)}
                 className="py-2 px-4 bg-destructive text-white text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 shrink-0"
               >
                 {loading === 'delete' ? <Loader className="w-3 h-3 animate-spin" /> : 'Confirm Delete'}
@@ -323,6 +332,7 @@ export function AccountSettingsCard() {
                   setDeleteConfirmText('');
                 }}
                 disabled={loading === 'delete'}
+                {...trackProps(UiElement.SETTINGS_DELETE_ACCOUNT_CONFIRM, { action: 'dismiss' })}
                 className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-surface-hover text-text shrink-0 disabled:opacity-50"
               >
                 Cancel

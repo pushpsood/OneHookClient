@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { UiElement, trackProps, hostScreen } from '../../lib/analytics/analytics';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -82,6 +83,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
               <button
                 onClick={() => removeToast(toast.id)}
+                {...trackProps(UiElement.SHARED_ALERT_DISMISS, { context: hostScreen() })}
                 className="text-border hover:text-accent transition-colors"
               >
                 <X className="w-4 h-4" />

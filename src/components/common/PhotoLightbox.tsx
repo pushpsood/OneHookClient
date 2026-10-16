@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { MediaImage } from './MediaImage';
-import { trackMediaFullscreenOpen } from '../../lib/analytics/analytics';
+import { trackMediaFullscreenOpen, UiElement, trackProps, type ViewableScreen } from '../../lib/analytics/analytics';
 
 export interface PhotoLightboxProps {
   /** Photo values (private `media/…` keys or URLs), in display order. */
@@ -14,8 +14,8 @@ export interface PhotoLightboxProps {
   ownerName: string;
   /** Per-photo crop transforms, keyed by photo value. */
   styleFor?: (photo: string) => CSSProperties | undefined;
-  /** Analytics context (e.g. 'discovery'); omit to not record full-screen opens (e.g. own profile). */
-  trackContext?: string;
+  /** Analytics context screen (e.g. Screen.DISCOVER); omit to not record full-screen opens (e.g. own profile). */
+  trackContext?: ViewableScreen;
   viewedUserId?: string;
 }
 
@@ -74,6 +74,7 @@ export function PhotoLightbox({ photos, startIndex, onClose, ownerName, styleFor
       aria-label={`${ownerName}'s photos`}
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95"
       onClick={onClose}
+      data-track-exempt="backdrop: click-away that dismisses the viewer; the explicit close control (photo_viewer.close) is tracked."
       data-testid="photo-lightbox"
     >
       <button
@@ -81,6 +82,7 @@ export function PhotoLightbox({ photos, startIndex, onClose, ownerName, styleFor
         type="button"
         onClick={onClose}
         aria-label="Close full-screen photo"
+        {...trackProps(UiElement.PHOTO_VIEWER_CLOSE)}
         className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
       >
         <X className="w-6 h-6" aria-hidden="true" />
@@ -92,6 +94,7 @@ export function PhotoLightbox({ photos, startIndex, onClose, ownerName, styleFor
             type="button"
             onClick={(e) => { e.stopPropagation(); go(-1); }}
             aria-label="Previous photo"
+            {...trackProps(UiElement.PHOTO_VIEWER_PREVIOUS)}
             className="absolute left-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
           >
             <ChevronLeft className="w-7 h-7" aria-hidden="true" />
@@ -100,6 +103,7 @@ export function PhotoLightbox({ photos, startIndex, onClose, ownerName, styleFor
             type="button"
             onClick={(e) => { e.stopPropagation(); go(1); }}
             aria-label="Next photo"
+            {...trackProps(UiElement.PHOTO_VIEWER_NEXT)}
             className="absolute right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
           >
             <ChevronRight className="w-7 h-7" aria-hidden="true" />

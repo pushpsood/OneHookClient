@@ -6,6 +6,7 @@ import { AppleIcon, AndroidIcon } from '../common/BrandIcons';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { describeMissingPrerequisites, type MissingPrerequisite } from '../../lib/registration-prerequisites';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 interface Props {
   /** Which app-only guarantees are absent; drives the explanation. */
@@ -41,12 +42,12 @@ export function FinishSetupInAppNotice({ missing, onRetry, retrying = false, che
     'w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors flex items-center justify-center gap-2 disabled:opacity-50';
 
   const iosLink = (
-    <a key="ios" href={APP_STORE_LINKS.ios} className={androidFirst ? secondaryClass : primaryClass}>
+    <a key="ios" href={APP_STORE_LINKS.ios} {...trackProps(UiElement.LANDING_OPEN_IN_APP)} className={androidFirst ? secondaryClass : primaryClass}>
       <AppleIcon className="w-4 h-4" /> Open on iPhone
     </a>
   );
   const androidLink = (
-    <a key="android" href={APP_STORE_LINKS.android} className={androidFirst ? primaryClass : secondaryClass}>
+    <a key="android" href={APP_STORE_LINKS.android} {...trackProps(UiElement.LANDING_OPEN_IN_APP)} className={androidFirst ? primaryClass : secondaryClass}>
       <AndroidIcon className="w-4 h-4" /> Open on Android
     </a>
   );
@@ -98,7 +99,7 @@ export function FinishSetupInAppNotice({ missing, onRetry, retrying = false, che
               </div>
             </div>
 
-            <button type="button" onClick={onRetry} disabled={retrying} className={primaryClass}>
+            <button type="button" onClick={onRetry} disabled={retrying} {...trackProps(UiElement.LANDING_NOTICE_RETRY)} className={primaryClass}>
               {retrying ? (
                 <>
                   <Loader className="w-4 h-4 animate-spin" /> Checking…
@@ -121,6 +122,7 @@ export function FinishSetupInAppNotice({ missing, onRetry, retrying = false, che
             <button
               type="button"
               onClick={() => navigate('/')}
+              {...trackProps(UiElement.LANDING_HOME_LINK)}
               className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity"
             >
               Back to home

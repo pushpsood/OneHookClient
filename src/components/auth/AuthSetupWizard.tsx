@@ -5,6 +5,7 @@ import { Mail, ShieldCheck, Loader, ArrowRight, Fingerprint } from 'lucide-react
 import { getCognitoAuth } from '../../lib/cognito-auth';
 import { useToast } from '../common/Toast';
 import { useAppStore } from '../../store/app-store';
+import { UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
 
 type SetupStep = 'EMAIL_PROMPT' | 'EMAIL_VERIFY' | 'WEBAUTHN_SETUP';
 
@@ -39,6 +40,7 @@ export function AuthSetupWizard() {
     try {
       const auth = getCognitoAuth();
       await auth.updateUserEmail(email);
+      trackUi(UiElement.LOGIN_PASSKEY_SETUP, { value: 'email_submit' });
       setStep('EMAIL_VERIFY');
       showToast('Verification code sent to email', 'info');
     } catch (err) {
@@ -60,6 +62,7 @@ export function AuthSetupWizard() {
     try {
       const auth = getCognitoAuth();
       await auth.verifyEmail(code);
+      trackUi(UiElement.LOGIN_PASSKEY_SETUP, { value: 'code_submit' });
       showToast('Email verified successfully!', 'success');
       setStep('WEBAUTHN_SETUP');
     } catch (err) {
@@ -140,6 +143,7 @@ export function AuthSetupWizard() {
                     type="button"
                     onClick={handleSkipToWebAuthn}
                     disabled={loading}
+                    {...trackProps(UiElement.LOGIN_PASSKEY_SETUP, { value: 'skip_to_passkey' })}
                     className="flex-1 py-4 border border-border text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-bg transition-colors"
                   >
                     Skip
@@ -201,6 +205,7 @@ export function AuthSetupWizard() {
                       setError(null);
                     }}
                     disabled={loading}
+                    {...trackProps(UiElement.LOGIN_PASSKEY_SETUP, { value: 'change_email' })}
                     className="flex-1 py-4 border border-border text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-bg transition-colors"
                   >
                     Back
@@ -245,6 +250,7 @@ export function AuthSetupWizard() {
                   type="button"
                   onClick={handleWebAuthnSetup}
                   disabled={loading}
+                  {...trackProps(UiElement.LOGIN_PASSKEY_SETUP, { value: 'passkey_create' })}
                   className="w-full py-4 bg-accent text-white text-[10px] font-black uppercase tracking-[0.3em] hover:opacity-90 flex items-center justify-center gap-2 rounded shadow-xl shadow-accent/10"
                 >
                   {loading ? <Loader className="w-4 h-4 animate-spin" /> : 'Create Passkey'}
@@ -253,6 +259,7 @@ export function AuthSetupWizard() {
                   type="button"
                   onClick={handleSkipToApp}
                   disabled={loading}
+                  {...trackProps(UiElement.LOGIN_PASSKEY_SETUP, { value: 'skip_to_app' })}
                   className="w-full py-4 border border-transparent text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-bg transition-colors flex items-center justify-center gap-2 opacity-50 hover:opacity-100"
                 >
                   Skip for now <ArrowRight className="w-3 h-3" />

@@ -8,7 +8,7 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { DiscoveryCard } from './DiscoveryCard';
 import { CommentComposer } from './CommentComposer';
 import type { LikeTarget } from './like-target';
-import { trackCardImpression, trackCardSwipe } from '../../lib/analytics/analytics';
+import { trackCardImpression, trackCardSwipe, UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * DiscoveryView — ONE profile at a time, matched to the iOS discovery experience.
@@ -145,6 +145,7 @@ export function DiscoveryView({
           <p className="text-sm text-text-secondary">{error.message}</p>
           <button
             onClick={onRetry}
+            {...trackProps(UiElement.DISCOVER_RETRY)}
             className="w-full py-3 bg-ig-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
           >
             Try Again

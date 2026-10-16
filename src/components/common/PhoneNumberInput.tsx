@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
+import { UiElement, trackProps, hostScreen } from '../../lib/analytics/analytics';
 import {
   type Country,
   countryFlag,
@@ -131,6 +132,7 @@ export function PhoneNumberInput({
             aria-haspopup="listbox"
             aria-expanded={pickerOpen}
             aria-label={`Country: ${countryName(country)}, ${dialCodeDisplay(country)}`}
+            {...trackProps(UiElement.SHARED_COUNTRY_CODE_OPEN, { context: hostScreen() })}
             className="h-full px-3 flex items-center gap-1.5 text-sm font-semibold border-r border-border hover:bg-bg transition-colors disabled:opacity-50 min-h-[44px]"
           >
             <span aria-hidden="true">{countryFlag(country)}</span>
@@ -160,6 +162,7 @@ export function PhoneNumberInput({
                       role="option"
                       aria-selected={item.iso2 === country.iso2}
                       onClick={() => selectCountry(item)}
+                      {...trackProps(UiElement.SHARED_COUNTRY_CODE_SELECT, { context: hostScreen() })}
                       className={`w-full px-3 py-2.5 flex items-center justify-between gap-2 text-left text-sm hover:bg-bg transition-colors ${
                         item.iso2 === country.iso2 ? 'bg-bg' : ''
                       }`}

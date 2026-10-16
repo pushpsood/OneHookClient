@@ -11,6 +11,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useToast } from '../common/Toast';
 import type { ChatWallpaper } from '../../lib/chat-appearance';
 import { WallpaperGrid } from './WallpaperGrid';
+import { UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
 
 /**
  * Chat & appearance settings. Reads `GET /chat/settings` on open and persists each change with a
@@ -71,13 +72,13 @@ export function ChatSettingsSheet({
     }
   };
 
-  const toggles: { key: keyof ChatSettings; label: string; hint?: string }[] = [
-    { key: 'messageNotifications', label: 'Message notifications' },
-    { key: 'showPreviews', label: 'Show message previews' },
-    { key: 'reactionNotifications', label: 'Reaction notifications' },
-    { key: 'readReceipts', label: 'Read receipts' },
-    { key: 'typingIndicators', label: 'Typing indicators' },
-    { key: 'screenshotProtection', label: 'Screenshot protection' },
+  const toggles: { key: keyof ChatSettings; label: string; kind: 'notification' | 'privacy'; hint?: string }[] = [
+    { key: 'messageNotifications', label: 'Message notifications', kind: 'notification' },
+    { key: 'showPreviews', label: 'Show message previews', kind: 'notification' },
+    { key: 'reactionNotifications', label: 'Reaction notifications', kind: 'notification' },
+    { key: 'readReceipts', label: 'Read receipts', kind: 'privacy' },
+    { key: 'typingIndicators', label: 'Typing indicators', kind: 'privacy' },
+    { key: 'screenshotProtection', label: 'Screenshot protection', kind: 'privacy' },
   ];
 
   return (
@@ -89,6 +90,7 @@ export function ChatSettingsSheet({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 md:p-6"
           onClick={onClose}
+          data-track-exempt="backdrop: click-away that closes the chat-settings sheet; the explicit close control (chat.settings_open dismiss) is tracked."
         >
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -98,11 +100,13 @@ export function ChatSettingsSheet({
             aria-label="Chat settings"
             className="w-full max-w-md bg-surface-card text-text border border-border shadow-2xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
+            data-track-exempt="backdrop: modal container; stops backdrop dismissal, not an interactive control."
           >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
               <h2 className="text-lg font-serif italic font-bold text-text">Chat settings</h2>
               <button
                 onClick={onClose}
+                {...trackProps(UiElement.CHAT_SETTINGS_OPEN, { action: 'dismiss' })}
                 className="p-2 border border-border hover:border-accent hover:bg-surface-hover transition-colors rounded-lg cursor-pointer"
                 aria-label="Close chat settings"
               >
@@ -123,6 +127,12 @@ export function ChatSettingsSheet({
                     {toggles.map((t) => (
                       <label
                         key={t.key}
+                        {...trackProps(
+                          t.kind === 'notification'
+                            ? UiElement.CHAT_SETTINGS_NOTIFICATION_TOGGLE
+                            : UiElement.CHAT_SETTINGS_PRIVACY_TOGGLE,
+                          { value: settings[t.key] ? 'off' : 'on', targetId: t.key }
+                        )}
                         className="flex items-center justify-between gap-4 cursor-pointer"
                       >
                         <span className="text-sm">{t.label}</span>
@@ -142,9 +152,10 @@ export function ChatSettingsSheet({
                     </label>
                     <select
                       value={settings.lastSeenVisibility}
-                      onChange={(e) =>
-                        void patch({ lastSeenVisibility: e.target.value as LastSeenVisibility })
-                      }
+                      onChange={(e) => {
+                        trackUi(UiElement.CHAT_SETTINGS_LAST_SEEN_SELECT);
+                        void patch({ lastSeenVisibility: e.target.value as LastSeenVisibility });
+                      }}
                       className="w-full p-3 border border-border text-xs bg-surface text-text rounded-xl outline-none focus:border-accent"
                     >
                       <option value="EVERYONE">Everyone</option>
@@ -167,9 +178,10 @@ export function ChatSettingsSheet({
                           defaultDisappearingSeconds: Number(e.target.value) || 0,
                         })
                       }
-                      onBlur={(e) =>
-                        void patch({ defaultDisappearingSeconds: Number(e.target.value) || 0 })
-                      }
+                      onBlur={(e) => {
+                        trackUi(UiElement.CHAT_SETTINGS_DISAPPEARING_SELECT);
+                        void patch({ defaultDisappearingSeconds: Number(e.target.value) || 0 });
+                      }}
                       className="w-full p-3 border border-border text-xs bg-surface text-text rounded-xl outline-none focus:border-accent"
                     />
                   </div>

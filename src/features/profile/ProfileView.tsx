@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useState, useRef, type ReactNode, type ChangeEvent } from 'react';
+import React, { useEffect, useState, useRef, type ReactNode, type ChangeEvent } from 'react';
 import { motion } from 'motion/react';
 import {
   CheckCircle2,
@@ -19,11 +19,8 @@ import {
 } from 'lucide-react';
 import type { UserProfile } from '../../types';
 import { ProfileApi } from '../../api/profile';
-import { SetPasswordCard } from '../../components/profile/SetPasswordCard';
-import { AccountSettingsCard } from '../../components/profile/AccountSettingsCard';
-import { DeviceManagementCard } from '../../components/profile/DeviceManagementCard';
 import { usePreferences } from '../../hooks/use-api';
-import { isPremium, useAppStore } from '../../store/app-store';
+import { useAppStore } from '../../store/app-store';
 import { useToast } from '../../components/common/Toast';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { MediaImage } from '../../components/common/MediaImage';
@@ -33,17 +30,11 @@ import { ModerationBadge } from '../../components/ui/ModerationBadge';
 import { AudioRecorder } from '../../components/profile/AudioRecorder';
 import { ProfilePreviewModal } from '../../components/profile/ProfilePreviewModal';
 import { ProfilePreviewHoverCard } from '../../components/profile/ProfilePreviewHoverCard';
-import { AppearanceCard } from '../../components/profile/AppearanceCard';
 import type { DiscoveryProfileData } from '../discovery/DiscoveryCard';
 import { PhotoStatsBadge, useMyPhotoStats } from '../../components/profile/PhotoStatsBadge';
 import { usePhotoLightbox } from '../../components/common/PhotoLightbox';
+import { UiElement, trackProps, trackUi, Screen } from '../../lib/analytics/analytics';
 
-
-const LivenessVerification = lazy(() =>
-  import('../../components/profile/LivenessVerification').then((module) => ({
-    default: module.LivenessVerification,
-  }))
-);
 
 const GENDER_OPTIONS = [
   { value: 'MALE', label: 'Man' },
@@ -170,18 +161,11 @@ const LANGUAGE_PRESETS = [
 
 export function ProfileView({
   user,
-  onUpgrade,
-  upgrading,
-  onVerified,
 }: {
   key?: string;
   user: UserProfile;
-  onUpgrade?: () => void;
-  upgrading?: boolean;
-  onVerified?: () => void;
 }) {
   const { userState, setCurrentUser } = useAppStore();
-  const premium = useAppStore(isPremium);
   const tierLabel = userState?.subscriptionTier ?? '—';
   const { showToast } = useToast();
   const { prefs, save: savePreferences, saving } = usePreferences(user.id);
@@ -816,6 +800,7 @@ export function ProfileView({
                 setIsHoveringAvatar(false);
                 setShowFullPreview(true);
               }}
+              {...trackProps(UiElement.PROFILE_PREVIEW_OPEN)}
               className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-border hover:border-accent bg-surface cursor-pointer transition-all"
               title="Preview how your profile appears"
             >
@@ -894,6 +879,7 @@ export function ProfileView({
             <button
               type="button"
               onClick={() => setShowFullPreview(true)}
+              {...trackProps(UiElement.PROFILE_PREVIEW_OPEN)}
               className="w-full max-w-xs mx-auto py-2 bg-surface hover:bg-surface-hover border border-border text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer text-text"
             >
               <Eye className="w-4 h-4" /> Preview Profile
@@ -910,6 +896,7 @@ export function ProfileView({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingPhoto || photos.length >= 6}
+              {...trackProps(UiElement.PROFILE_EDIT_PHOTO_ADD)}
               className="py-1.5 px-4 bg-accent text-bg text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-40"
             >
               {uploadingPhoto ? <LoadingSpinner /> : <Plus className="w-3.5 h-3.5" />} Add
@@ -926,6 +913,7 @@ export function ProfileView({
                   type="button"
                   onClick={() => openOwnPhoto(index)}
                   aria-label={`View photo ${index + 1} full screen`}
+                  {...trackProps(UiElement.PROFILE_PHOTO_OPEN, { index })}
                   className="block w-full h-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                 >
                   <MediaImage
@@ -943,6 +931,7 @@ export function ProfileView({
                 <button
                   type="button"
                   onClick={() => handleRemovePhoto(index)}
+                  {...trackProps(UiElement.PROFILE_EDIT_PHOTO_REMOVE)}
                   className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-all shadow z-10"
                   title="Remove Photo"
                 >
@@ -957,6 +946,7 @@ export function ProfileView({
                   <button
                     type="button"
                     onClick={() => setPrimaryPhoto(index)}
+                    {...trackProps(UiElement.PROFILE_EDIT_PHOTO_SET_PRIMARY)}
                     className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/70 hover:bg-accent hover:text-bg text-white text-[9px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all shadow z-10 whitespace-nowrap"
                   >
                     Set Profile Pic
@@ -967,6 +957,7 @@ export function ProfileView({
             {photos.length < 6 && (
               <div
                 onClick={() => fileInputRef.current?.click()}
+                {...trackProps(UiElement.PROFILE_EDIT_PHOTO_ADD)}
                 className="aspect-[3/4] border-2 border-dashed border-border hover:border-accent flex flex-col items-center justify-center gap-2 cursor-pointer text-text-muted hover:text-accent p-4 text-center transition-all"
               >
                 <Plus className="w-5 h-5" />
@@ -1007,6 +998,7 @@ export function ProfileView({
                 <button
                   type="button"
                   onClick={() => removePrompt(p.promptId)}
+                  {...trackProps(UiElement.PROFILE_EDIT_PROMPT_REMOVE)}
                   className="text-text-muted hover:text-red-600 p-1"
                   title="Remove prompt"
                 >
@@ -1022,7 +1014,10 @@ export function ProfileView({
             </label>
             <select
               value={newPromptId}
-              onChange={(e) => setNewPromptId(e.target.value)}
+              onChange={(e) => {
+                trackUi(UiElement.SHARED_PROMPT_PRESET_SELECT, { context: Screen.PROFILE_EDIT });
+                setNewPromptId(e.target.value);
+              }}
               className="field-input text-xs font-bold"
             >
               {PROMPT_PRESETS.map((preset) => (
@@ -1041,6 +1036,7 @@ export function ProfileView({
               <button
                 type="button"
                 onClick={addPrompt}
+                {...trackProps(UiElement.PROFILE_EDIT_PROMPT_ADD)}
                 className="py-2 px-5 bg-accent text-bg text-xs font-bold uppercase tracking-widest hover:bg-accent/90 transition-all shadow"
               >
                 Save
@@ -1057,6 +1053,7 @@ export function ProfileView({
               <button
                 type="button"
                 onClick={() => setShowAudioRecorder(true)}
+                {...trackProps(UiElement.PROFILE_EDIT_VOICE_ADD)}
                 className="py-2 px-4 border border-border hover:border-accent text-[10px] font-black uppercase tracking-widest text-text hover:text-accent transition-all flex items-center gap-1.5"
               >
                 <Mic className="w-3.5 h-3.5" /> Add Voice Note
@@ -1083,6 +1080,7 @@ export function ProfileView({
                 <button
                   type="button"
                   onClick={togglePlayAudio}
+                  {...trackProps(UiElement.PROFILE_VOICE_PLAY, { value: isPlayingAudio ? 'pause' : 'play' })}
                   className="w-10 h-10 rounded-full bg-accent text-bg flex items-center justify-center shadow hover:bg-accent/90 shrink-0"
                 >
                   {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-1" />}
@@ -1118,6 +1116,7 @@ export function ProfileView({
               <button
                 type="button"
                 onClick={handleRemoveAudio}
+                {...trackProps(UiElement.PROFILE_EDIT_VOICE_REMOVE)}
                 className="text-text-muted hover:text-red-600 p-2 shrink-0 ml-4"
                 title="Remove Voice Note"
               >
@@ -1191,6 +1190,7 @@ export function ProfileView({
                     key={g.value}
                     type="button"
                     onClick={() => setGender(g.value)}
+                    {...trackProps(UiElement.PROFILE_EDIT_CHOICE_SELECT, { targetId: g.value })}
                     className={`py-2.5 px-3 text-[10px] font-black uppercase tracking-widest border transition-all ${
                       gender === g.value
                         ? 'bg-accent text-bg border-accent shadow-sm'
@@ -1215,6 +1215,7 @@ export function ProfileView({
                       key={g.value}
                       type="button"
                       onClick={() => toggleInterestedIn(g.value)}
+                      {...trackProps(UiElement.PROFILE_EDIT_CHOICE_SELECT, { targetId: g.value })}
                       className={`py-2.5 px-3 text-[10px] font-black uppercase tracking-widest border transition-all flex items-center justify-center gap-1.5 ${
                         active
                           ? 'bg-accent text-bg border-accent shadow-sm'
@@ -1438,6 +1439,7 @@ export function ProfileView({
                       key={lang.value}
                       type="button"
                       onClick={() => toggleLanguage(lang.value)}
+                      {...trackProps(UiElement.PROFILE_EDIT_CHOICE_SELECT, { targetId: lang.value })}
                       className={`py-1.5 px-3 text-[10px] font-bold rounded-full border transition-all ${
                         active
                           ? 'bg-accent text-bg border-accent shadow-sm'
@@ -1463,6 +1465,7 @@ export function ProfileView({
                       key={interest}
                       type="button"
                       onClick={() => toggleInterest(interest)}
+                      {...trackProps(UiElement.PROFILE_EDIT_CHOICE_SELECT, { targetId: interest })}
                       className={`py-1.5 px-3 text-[10px] font-bold rounded-full border transition-all ${
                         active
                           ? 'bg-accent text-bg border-accent shadow-sm'
@@ -1482,39 +1485,12 @@ export function ProfileView({
           <button
             onClick={handleSaveMatchingDetails}
             disabled={savingProfile}
+            {...trackProps(UiElement.PROFILE_EDIT_SAVE)}
             className="flex-1 py-5 bg-accent text-bg text-[11px] font-black uppercase tracking-[0.4em] hover:scale-[1.01] shadow-2xl transition-all disabled:opacity-40"
           >
             {savingProfile ? 'Saving Changes…' : 'Save Changes'}
           </button>
         </div>
-
-        {userState != null && !premium && (
-          <div className="bg-accent/5 border border-accent/20 p-8 space-y-4">
-            <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent">
-              More with Premium
-            </div>
-            <p className="text-xs opacity-60 leading-relaxed max-w-xl">
-              Get read receipts, delivery confirmations, the option to delete chats for everyone,
-              and room for more connections at once.
-            </p>
-            <button
-              onClick={onUpgrade}
-              disabled={upgrading}
-              className="w-full py-4 bg-accent text-bg text-[11px] font-black uppercase tracking-[0.4em] hover:scale-[1.01] transition-all disabled:opacity-40"
-            >
-              {upgrading ? 'Upgrading…' : 'Upgrade to Premium'}
-            </button>
-          </div>
-        )}
-
-        <AppearanceCard />
-        <AccountSettingsCard />
-        <DeviceManagementCard />
-        <SetPasswordCard />
-
-        <Suspense fallback={null}>
-          <LivenessVerification userId={user.id} verified={Boolean(user.verified)} onVerified={onVerified} />
-        </Suspense>
       </div>
 
       <ProfilePreviewModal

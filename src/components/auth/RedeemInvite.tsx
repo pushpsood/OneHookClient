@@ -9,6 +9,7 @@ import { SiteFooter } from '../common/SiteFooter';
 import { SOCIALS } from '../common/socials';
 import { WEB_SIGNUP_ENABLED } from '../../config/signup.config';
 import { SignupInAppNotice } from './SignupInAppNotice';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 type Step = 'invite' | 'phone' | 'otp';
 
@@ -270,6 +271,7 @@ function RedeemInviteFlow() {
                     href="/privacy"
                     target="_blank"
                     rel="noreferrer"
+                    {...trackProps(UiElement.LANDING_POLICY_LINK)}
                     className="underline underline-offset-2 hover:opacity-100"
                   >
                     Privacy Policy
@@ -279,6 +281,7 @@ function RedeemInviteFlow() {
                     href="/terms"
                     target="_blank"
                     rel="noreferrer"
+                    {...trackProps(UiElement.LANDING_POLICY_LINK)}
                     className="underline underline-offset-2 hover:opacity-100"
                   >
                     Terms
@@ -297,6 +300,9 @@ function RedeemInviteFlow() {
                 (step === 'phone' && !phone.trim()) ||
                 (step === 'otp' && (!otp.trim() || !agreed))
               }
+              {...trackProps(UiElement.REDEEM_INVITE_SUBMIT, {
+                value: step === 'invite' ? 'validate_invite' : step === 'phone' ? 'send_otp' : 'create_account',
+              })}
               className="w-full py-4 bg-accent text-white text-xs font-black uppercase tracking-[0.3em] rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -326,6 +332,7 @@ function RedeemInviteFlow() {
                 type="button"
                 onClick={handleResendOtp}
                 disabled={loading || resendLoading || resendCooldown > 0}
+                {...trackProps(UiElement.REDEEM_INVITE_RESEND_CODE)}
                 className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {resendLoading ? (
@@ -351,6 +358,7 @@ function RedeemInviteFlow() {
                   setStep(step === 'otp' ? 'phone' : 'invite');
                 }}
                 disabled={loading || resendLoading}
+                {...trackProps(UiElement.REDEEM_INVITE_BACK)}
                 className="w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors disabled:opacity-50"
               >
                 Back
@@ -362,6 +370,7 @@ function RedeemInviteFlow() {
             <button
               type="button"
               onClick={() => navigate('/login')}
+              {...trackProps(UiElement.REDEEM_INVITE_LOGIN)}
               className="w-full py-3 border border-border bg-white text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors"
             >
               Already a member? Sign in
@@ -379,6 +388,11 @@ function RedeemInviteFlow() {
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`OneHook on ${label}`}
+                  {...trackProps(UiElement.LANDING_SOCIAL_LINK, {
+                    value: ['instagram', 'facebook', 'x', 'youtube', 'linkedin', 'tiktok', 'threads'].includes(label.toLowerCase())
+                      ? label.toLowerCase()
+                      : 'other',
+                  })}
                   className="hover:opacity-100 transition-opacity"
                 >
                   <Icon className="w-[18px] h-[18px]" />

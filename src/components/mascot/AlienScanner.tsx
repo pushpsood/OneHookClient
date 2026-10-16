@@ -18,6 +18,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Instagram, Youtube } from 'lucide-react';
 import { AiSparkle } from './AiSparkle';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 interface AlienScannerProps {
   /** Fixed size in pixels (square). Omit to let the container control size (e.g. h-full). */
@@ -319,6 +320,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
               rel="noreferrer"
               className="hover:opacity-60 transition-opacity"
               onClick={(e) => e.stopPropagation()}
+              {...trackProps(UiElement.LANDING_SOCIAL_LINK, { value: 'instagram' })}
               aria-label="Instagram"
             >
               <Instagram className="w-4 h-4" />
@@ -329,6 +331,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
               rel="noreferrer"
               className="hover:opacity-60 transition-opacity flex items-center justify-center"
               onClick={(e) => e.stopPropagation()}
+              {...trackProps(UiElement.LANDING_SOCIAL_LINK, { value: 'youtube' })}
               aria-label="YouTube"
             >
               <Youtube className="w-5 h-5" />
@@ -341,6 +344,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
         <motion.button
           type="button"
           onClick={onClick}
+          {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'mascot' })}
           onPointerDown={() => {
             // Remember that the upcoming focus came from a pointer, not the keyboard.
             pointerFocusRef.current = true;

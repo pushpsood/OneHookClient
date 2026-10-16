@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { Eye, Sparkles } from 'lucide-react';
 import { DiscoveryCard, type DiscoveryProfileData } from '../../features/discovery/DiscoveryCard';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 interface ProfilePreviewHoverCardProps {
   isVisible: boolean;
@@ -27,6 +28,7 @@ export function ProfilePreviewHoverCard({
             {/* Header / Click to expand cue */}
             <div
               onClick={onClickFullPreview}
+              {...trackProps(UiElement.PROFILE_PREVIEW_OPEN)}
               className="bg-accent text-bg px-4 py-2.5 flex items-center justify-between text-[9px] uppercase font-black tracking-widest cursor-pointer hover:bg-accent/90 transition-colors"
             >
               <span className="flex items-center gap-1.5">

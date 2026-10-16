@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, Loader } from 'lucide-react';
 import { ChatEncryptionManager } from '../../lib/chat-encryption';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * The floor of the unlock ladder: abandon unreadable history and start a working epoch.
@@ -102,6 +103,7 @@ export function HistoryResetDialog({
             </p>
             <button
               onClick={close}
+              {...trackProps(UiElement.CHAT_HISTORY_RESET_CONFIRM, { action: 'dismiss' })}
               className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity"
             >
               Back to chat
@@ -144,6 +146,7 @@ export function HistoryResetDialog({
               <button
                 onClick={() => void performReset()}
                 disabled={!canReset}
+                {...trackProps(UiElement.CHAT_HISTORY_RESET_CONFIRM)}
                 className="w-full py-4 bg-amber-600 text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity disabled:opacity-30 inline-flex items-center justify-center gap-2"
               >
                 {busy && <Loader className="w-3 h-3 animate-spin" aria-hidden="true" />}
@@ -151,6 +154,7 @@ export function HistoryResetDialog({
               </button>
               <button
                 onClick={close}
+                {...trackProps(UiElement.CHAT_HISTORY_RESET_CONFIRM, { action: 'dismiss' })}
                 className="w-full py-4 border border-border text-[10px] uppercase tracking-[0.3em] font-black hover:border-accent transition-colors"
               >
                 Keep trying to restore

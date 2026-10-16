@@ -3,6 +3,7 @@ import { ShieldCheck, Loader, Camera, RefreshCw, CheckCircle2, AlertTriangle, Cl
 import { LivenessApi, type LivenessStatus } from '../../api/liveness';
 import { cognitoRegion } from '../../utils/env.config';
 import { useToast } from '../common/Toast';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 // The Rekognition detector (and the Amplify UI / liveness SDK + CSS it pulls in)
 // live in a separate chunk that is ONLY downloaded when this dynamic import runs
@@ -252,6 +253,7 @@ export function LivenessVerification({
       {canVerify && (
         <button
           onClick={start}
+          {...trackProps(UiElement.LIVENESS_BEGIN)}
           className="w-full py-4 bg-accent text-bg text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2"
         >
           <Camera className="w-4 h-4" /> {failed ? 'Try again' : 'Verify with a selfie'}
@@ -283,6 +285,7 @@ export function LivenessVerification({
           <p className="text-sm text-red-600 italic">{errorMsg}</p>
           <button
             onClick={start}
+            {...trackProps(UiElement.LIVENESS_RETRY)}
             className="inline-flex items-center gap-2 px-6 py-3 border border-accent text-[10px] font-black uppercase tracking-[0.24em] hover:bg-accent hover:text-bg transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Retry
