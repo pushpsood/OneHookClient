@@ -1,14 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Play, Pause, Trash2, Check } from 'lucide-react';
+import { UiElement, trackProps, hostScreen, type ViewableScreen } from '../../lib/analytics/analytics';
 
 interface AudioRecorderProps {
   onSave: (blob: Blob) => void;
   onCancel: () => void;
+  /** Host screen for the SHARED voice-recorder signals (defaults to a best-effort route lookup). */
+  context?: ViewableScreen;
 }
 
 const MAX_RECORDING_TIME = 30; // 30 seconds
 
-export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
+export function AudioRecorder({ onSave, onCancel, context }: AudioRecorderProps) {
+  const recorderContext = context ?? hostScreen();
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -216,6 +220,7 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
             {!isRecording ? (
               <button
                 onClick={startRecording}
+                {...trackProps(UiElement.SHARED_VOICE_RECORDER, { value: 'record', context: recorderContext })}
                 className="py-2 px-4 bg-red-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-all flex items-center gap-2 shadow"
               >
                 <Mic className="w-3.5 h-3.5" /> Start Recording
@@ -223,6 +228,7 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
             ) : (
               <button
                 onClick={stopRecording}
+                {...trackProps(UiElement.SHARED_VOICE_RECORDER, { value: 'stop', context: recorderContext })}
                 className="py-2 px-4 bg-accent text-bg text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all flex items-center gap-2 shadow animate-pulse"
               >
                 <Square className="w-3.5 h-3.5" /> Stop Recording
@@ -230,6 +236,7 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
             )}
             <button
               onClick={onCancel}
+              {...trackProps(UiElement.SHARED_VOICE_RECORDER, { value: 'cancel', context: recorderContext })}
               className="text-[10px] uppercase font-bold text-text-muted hover:text-text"
             >
               Cancel
@@ -241,6 +248,7 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
           <div className="flex items-center gap-4 w-full">
             <button
               onClick={togglePlayback}
+              {...trackProps(UiElement.SHARED_VOICE_RECORDER, { value: isPlaying ? 'pause' : 'play', context: recorderContext })}
               className="w-10 h-10 rounded-full bg-accent text-bg flex items-center justify-center shadow hover:bg-accent/90 shrink-0"
             >
               {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-1" />}
@@ -275,12 +283,14 @@ export function AudioRecorder({ onSave, onCancel }: AudioRecorderProps) {
           <div className="flex items-center gap-2 mt-2">
             <button
               onClick={handleSave}
+              {...trackProps(UiElement.SHARED_VOICE_RECORDER, { value: 'save', context: recorderContext })}
               className="py-2 px-4 bg-accent text-bg text-[10px] font-black uppercase tracking-widest hover:bg-accent/90 transition-all flex items-center gap-2 shadow"
             >
               <Check className="w-3.5 h-3.5" /> Save
             </button>
             <button
               onClick={handleDiscard}
+              {...trackProps(UiElement.SHARED_VOICE_RECORDER, { value: 'discard', context: recorderContext })}
               className="py-2 px-4 border border-border text-text hover:bg-surface-hover text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
             >
               <Trash2 className="w-3.5 h-3.5" /> Discard

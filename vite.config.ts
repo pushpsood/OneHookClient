@@ -105,6 +105,7 @@ export default defineConfig(({ mode }) => {
           '/terms',
           '/contact',
           '/careers',
+          '/science',
           '/login',
           '/redeem',
         ],

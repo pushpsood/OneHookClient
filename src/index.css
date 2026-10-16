@@ -127,3 +127,77 @@ body {
 .career-input {
   @apply w-full rounded border border-border bg-white px-4 py-3 text-sm outline-none transition-all focus:outline-none focus:ring-2 focus:ring-accent;
 }
+
+/* ── Heartbeat (Science page finale) ─────────────────────────────────────────
+ * One CSS clock drives the logo, its glow, the ripples and the photo, so they can never drift apart.
+ * A calm, resting heart: ~65 bpm. Each beat is "lub" (S1, the stronger contraction) followed ~0.3 s
+ * later by a softer "dub" (S2), then a long relaxed pause. Transform/opacity only, so it runs on the
+ * compositor and stays smooth. Pause (not remove) off-screen so it never snaps mid-beat. */
+:root {
+  --oh-beat: 0.92s;
+}
+
+@keyframes oh-heartbeat {
+  /* lub: ~130 ms swell, ~110 ms release */
+  0% { transform: scale(1); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  14% { transform: scale(1.045); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  26% { transform: scale(0.998); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  /* dub: softer, then a long relaxed rest */
+  37% { transform: scale(1.022); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  56%, 100% { transform: scale(1); }
+}
+
+@keyframes oh-heartglow {
+  0% { opacity: 0.18; animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  14% { opacity: 0.62; animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  26% { opacity: 0.3; animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  37% { opacity: 0.45; animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  70%, 100% { opacity: 0.18; }
+}
+
+@keyframes oh-heart-ripple {
+  0% { transform: scale(0.42); opacity: 0; }
+  2.25% { opacity: 0.55; }
+  100% { transform: scale(5.2); opacity: 0; }
+}
+
+/* The photo breathes with the beat, very slightly. */
+@keyframes oh-photo-pulse {
+  0% { transform: scale(1); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  14% { transform: scale(1.006); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  37% { transform: scale(1.003); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  70%, 100% { transform: scale(1); }
+}
+
+.oh-heartbeat,
+.oh-heartglow,
+.oh-heart-ripple,
+.oh-photo-pulse {
+  animation-duration: var(--oh-beat);
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+.oh-heartbeat { animation-name: oh-heartbeat; transform-box: fill-box; transform-origin: center; }
+.oh-heartglow { animation-name: oh-heartglow; }
+.oh-photo-pulse { animation-name: oh-photo-pulse; transform-origin: var(--oh-origin, 50% 30%); }
+.oh-heart-ripple {
+  animation-name: oh-heart-ripple;
+  animation-duration: calc(var(--oh-beat) * 4);
+  animation-timing-function: cubic-bezier(0.16, 0.6, 0.3, 1);
+}
+.oh-beat-paused .oh-heartbeat,
+.oh-beat-paused .oh-heartglow,
+.oh-beat-paused .oh-heart-ripple,
+.oh-beat-paused .oh-photo-pulse {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oh-heartbeat,
+  .oh-heartglow,
+  .oh-heart-ripple,
+  .oh-photo-pulse {
+    animation: none;
+  }
+  .oh-heart-ripple { opacity: 0; }
+}

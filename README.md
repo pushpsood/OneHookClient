@@ -73,6 +73,14 @@ When the production backend has been deployed and validated, add a source-contro
 then change only the production build's `VITE_BACKEND_STAGE` selector. Do not switch production URLs
 independently in pipeline settings.
 
+## Mr OneHook member chat
+
+The signed-in chat surface uses `POST /api/member/product-connection-chat` with the Cognito **ID token** (the member route verifies `aud` and reads the member's `roles`/tier from claims the access token does not carry). Members can choose product-only mode or one active match. Match messages remain end-to-end encrypted and are searched only after local decryption; when the service returns `needsMoreContext`, the browser selects bounded readable excerpts, displays the exact excerpt review panel, and sends them only after confirmation. Excerpts carry only `speaker`, `sentAt`, and `text` and are never persisted in the local Mr OneHook transcript.
+
+Non-FREE tiers request server-side AI-session persistence, while the server remains authoritative. Returned session IDs are stored per user and product/match scope; stale, expired, denied, or unavailable sessions are forgotten and the same question is retried without persistence. The public landing widget remains separate on `POST /api/public/product-chat` without an authorization header.
+
+**Entitlement.** Mr OneHook is gated by the `context.chat` permission, granted to members in the `mr-onehook` Cognito group (the backend returns `403 INSUFFICIENT_PERMISSION` otherwise). The client classifies terminal availability — `NOT_ENTITLED` (403), `NOT_AUTHENTICATED` (401 `AUTH_REQUIRED`/`INVALID_ACCESS_TOKEN`), `NOT_CONFIGURED` (404/503) — via `classifyMemberChatAvailability`, surfaces a clear one-time message, and disables the composer rather than showing a retryable error. A recognised-but-unrelated code (e.g. a session or per-request validation code) is handled on its own path and never gates the feature.
+
 ## Engineering Policy: No Test Code in Production (strict)
 
 **Test, mock, and local-development code must never reach a production artifact, and must not be

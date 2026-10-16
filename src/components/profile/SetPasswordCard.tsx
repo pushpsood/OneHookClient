@@ -4,6 +4,7 @@ import { getCognitoAuth } from '../../lib/cognito-auth';
 import { useToast } from '../common/Toast';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/app-store';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * Lets a signed-in member know how to set an account password.
@@ -49,6 +50,7 @@ export function SetPasswordCard() {
         </p>
         <button
           onClick={handleSignOutToSetPassword}
+          {...trackProps(UiElement.SETTINGS_PASSWORD_SET)}
           className="w-full py-4 bg-accent text-bg text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity"
         >
           Sign Out & Set Password

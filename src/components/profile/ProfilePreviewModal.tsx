@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Eye } from 'lucide-react';
 import { DiscoveryCard, type DiscoveryProfileData } from '../../features/discovery/DiscoveryCard';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 interface ProfilePreviewModalProps {
   isOpen: boolean;
@@ -48,6 +49,7 @@ export function ProfilePreviewModal({
             onClick={onClose}
             className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
             aria-hidden="true"
+            data-track-exempt="backdrop: click-away that dismisses the profile preview; the explicit close control is tracked."
           />
 
           {/* Modal Container */}
@@ -72,6 +74,7 @@ export function ProfilePreviewModal({
               <button
                 type="button"
                 onClick={onClose}
+                {...trackProps(UiElement.PROFILE_PREVIEW_OPEN, { action: 'dismiss' })}
                 className="p-1 text-bg/70 hover:text-bg hover:bg-bg/10 rounded transition-colors cursor-pointer"
                 title="Close (Esc)"
               >

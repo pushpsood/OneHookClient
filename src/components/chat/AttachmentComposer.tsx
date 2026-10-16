@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactN
 import { Film, ImageIcon, Mic, Paperclip, Square, Trash2 } from 'lucide-react';
 import type { AttachmentKind } from '../../lib/chat-attachments';
 import { downsampleWaveform } from '../../lib/attachment-media';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * Composer controls for attachments: a picker (image / video / file) and a voice-note recorder.
@@ -56,20 +57,21 @@ export function AttachmentComposer({ disabled, onPickFile, onVoiceNote }: Attach
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-label="Add an attachment"
+          {...trackProps(UiElement.CHAT_ATTACH_BUTTON)}
           className="p-2 text-accent hover:opacity-60 transition-opacity disabled:opacity-30"
         >
           <Paperclip className="w-4 h-4" />
         </button>
         {menuOpen && (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+            <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} aria-hidden="true" data-track-exempt="backdrop: click-away that closes the attachment menu." />
             <div
               role="menu"
               className="absolute bottom-full left-0 mb-2 w-40 bg-surface-card border border-border shadow-xl z-40 py-1 rounded-xl text-text overflow-hidden"
             >
-              <MenuItem icon={<ImageIcon className="w-4 h-4" />} label="Photo" onClick={() => pick(imageInputRef)} />
-              <MenuItem icon={<Film className="w-4 h-4" />} label="Video" onClick={() => pick(videoInputRef)} />
-              <MenuItem icon={<Paperclip className="w-4 h-4" />} label="File" onClick={() => pick(fileInputRef)} />
+              <MenuItem icon={<ImageIcon className="w-4 h-4" />} label="Photo" onClick={() => pick(imageInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'photo_video' })} />
+              <MenuItem icon={<Film className="w-4 h-4" />} label="Video" onClick={() => pick(videoInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'photo_video' })} />
+              <MenuItem icon={<Paperclip className="w-4 h-4" />} label="File" onClick={() => pick(fileInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'file' })} />
             </div>
           </>
         )}
@@ -85,12 +87,13 @@ export function AttachmentComposer({ disabled, onPickFile, onVoiceNote }: Attach
   );
 }
 
-function MenuItem({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+function MenuItem({ icon, label, onClick, trackAttrs }: { icon: ReactNode; label: string; onClick: () => void; trackAttrs?: Record<string, string> }) {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
+      {...trackAttrs}
       className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-hover transition-colors text-text cursor-pointer"
     >
       {icon}
@@ -218,6 +221,7 @@ function VoiceRecorderButton({
         onClick={() => void start()}
         disabled={disabled}
         aria-label="Record a voice note"
+        {...trackProps(UiElement.CHAT_VOICE_RECORD_START)}
         className="p-2 text-accent hover:opacity-60 transition-opacity disabled:opacity-30"
       >
         <Mic className="w-4 h-4" />
@@ -232,6 +236,7 @@ function VoiceRecorderButton({
         type="button"
         onClick={cancel}
         aria-label="Discard voice note"
+        {...trackProps(UiElement.CHAT_VOICE_RECORD_CANCEL)}
         className="p-2 text-accent hover:opacity-60 transition-opacity"
       >
         <Trash2 className="w-4 h-4" />
@@ -244,6 +249,7 @@ function VoiceRecorderButton({
         type="button"
         onClick={stop}
         aria-label="Stop and send voice note"
+        {...trackProps(UiElement.CHAT_VOICE_SEND)}
         className="p-2 text-accent hover:opacity-60 transition-opacity"
       >
         <Square className="w-4 h-4 fill-current" />

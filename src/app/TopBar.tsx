@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, Sun, Moon } from 'lucide-react';
 import { BrandWordmark } from '../components/common/BrandWordmark';
 import { useTheme } from '../lib/theme';
+import { UiElement, trackProps } from '../lib/analytics/analytics';
 import type { AppTab } from './BottomTabBar';
 
 interface TopBarProps {
@@ -47,6 +48,7 @@ export function TopBar({
                 onClick={onBack}
                 aria-label="Go back"
                 title="Go back"
+                {...trackProps(UiElement.NAV_BACK)}
                 className="w-9 h-9 flex items-center justify-center text-text hover:bg-surface-hover rounded-xl transition-colors cursor-pointer -ml-1"
               >
                 <ArrowLeft className="w-5 h-5 stroke-[1.75]" />
@@ -63,6 +65,7 @@ export function TopBar({
               onClick={() => onNavigateToDiscovery?.()}
               title="OneHook Home"
               aria-label="OneHook Home"
+              {...trackProps(UiElement.NAV_HOME_LOGO)}
             >
               <BrandWordmark className="text-xl sm:text-2xl font-bold tracking-tight text-text group-hover/logo:opacity-85 transition-opacity" text="OneHook" />
               {premium && (
@@ -93,6 +96,7 @@ export function TopBar({
               onClick={toggleTheme}
               aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               title={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: resolvedTheme === 'dark' ? 'light' : 'dark' })}
               className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
             >
               {resolvedTheme === 'dark' ? (

@@ -1,5 +1,6 @@
 import { Sun, Moon, Smartphone, Check } from 'lucide-react';
 import { useTheme, type Theme } from '../../lib/theme';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 export function AppearanceCard() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -66,6 +67,7 @@ export function AppearanceCard() {
               key={opt.id}
               type="button"
               onClick={() => setTheme(opt.id)}
+              {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: opt.id })}
               className={`relative flex flex-col p-4 rounded-xl border text-left transition-all cursor-pointer ${
                 isSelected
                   ? 'border-ig-blue ring-2 ring-ig-blue/20 bg-surface'

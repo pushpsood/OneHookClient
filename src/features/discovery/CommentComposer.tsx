@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { X, Send, Image as ImageIcon, Video, Volume2, MessageSquareQuote, Sparkles, Tag } from 'lucide-react';
 import { LIKE_COMMENT_MAX_CHARS } from '../../api/rest';
 import type { LikeTarget, LikeTargetType } from './like-target';
-import { trackLikeComposerOpen, trackLikeCommentAbandoned } from '../../lib/analytics/analytics';
+import { trackLikeComposerOpen, trackLikeCommentAbandoned, UiElement, trackProps } from '../../lib/analytics/analytics';
 
 const TYPE_META: Record<LikeTargetType, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   PHOTO: { label: 'Photo', icon: ImageIcon },
@@ -111,6 +111,7 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel, kind =
       role="dialog"
       aria-modal="true"
       aria-label={`Comment on ${targetName}'s ${meta.label.toLowerCase()}`}
+      data-track-exempt="backdrop: click-away that cancels the like composer; the explicit cancel control (like_composer.cancel) is tracked."
     >
       <motion.div
         initial={{ y: 24, opacity: 0 }}
@@ -118,6 +119,7 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel, kind =
         exit={{ y: 24, opacity: 0 }}
         className="w-full max-w-[460px] bg-white border border-border shadow-2xl"
         onClick={(e) => e.stopPropagation()}
+        data-track-exempt="backdrop: modal container; stops backdrop dismissal, not an interactive control."
       >
         {/* Header: what is being commented on */}
         <div className="flex items-start justify-between gap-4 p-5 border-b border-border">
@@ -139,6 +141,7 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel, kind =
             onClick={onCancel}
             disabled={submitting}
             aria-label="Cancel"
+            {...trackProps(UiElement.LIKE_COMPOSER_CANCEL)}
             className="shrink-0 w-8 h-8 rounded-full border border-border flex items-center justify-center hover:bg-bg transition-colors disabled:opacity-40 cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -179,6 +182,7 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel, kind =
               type="button"
               onClick={onCancel}
               disabled={submitting}
+              {...trackProps(UiElement.LIKE_COMPOSER_CANCEL)}
               className="flex-1 py-3.5 border border-border text-[10px] font-bold uppercase tracking-[0.3em] hover:bg-bg transition-colors disabled:opacity-40 cursor-pointer"
             >
               Cancel
@@ -187,6 +191,7 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel, kind =
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
+              {...trackProps(UiElement.LIKE_COMPOSER_SEND)}
               className="flex-1 py-3.5 bg-accent text-white text-[10px] font-bold uppercase tracking-[0.3em] hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow"
             >
               <Send className="w-3.5 h-3.5" /> {submitting ? 'Sending…' : isRose ? 'Send Rose 🌹' : 'Send Like'}

@@ -4,9 +4,13 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/telemetry-contract.mjs --banner-only",
     "dev": "vite --port=3000 --mode development",
+    "prebuild": "node scripts/telemetry-contract.mjs",
     "build": "vite build --mode production",
+    "prebuild:dev": "node scripts/telemetry-contract.mjs",
     "build:dev": "vite build --mode development",
+    "prebuild:prod": "node scripts/telemetry-contract.mjs",
     "build:prod": "vite build --mode production",
     "preview": "vite preview",
     "clean": "rm -rf dist node_modules package-lock.json",
@@ -27,7 +31,9 @@
     "diff:pipeline": "npx cdk diff OneHook-Frontend-Pipeline --app 'npx tsx infra/pipeline/pipeline-app.ts'",
     "deploy:pipeline": "npx cdk deploy OneHook-Frontend-Pipeline --app 'npx tsx infra/pipeline/pipeline-app.ts' --require-approval broadening",
     "cdk:deploy": "npm run build && npx cdk deploy --all --app 'npx tsx infra/stacks/frontend-app.ts' --require-approval never",
-    "deploy:prod": "npm run cdk:deploy -- --context env=prod --require-approval broadening"
+    "deploy:prod": "npm run cdk:deploy -- --context env=prod --require-approval broadening",
+    "telemetry:contract": "node scripts/telemetry-contract.mjs",
+    "prepare": "node scripts/install-git-hooks.mjs"
   },
   "dependencies": {
     "@aws-amplify/ui-react": "^6.15.5",

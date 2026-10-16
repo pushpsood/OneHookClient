@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePhotoLightbox } from '../common/PhotoLightbox';
 import {
   AlertTriangle,
   Download,
@@ -13,6 +14,7 @@ import {
 import type { AttachmentEnvelope } from '../../lib/chat-attachments';
 import type { AttachmentObjectUrlCache } from '../../lib/attachment-transport';
 import type { AttachmentTransferState } from '../../hooks/use-api';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * Renders one attachment message: image, video, voice note (audio) or arbitrary file.
@@ -201,6 +203,7 @@ export function AttachmentBubble({
         <button
           type="button"
           onClick={onReportPeerMedia}
+          {...trackProps(UiElement.CHAT_REPORT_BLOCK)}
           className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] font-black opacity-60 hover:opacity-100 transition-opacity"
         >
           <Flag className="w-3 h-3" aria-hidden="true" />
@@ -259,6 +262,7 @@ function OutgoingOverlay({
           <button
             type="button"
             onClick={onRetry}
+            {...trackProps(UiElement.CHAT_ATTACHMENT_RETRY, { value: 'upload' })}
             className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] font-black underline hover:opacity-70"
           >
             <RotateCcw className="w-3 h-3" aria-hidden="true" />
@@ -275,7 +279,7 @@ function LoadError({ message, onRetry }: { message?: string; onRetry: () => void
     <div className="flex items-center gap-2 text-xs text-red-500">
       <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
       <span className="flex-1">{message || 'This attachment could not be opened.'}</span>
-      <button type="button" onClick={onRetry} className="underline font-black hover:opacity-70">
+      <button type="button" onClick={onRetry} {...trackProps(UiElement.CHAT_ATTACHMENT_RETRY, { value: 'download' })} className="underline font-black hover:opacity-70">
         Retry
       </button>
     </div>
@@ -333,10 +337,28 @@ function ImageAttachment({
       <DownloadProgress progress={progress} label={`Loading image ${label}`} />
     );
   }
+  return <ChatImageFullscreen url={url} label={label} />;
+}
+
+/**
+ * Decrypted chat image with an in-app full-screen viewer (previously a new browser tab). Local only:
+ * chat media is E2EE, so nothing about it is ever sent to analytics (no trackContext).
+ */
+function ChatImageFullscreen({ url, label }: { url: string; label: string }) {
+  const { open, lightbox } = usePhotoLightbox({ photos: [url], ownerName: label });
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="block">
-      <img src={url} alt={label} className="max-w-[16rem] max-h-80 rounded object-contain" />
-    </a>
+    <>
+      <button
+        type="button"
+        onClick={() => open(0)}
+        aria-label={`View ${label} full screen`}
+        {...trackProps(UiElement.CHAT_MEDIA_OPEN)}
+        className="block cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent rounded"
+      >
+        <img src={url} alt={label} className="max-w-[16rem] max-h-80 rounded object-contain" />
+      </button>
+      {lightbox}
+    </>
   );
 }
 
@@ -384,6 +406,7 @@ function RevealCover({ envelope, onReveal }: { envelope: AttachmentEnvelope; onR
     <button
       type="button"
       onClick={onReveal}
+      {...trackProps(UiElement.CHAT_SENSITIVE_REVEAL_CONFIRM)}
       className="relative block w-64 h-40 rounded overflow-hidden group"
       aria-label={`Hidden ${envelope.kind}. ${envelope.caption ? `${envelope.caption}. ` : ''}Click to reveal.`}
     >
@@ -461,6 +484,7 @@ function AudioAttachment({
         onClick={toggle}
         disabled={!url}
         aria-label={playing ? 'Pause voice note' : 'Play voice note'}
+        {...trackProps(UiElement.CHAT_AUDIO_PLAY, { value: playing ? 'pause' : 'play' })}
         className="w-9 h-9 shrink-0 rounded-full border border-current flex items-center justify-center hover:opacity-70 transition-opacity disabled:opacity-40"
       >
         {!url ? (
@@ -534,6 +558,7 @@ function FileAttachment({
           ref={anchorRef}
           href={url}
           download={envelope.name}
+          {...trackProps(UiElement.CHAT_FILE_OPEN)}
           className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] font-black hover:opacity-70"
         >
           <Download className="w-3.5 h-3.5" aria-hidden="true" />
@@ -547,6 +572,7 @@ function FileAttachment({
             setPendingClick(true);
           }}
           disabled={status === 'loading'}
+          {...trackProps(UiElement.CHAT_FILE_OPEN)}
           className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] font-black hover:opacity-70 disabled:opacity-40"
           aria-label={`Download ${envelope.name}`}
         >

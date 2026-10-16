@@ -1,0 +1,35 @@
+################################################################################
+#                                                                              #
+#   ONEHOOK TELEMETRY CONTRACT  -  HARD RULE  -  ENFORCED, NOT OPTIONAL         #
+#                                                                              #
+################################################################################
+
+ 1. EVERY user interaction MUST be reported to the backend.
+    Every button, link, tab, toggle, menu item, dialog button (incl. Cancel /
+    Close / OK), list item and tap gesture emits ONE `ui_interaction` through
+    the platform analytics SDK:
+      web      {...trackProps(UiElement.X)}  or  trackUi(UiElement.X, ...)
+      iOS      control.trackUi(.x)           or  OneHookAnalytics.shared.trackUi(.x)
+      Android  view.setTrackedOnClickListener(UiElement.X) { }  or  OneHookAnalytics.trackUi(...)
+
+ 2. Interaction identifiers are OWNED AND CONTROLLED BY THE BACKEND.
+    Use ONLY the generated UiElement ids. NEVER hand-write an id string.
+    NEVER edit the generated catalog file (TelemetryCatalog.* / telemetryCatalog.ts).
+    Need a new id? Add it to OneHookBackend/packages/telemetry/src/catalog.ts, run
+      npm run telemetry:generate && npm run telemetry:sync
+    and deploy the backend BEFORE shipping the client that uses it.
+    Unregistered or wrong-platform ids are REJECTED by the server and never stored.
+
+ 3. Parity: an element may be missing on a platform ONLY if it is listed, with a
+    reason, in OneHookBackend/packages/telemetry/src/parity/<platform>.ts.
+
+ 4. The ONLY allowed way to leave a press unreported is an annotation:
+      telemetry-exempt: <duplicate|backdrop|gesture|continuous|disabled>: <reason>
+    Cancel, close, OK, decline, retry, links, pickers and menu openers are
+    NOT exemptable. Reviewers: reject any PR that weakens these checks.
+
+ Violations FAIL: (1) every local build (web prebuild, Gradle assemble/bundle,
+ Xcode build phase), (2) the git pre-push hook, so they are never pushed, and
+ (3) CI / the deploy pipeline. "git push --no-verify" does not get past CI.
+ Full rules: OneHookBackend/packages/telemetry/README.md
+################################################################################

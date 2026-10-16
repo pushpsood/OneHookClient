@@ -18,23 +18,13 @@
  *    never trusts it for ordering/KPIs.
  */
 
-export type SignalType =
-  | 'screen_view'
-  | 'card_impression'
-  | 'card_swipe_ui'
-  | 'prompt_view'
-  | 'media_view'
-  | 'section_view'
-  | 'notification_opened'
-  | 'session_heartbeat'
-  | 'like_composer_open'
-  | 'like_comment_abandoned'
-  | 'conversation_opened'
-  | 'compose_abandoned'
-  | 'profile_revisit'
-  | 'hooked_state_view'
-  | 'likes_you_view'
-  | 'safety_ui_open';
+/**
+ * Signal types come from the backend-owned telemetry catalog (generated; see
+ * ./generated/telemetryCatalog.ts). Never hand-write a signal name: the ingest rejects anything that
+ * is not in the catalog.
+ */
+export type { SignalType } from './generated/telemetryCatalog';
+import type { SignalType } from './generated/telemetryCatalog';
 
 export interface Signal {
   clientEventId: string;

@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Fingerprint, Loader, ShieldAlert, ShieldCheck, X, Download } from 'lucide-react';
 import { useRecoveryResponder } from '../../hooks/use-key-recovery';
 import { useAppStore } from '../../store/app-store';
+import { UiElement, trackProps, hostScreen } from '../../lib/analytics/analytics';
 
 /**
  * SOURCE-device side of history recovery.
@@ -113,6 +114,7 @@ export function KeyRecoveryResponder() {
           </div>
           <button
             onClick={() => responder.dismiss()}
+            {...trackProps(UiElement.SHARED_ALERT_DISMISS, { context: hostScreen() })}
             className="w-full py-4 border border-border text-[10px] uppercase tracking-[0.3em] font-black hover:border-accent hover:text-accent transition-colors"
           >
             Got it
@@ -147,6 +149,7 @@ export function KeyRecoveryResponder() {
           </div>
           <button
             onClick={() => responder.dismiss()}
+            {...trackProps(UiElement.SHARED_ALERT_DISMISS, { context: hostScreen() })}
             className="w-full py-4 border border-border text-[10px] uppercase tracking-[0.3em] font-black hover:border-accent hover:text-accent transition-colors"
           >
             Dismiss
@@ -183,6 +186,7 @@ export function KeyRecoveryResponder() {
           <button
             onClick={() => void responder.decline()}
             aria-label="Dismiss"
+            {...trackProps(UiElement.SETTINGS_RECOVERY_APPROVE, { action: 'dismiss' })}
             className="p-1 opacity-40 hover:opacity-100 transition-opacity"
           >
             <X className="w-4 h-4" />
@@ -222,6 +226,7 @@ export function KeyRecoveryResponder() {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={saveQrAsImage}
+                    {...trackProps(UiElement.SETTINGS_RECOVERY_QR_SAVE)}
                     className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
                     title="Save the code as an image to open on another browser on this same computer"
                   >
@@ -262,6 +267,7 @@ export function KeyRecoveryResponder() {
               <button
                 onClick={() => void responder.approve(displayName)}
                 disabled={busy}
+                {...trackProps(UiElement.SETTINGS_RECOVERY_APPROVE)}
                 className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity disabled:opacity-50 inline-flex items-center justify-center gap-2"
               >
                 {busy ? (
@@ -273,6 +279,7 @@ export function KeyRecoveryResponder() {
               </button>
               <button
                 onClick={() => void responder.decline()}
+                {...trackProps(UiElement.SETTINGS_RECOVERY_APPROVE, { action: 'dismiss' })}
                 className="w-full py-4 border border-border text-[10px] uppercase tracking-[0.3em] font-black hover:border-red-500 hover:text-red-500 transition-colors"
               >
                 Not me — decline

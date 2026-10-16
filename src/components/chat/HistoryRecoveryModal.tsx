@@ -11,6 +11,7 @@ import {
 import { useHistoryRecovery } from '../../hooks/use-key-recovery';
 import { QrCameraScanner } from './QrCameraScanner';
 import { HistoryResetDialog } from './HistoryResetDialog';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * NEW-device side of history recovery, as a modal.
@@ -89,6 +90,7 @@ export function HistoryRecoveryModal({
           <button
             onClick={close}
             aria-label="Close"
+            {...trackProps(UiElement.CHAT_HISTORY_RECOVER, { action: 'dismiss' })}
             className="p-1 opacity-40 hover:opacity-100 transition-opacity"
           >
             <X className="w-4 h-4" />
@@ -120,6 +122,7 @@ export function HistoryRecoveryModal({
                       <button
                         onClick={() => void recovery.chooseDevice(device.deviceId)}
                         disabled={recovery.busy}
+                        {...trackProps(UiElement.CHAT_HISTORY_RECOVER_METHOD, { value: 'device', targetId: device.deviceId })}
                         className="w-full flex items-center justify-between gap-4 p-4 border border-border hover:border-accent transition-colors text-left disabled:opacity-50"
                       >
                         <span className="min-w-0">
@@ -203,6 +206,7 @@ export function HistoryRecoveryModal({
               </p>
               <button
                 onClick={onClose}
+                {...trackProps(UiElement.CHAT_HISTORY_RECOVER_STEP, { value: 'done' })}
                 className="w-full py-4 bg-accent text-white text-[10px] uppercase tracking-[0.3em] font-black hover:opacity-90 transition-opacity"
               >
                 Back to chat
@@ -217,6 +221,7 @@ export function HistoryRecoveryModal({
               </p>
               <button
                 onClick={() => void recovery.start()}
+                {...trackProps(UiElement.CHAT_HISTORY_RECOVER_STEP, { value: 'retry' })}
                 className="w-full py-4 border border-border text-[10px] uppercase tracking-[0.3em] font-black hover:border-accent transition-colors"
               >
                 Try again
@@ -236,6 +241,7 @@ export function HistoryRecoveryModal({
               </p>
               <button
                 onClick={() => setResetOpen(true)}
+                {...trackProps(UiElement.CHAT_HISTORY_RECOVER_STEP, { value: 'reset_open' })}
                 className="text-[10px] uppercase tracking-[0.2em] font-bold text-amber-700 underline hover:opacity-70 transition-opacity"
               >
                 Start fresh without old messages

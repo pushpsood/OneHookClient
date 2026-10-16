@@ -10,6 +10,7 @@ import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { SOCIALS } from '../common/socials';
 import { useAppStore } from '../../store/app-store';
+import { UiElement, trackProps, trackScreenView, Screen } from '../../lib/analytics/analytics';
 
 /**
  * Sign in with a phone number OR an email — both support a one-time-code (OTP)
@@ -48,6 +49,11 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
 
   const identifierLabel = identifierMode === 'phone' ? 'phone' : 'email';
+
+  // Analytics: the login screen was shown (one screen_view on mount).
+  useEffect(() => {
+    trackScreenView(Screen.LOGIN);
+  }, []);
 
   /**
    * The Cognito username for the active mode: a normalised E.164 number, or the typed email.
@@ -370,6 +376,7 @@ export function Login() {
                     setIdentifierMode((mode) => (mode === 'phone' ? 'email' : 'phone'));
                     setError(null);
                   }}
+                  {...trackProps(UiElement.LOGIN_IDENTIFIER_MODE, { value: identifierMode === 'phone' ? 'email' : 'phone' })}
                   className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity"
                 >
                   {identifierMode === 'phone' ? 'Use email instead' : 'Use phone number instead'}
@@ -403,6 +410,7 @@ export function Login() {
                     (identifierMode === 'phone' ? !phone.isValid : !identifier.trim()) ||
                     (usePassword && !password.trim())
                   }
+                  {...trackProps(UiElement.LOGIN_SUBMIT, { value: usePassword ? 'password' : 'request_otp' })}
                   className="w-full py-4 bg-accent text-white text-xs font-black uppercase tracking-[0.3em] rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (
@@ -422,6 +430,7 @@ export function Login() {
                     setUsePassword((prev) => !prev);
                     setError(null);
                   }}
+                  {...trackProps(UiElement.LOGIN_PASSWORD_MODE, { value: usePassword ? 'otp' : 'password' })}
                   className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity"
                 >
                   {usePassword ? 'Use a one-time code instead' : 'Sign in with password instead'}
@@ -431,6 +440,7 @@ export function Login() {
                   type="button"
                   onClick={handleForgotPassword}
                   disabled={loading}
+                  {...trackProps(UiElement.LOGIN_FORGOT_PASSWORD)}
                   className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity"
                 >
                   Forgot your password, or need to set one?
@@ -445,6 +455,7 @@ export function Login() {
                 <button
                   type="button"
                   onClick={() => navigate('/redeem')}
+                  {...trackProps(UiElement.LOGIN_REDEEM_INVITE)}
                   className="w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors"
                 >
                   Redeem Invite Code
@@ -454,6 +465,7 @@ export function Login() {
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={loading}
+                  {...trackProps(UiElement.LOGIN_GOOGLE)}
                   className="w-full py-3 border border-blue-500 text-blue-500 text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
                 >
                   <GoogleIcon className="w-4 h-4" /> Sign in with Google
@@ -463,6 +475,7 @@ export function Login() {
                   type="button"
                   onClick={handleAppleSignIn}
                   disabled={loading}
+                  {...trackProps(UiElement.LOGIN_APPLE)}
                   className="w-full py-3 border border-black text-black text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
                 >
                   <AppleIcon className="w-4 h-4" /> Sign in with Apple
@@ -498,6 +511,7 @@ export function Login() {
                 <button
                   type="submit"
                   disabled={loading || resendLoading || !code.trim()}
+                  {...trackProps(UiElement.LOGIN_SUBMIT, { value: 'verify_otp' })}
                   className="w-full py-4 bg-accent text-white text-xs font-black uppercase tracking-[0.3em] rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (
@@ -514,6 +528,7 @@ export function Login() {
                   type="button"
                   onClick={handleResendOtp}
                   disabled={loading || resendLoading || resendCooldown > 0}
+                  {...trackProps(UiElement.LOGIN_RESEND_CODE)}
                   className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {resendLoading ? (
@@ -532,6 +547,7 @@ export function Login() {
                   type="button"
                   onClick={resetToIdentifier}
                   disabled={loading || resendLoading}
+                  {...trackProps(UiElement.LOGIN_CLOSE)}
                   className="w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors disabled:opacity-50"
                 >
                   Use a different account
@@ -600,6 +616,7 @@ export function Login() {
                 <button
                   type="submit"
                   disabled={loading || !code.trim() || !password.trim() || !confirmPassword.trim()}
+                  {...trackProps(UiElement.LOGIN_SUBMIT, { value: 'reset_password' })}
                   className="w-full py-4 bg-accent text-white text-xs font-black uppercase tracking-[0.3em] rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (
@@ -615,6 +632,7 @@ export function Login() {
                 <button
                   type="button"
                   onClick={resetToIdentifier}
+                  {...trackProps(UiElement.LOGIN_CLOSE)}
                   className="w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors"
                 >
                   Back to sign in
@@ -637,6 +655,11 @@ export function Login() {
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`OneHook on ${label}`}
+                  {...trackProps(UiElement.LANDING_SOCIAL_LINK, {
+                    value: ['instagram', 'facebook', 'x', 'youtube', 'linkedin', 'tiktok', 'threads'].includes(label.toLowerCase())
+                      ? label.toLowerCase()
+                      : 'other',
+                  })}
                   className="hover:opacity-100 transition-opacity"
                 >
                   <Icon className="w-[18px] h-[18px]" />

@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Smartphone, X } from 'lucide-react';
 import { BrandWordmark } from './BrandWordmark';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 // The platform-aware install smart link: app.onehook.club answers with a 302 to the App Store or
 // Play Store based on the visitor's device (see infra/stacks/frontend-stack.ts), so one URL works
@@ -31,6 +32,7 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
           type="button"
           onClick={() => navigate('/')}
           aria-label="OneHook home"
+          {...trackProps(UiElement.LANDING_HOME_LINK)}
           className="hover:opacity-80 transition-opacity"
         >
           <BrandWordmark className="text-xl sm:text-2xl font-bold tracking-tighter uppercase" />
@@ -50,6 +52,7 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
               href={APP_DOWNLOAD_URL}
               target="_blank"
               rel="noreferrer"
+              {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-full hover:opacity-90 transition-opacity"
             >
               <Smartphone className="w-3.5 h-3.5" /> Open in app
@@ -62,6 +65,7 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
               <button
                 type="button"
                 onClick={onApply}
+                {...trackProps(UiElement.LANDING_CAREERS_APPLY)}
                 className="text-[10px] font-black uppercase tracking-[0.25em] px-4 py-2 bg-accent text-white rounded-full hover:opacity-90 transition-opacity"
               >
                 Apply
@@ -71,6 +75,7 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
               type="button"
               onClick={() => navigate('/')}
               aria-label="Close and return home"
+              {...trackProps(UiElement.LANDING_HOME_LINK)}
               className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border opacity-60 hover:opacity-100 hover:bg-black/5 transition-all"
             >
               <X className="w-5 h-5" />

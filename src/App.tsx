@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { UserState } from './types';
 import { useAppStore } from './store/app-store';
@@ -16,6 +16,8 @@ import { Terms } from './components/legal/Terms';
 import { Pricing } from './components/legal/Pricing';
 import { Contact } from './components/legal/Contact';
 import { Careers } from './components/careers/Careers';
+import { Science } from './components/science/Science';
+import { MrOneHookDock } from './components/Chatbot/MrOneHookDock';
 import { getCognitoAuth, initializeCognitoAuth } from './lib/cognito-auth';
 import { config } from './utils/env.config';
 import { AppContent } from './app/AppContent';
@@ -123,10 +125,16 @@ function OnboardingGuard({ children }: { children: ReactNode }) {
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
+  const previousPath = useRef(pathname);
 
   useEffect(() => {
-    if (hash) return;
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    const pageChanged = previousPath.current !== pathname;
+    previousPath.current = pathname;
+    // A new page always starts at its top. `instant` (not `auto`): the site sets
+    // `scroll-behavior: smooth` on <html>, which turns `auto` into a slow animated scroll — from the
+    // bottom of a long page that looked as if the link had not navigated at all. When a hash is
+    // present the destination page then scrolls itself to that section (e.g. Landing's #get-app).
+    if (pageChanged || !hash) window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [pathname, hash]);
 
   return null;
@@ -162,6 +170,7 @@ export default function App() {
       <ToastProvider>
         <Router>
           <ScrollToTop />
+          <MrOneHookDock />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route
@@ -185,6 +194,7 @@ export default function App() {
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/careers" element={<Careers />} />
+            <Route path="/science" element={<Science />} />
             <Route
               path="/auth/setup"
               element={

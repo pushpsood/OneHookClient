@@ -1,4 +1,4 @@
-import { trackConversationOpened, trackProfileRevisit, trackSafetyUiOpen } from '../../lib/analytics/analytics';
+import { trackConversationOpened, trackProfileRevisit, trackSafetyUiOpen, Screen, UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -55,7 +55,18 @@ import {
   getSortOption,
   type SortableConversation,
 } from '../../lib/chat-sort';
-import { useMrOneHookChat, type MrOneHookMessage } from '../../lib/mr-onehook';
+import {
+  useMrOneHookChat,
+  type MrOneHookMessage,
+  type MrOneHookScope,
+  type PendingExcerptReview,
+} from '../../lib/mr-onehook';
+import {
+  selectEphemeralExcerpts,
+  toSelectableMessages,
+  type ExcerptSelectionRequest,
+} from '../../lib/mr-onehook-excerpts';
+import { SubscriptionTier } from '../../types';
 import { ChatSettingsSheet } from '../../components/chat/ChatSettingsSheet';
 import { AttachmentBubble } from '../../components/chat/AttachmentBubble';
 import { AttachmentComposer } from '../../components/chat/AttachmentComposer';
@@ -147,7 +158,7 @@ export function ChatView({
   useEffect(() => {
     if (profileOpen && selection && selection !== MR_ONEHOOK) {
       const peerId = matches.find((m) => m.matchId === selection)?.peerId;
-      trackProfileRevisit(peerId || String(selection), 'chat');
+      trackProfileRevisit(peerId || String(selection), Screen.CHAT);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profileOpen]);
@@ -326,6 +337,9 @@ export function ChatView({
     return [mr, ...rows];
   }, [matches, distances]);
 
+  // Position of the active conversation within the picker list (for CHAT_CONVERSATION_SWITCH index).
+  const selectionIndex = pickerRows.findIndex((r) => r.id === selection);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -346,6 +360,7 @@ export function ChatView({
                 title={avatarLabel}
                 aria-label={avatarLabel}
                 aria-haspopup="dialog"
+                {...trackProps(UiElement.CHAT_CONVERSATION_SWITCHER_OPEN)}
               >
                 <span className="block w-6 h-6 rounded-full overflow-hidden border border-border group-hover:ring-2 group-hover:ring-accent/30 transition-all bg-surface shrink-0">
                   {isMrOneHook ? (
@@ -386,6 +401,7 @@ export function ChatView({
                   aria-haspopup="menu"
                   aria-expanded={shieldOpen}
                   aria-label="Safety and report options"
+                  {...trackProps(UiElement.CHAT_SAFETY_MENU_OPEN)}
                 >
                   <Shield className="w-5 h-5 stroke-[1.75]" />
                 </button>
@@ -397,7 +413,7 @@ export function ChatView({
                 <AnimatePresence>
                   {shieldOpen && (
                     <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShieldOpen(false)} />
+                      <div className="fixed inset-0 z-40" onClick={() => setShieldOpen(false)} data-track-exempt="backdrop: click-away that closes the shield menu." />
                       <motion.div
                         initial={{ opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -413,6 +429,7 @@ export function ChatView({
                             setProfileOpen(true);
                           }}
                           className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                          {...trackProps(UiElement.CHAT_PROFILE_OPEN)}
                         >
                           {isMrOneHook ? 'About Mr.OneHook' : 'View profile'}
                         </button>
@@ -427,6 +444,7 @@ export function ChatView({
                                 void runReportAndBlock('SPAM');
                               }}
                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
+                              {...trackProps(UiElement.CHAT_REPORT_SPAM)}
                             >
                               Report spam
                             </button>
@@ -439,6 +457,7 @@ export function ChatView({
                                 setReportReason('OTHER');
                               }}
                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
+                              {...trackProps(UiElement.CHAT_REPORT_BLOCK)}
                             >
                               Report &amp; block
                             </button>
@@ -453,6 +472,7 @@ export function ChatView({
                             setWallpaperOpen(true);
                           }}
                           className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                          {...trackProps(UiElement.CHAT_WALLPAPER_OPEN)}
                         >
                           Choose wallpaper
                         </button>
@@ -470,6 +490,7 @@ export function ChatView({
                   className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
                   title="Chat settings"
                   aria-label="Chat settings"
+                  {...trackProps(UiElement.CHAT_SETTINGS_OPEN)}
                 >
                   <Settings className="w-5 h-5 stroke-[1.75]" />
                 </button>
@@ -486,6 +507,7 @@ export function ChatView({
                   className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
                   title="Add by username"
                   aria-label="Add someone by username"
+                  {...trackProps(UiElement.CHAT_ADD_HOOK_OPEN)}
                 >
                   <Plus className="w-5 h-5 stroke-[1.75]" />
                 </button>
@@ -509,6 +531,7 @@ export function ChatView({
                 title={avatarLabel}
                 aria-label={avatarLabel}
                 aria-haspopup="dialog"
+                {...trackProps(UiElement.CHAT_CONVERSATION_SWITCHER_OPEN)}
               >
                 <span className="block w-6 h-6 rounded-full overflow-hidden border border-border group-hover:ring-2 group-hover:ring-accent/30 transition-all bg-surface shrink-0">
                   {isMrOneHook ? (
@@ -547,6 +570,7 @@ export function ChatView({
                 aria-haspopup="menu"
                 aria-expanded={shieldOpen}
                 aria-label="Safety and report options"
+                {...trackProps(UiElement.CHAT_SAFETY_MENU_OPEN)}
               >
                 <Shield className="w-5 h-5 stroke-[1.75]" />
               </button>
@@ -558,7 +582,7 @@ export function ChatView({
               <AnimatePresence>
                 {shieldOpen && (
                   <>
-                    <div className="fixed inset-0 z-30" onClick={() => setShieldOpen(false)} />
+                    <div className="fixed inset-0 z-30" onClick={() => setShieldOpen(false)} data-track-exempt="backdrop: click-away that closes the shield menu." />
                     <motion.div
                       initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -574,6 +598,7 @@ export function ChatView({
                           setProfileOpen(true);
                         }}
                         className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                        {...trackProps(UiElement.CHAT_PROFILE_OPEN)}
                       >
                         {isMrOneHook ? 'About Mr.OneHook' : 'View profile'}
                       </button>
@@ -588,6 +613,7 @@ export function ChatView({
                               void runReportAndBlock('SPAM');
                             }}
                             className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
+                            {...trackProps(UiElement.CHAT_REPORT_SPAM)}
                           >
                             Report spam
                           </button>
@@ -600,6 +626,7 @@ export function ChatView({
                               setReportReason('OTHER');
                             }}
                             className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
+                            {...trackProps(UiElement.CHAT_REPORT_BLOCK)}
                           >
                             Report &amp; block
                           </button>
@@ -614,6 +641,7 @@ export function ChatView({
                           setWallpaperOpen(true);
                         }}
                         className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                        {...trackProps(UiElement.CHAT_WALLPAPER_OPEN)}
                       >
                         Choose wallpaper
                       </button>
@@ -630,6 +658,7 @@ export function ChatView({
                 className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
                 title="Chat settings"
                 aria-label="Chat settings"
+                {...trackProps(UiElement.CHAT_SETTINGS_OPEN)}
               >
                 <Settings className="w-5 h-5 stroke-[1.75]" />
               </button>
@@ -645,6 +674,7 @@ export function ChatView({
                 className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
                 title="Add by username"
                 aria-label="Add someone by username"
+                {...trackProps(UiElement.CHAT_ADD_HOOK_OPEN)}
               >
                 <Plus className="w-5 h-5 stroke-[1.75]" />
               </button>
@@ -658,7 +688,12 @@ export function ChatView({
 
       {/* ── ACTIVE CONVERSATION (in-place; header + composer are constant) ── */}
       {isMrOneHook ? (
-        <MrOneHookConversation currentUser={currentUser} wallpaper={wallpaper} />
+        <MrOneHookConversation
+          currentUser={currentUser}
+          wallpaper={wallpaper}
+          matches={matches}
+          tier={userState?.subscriptionTier ?? SubscriptionTier.FREE}
+        />
       ) : loadingMatches && !activeMatch ? (
         <div className="flex-1 flex items-center justify-center">
           <LoadingSpinner size="lg" />
@@ -777,6 +812,7 @@ function Composer({
         <button
           onClick={onSend}
           disabled={disabled || !value.trim()}
+          {...trackProps(UiElement.CHAT_SEND_BUTTON)}
           className="absolute right-0 bottom-3 text-xs font-semibold text-ig-blue hover:opacity-80 transition-opacity disabled:opacity-30 flex items-center gap-1 cursor-pointer"
         >
           Send
@@ -906,7 +942,7 @@ function MatchMessageBody({
         {message.status === 'FAILED' && (
           <div className="mt-2 text-[10px] text-red-300 flex items-center gap-1">
             <span>Didn&rsquo;t send</span>
-            <button onClick={() => onRetryText(decoded.text)} className="underline hover:opacity-70">
+            <button onClick={() => onRetryText(decoded.text)} {...trackProps(UiElement.CHAT_RETRY)} className="underline hover:opacity-70">
               Try again
             </button>
           </div>
@@ -1181,30 +1217,223 @@ function MatchConversation({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mr.OneHook conversation — local-only transcript, never touches E2EE APIs.
+// Mr.OneHook conversation — authenticated member chat. Local-only transcript; it
+// never writes to the E2EE match APIs and is never surfaced as a match. A scope
+// is either product-only or exactly ONE authorized match; match scope can ground
+// answers in locally-decrypted history, but only after the model asks for context
+// and the user explicitly approves the excerpts.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function MrOneHookConversation({
   currentUser,
   wallpaper,
+  matches,
+  tier,
 }: {
   currentUser: UserProfile;
   wallpaper: ChatWallpaper;
+  matches: HydratedMatch[];
+  tier: SubscriptionTier;
 }) {
-  const demographics = useMemo(
-    () => ({
-      gender: currentUser.gender || 'man',
-      sexualPreference: (currentUser.interestedIn || []).join(', '),
-    }),
-    [currentUser.gender, currentUser.interestedIn]
+  // Scope the conversation to product-only (default) or a single match the user picks here.
+  const [scope, setScope] = useState<MrOneHookScope>({ type: 'product' });
+  const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
+
+  const activeMatch =
+    scope.type === 'match' ? matches.find((m) => m.matchId === scope.matchId) ?? null : null;
+
+  // If the chosen match disappears (unmatch/block), fall back to product scope.
+  useEffect(() => {
+    if (scope.type === 'match' && !matches.some((m) => m.matchId === scope.matchId)) {
+      setScope({ type: 'product' });
+    }
+  }, [scope, matches]);
+
+  const activeMatchName =
+    activeMatch?.peerProfile?.displayName || activeMatch?.peerProfile?.name || 'your match';
+
+  return (
+    <>
+      {/* Scope selector: Product-only, or ground answers in one authorized match's local history. */}
+      <div className="shrink-0 px-4 md:px-6 pt-3 pb-2 border-b border-border/60 bg-surface-card/60">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] uppercase tracking-widest font-bold text-text-muted">
+            Context
+          </span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setScopeMenuOpen((v) => !v)}
+              {...trackProps(UiElement.CHAT_MR_ONEHOOK_SCOPE_OPEN)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-xs font-semibold text-text hover:bg-surface-hover transition-colors cursor-pointer"
+              aria-haspopup="menu"
+              aria-expanded={scopeMenuOpen}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-accent" />
+              <span className="max-w-[160px] truncate">
+                {scope.type === 'product' ? 'OneHook (product only)' : activeMatchName}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+            </button>
+            <AnimatePresence>
+              {scopeMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setScopeMenuOpen(false)} data-track-exempt="backdrop: click-away that closes the scope menu." />
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    role="menu"
+                    className="absolute left-0 mt-2 w-64 max-h-72 overflow-y-auto bg-surface-card border border-border rounded-xl shadow-xl z-50 py-1"
+                  >
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={scope.type === 'product'}
+                      onClick={() => {
+                        setScope({ type: 'product' });
+                        setScopeMenuOpen(false);
+                      }}
+                      {...trackProps(UiElement.CHAT_MR_ONEHOOK_SCOPE_SELECT, { targetId: 'product' })}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors flex items-center justify-between text-text cursor-pointer"
+                    >
+                      <span>OneHook (product only)</span>
+                      {scope.type === 'product' && <Check className="w-3.5 h-3.5 text-accent" />}
+                    </button>
+                    {matches.length > 0 && <div className="my-0.5 border-t border-border" />}
+                    {matches.map((m) => {
+                      const name = m.peerProfile?.displayName || m.peerProfile?.name || 'Your Match';
+                      const checked = scope.type === 'match' && scope.matchId === m.matchId;
+                      return (
+                        <button
+                          key={m.matchId}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={checked}
+                          onClick={() => {
+                            setScope({ type: 'match', matchId: m.matchId });
+                            setScopeMenuOpen(false);
+                          }}
+                          {...trackProps(UiElement.CHAT_MR_ONEHOOK_SCOPE_SELECT, { targetId: m.matchId })}
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors flex items-center justify-between text-text cursor-pointer"
+                        >
+                          <span className="truncate">{name}</span>
+                          {checked && <Check className="w-3.5 h-3.5 text-accent shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+          {scope.type === 'match' && (
+            <span className="text-[10px] text-text-muted italic">
+              Mr.OneHook can reference this chat only after you review &amp; approve excerpts.
+            </span>
+          )}
+        </div>
+      </div>
+
+      {scope.type === 'match' && activeMatch ? (
+        <MrOneHookMatchScope
+          key={activeMatch.matchId}
+          currentUser={currentUser}
+          wallpaper={wallpaper}
+          match={activeMatch}
+          matchName={activeMatchName}
+          tier={tier}
+        />
+      ) : (
+        <MrOneHookProductScope currentUser={currentUser} wallpaper={wallpaper} tier={tier} />
+      )}
+    </>
   );
-  const { messages, loading, send } = useMrOneHookChat(currentUser.id, demographics);
+}
+
+/** Product-only Mr.OneHook: no match, no excerpts — the always-available baseline. */
+function MrOneHookProductScope({
+  currentUser,
+  wallpaper,
+  tier,
+}: {
+  currentUser: UserProfile;
+  wallpaper: ChatWallpaper;
+  tier: SubscriptionTier;
+}) {
+  const chat = useMrOneHookChat({
+    userId: currentUser.id,
+    scope: { type: 'product' },
+    tier,
+  });
+  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} />;
+}
+
+/**
+ * Match-scoped Mr.OneHook. Reads the match's decrypted messages via the SAME `useChatMessages` hook
+ * the real conversation uses, and exposes a pure local-search resolver so a `needsMoreContext` turn
+ * can select bounded excerpts from that already-decrypted history for the user to review.
+ */
+function MrOneHookMatchScope({
+  currentUser,
+  wallpaper,
+  match,
+  matchName,
+  tier,
+}: {
+  key?: string;
+  currentUser: UserProfile;
+  wallpaper: ChatWallpaper;
+  match: HydratedMatch;
+  matchName: string;
+  tier: SubscriptionTier;
+}) {
+  const { messages } = useChatMessages(match.matchId, match.peerId || undefined);
+
+  // Stable snapshot of the decrypted turns for the pure selector; recomputed as history changes.
+  const selectable = useMemo(() => toSelectableMessages(messages), [messages]);
+  const selectableRef = useRef(selectable);
+  selectableRef.current = selectable;
+
+  const resolveLocalExcerpts = useCallback(
+    (request: ExcerptSelectionRequest) => selectEphemeralExcerpts(selectableRef.current, request),
+    [],
+  );
+
+  const chat = useMrOneHookChat({
+    userId: currentUser.id,
+    scope: { type: 'match', matchId: match.matchId },
+    tier,
+    resolveLocalExcerpts,
+  });
+
+  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} matchName={matchName} />;
+}
+
+/**
+ * Shared presentational body for both scopes: transcript, typing indicator, the inline excerpt
+ * review panel (shown only when the model asked for more context AND the device found some), and the
+ * composer. The review panel is the explicit consent gate — nothing is shared until the user approves.
+ */
+function MrOneHookChatBody({
+  chat,
+  wallpaper,
+  matchName,
+}: {
+  chat: ReturnType<typeof useMrOneHookChat>;
+  wallpaper: ChatWallpaper;
+  matchName?: string;
+}) {
+  const { messages, loading, mood, pendingReview, availability, send, confirmReview, cancelReview } = chat;
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+  // Terminal availability (not entitled / signed out / not configured): block input entirely. The
+  // reason is already surfaced as an assistant bubble by the hook, so the composer just locks.
+  const unavailable = availability !== 'AVAILABLE';
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [messages, loading, pendingReview]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -1249,6 +1478,18 @@ function MrOneHookConversation({
               </div>
             ))
           )}
+
+          {/* Inline excerpt review — explicit consent before any match message leaves the device. */}
+          {pendingReview && (
+            <ExcerptReviewPanel
+              review={pendingReview}
+              matchName={matchName}
+              onConfirm={() => void confirmReview()}
+              onCancel={cancelReview}
+              disabled={loading}
+            />
+          )}
+
           {loading && (
             <div className="max-w-md">
               <div className="text-[9px] uppercase tracking-widest opacity-40 mb-1">Mr.OneHook</div>
@@ -1267,11 +1508,90 @@ function MrOneHookConversation({
         value={input}
         onChange={setInput}
         onSend={handleSend}
-        disabled={loading}
-        placeholder="Say something to Mr.OneHook…"
+        disabled={loading || pendingReview !== null || unavailable}
+        placeholder={
+          unavailable
+            ? availability === 'NOT_ENTITLED'
+              ? 'Mr.OneHook isn’t available on your account yet.'
+              : availability === 'NOT_AUTHENTICATED'
+                ? 'Sign in again to chat with Mr.OneHook.'
+                : 'Mr.OneHook is temporarily unavailable.'
+            : pendingReview
+              ? 'Review the excerpts above first…'
+              : 'Say something to Mr.OneHook…'
+        }
         footerRight="OneHook AI · Always Here"
       />
     </>
+  );
+}
+
+/**
+ * The consent gate. Shows the EXACT excerpts that would be shared (speaker, time, text) and sends
+ * nothing until the user approves. Mirrors the privacy contract: the user sees precisely what leaves
+ * the device.
+ */
+function ExcerptReviewPanel({
+  review,
+  matchName,
+  onConfirm,
+  onCancel,
+  disabled,
+}: {
+  review: PendingExcerptReview;
+  matchName?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="max-w-md rounded-2xl border border-accent/40 bg-accent/5 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Sparkles className="w-4 h-4 text-accent shrink-0" />
+        <p className="text-xs font-semibold text-text">
+          Share these {review.excerpts.length} message
+          {review.excerpts.length === 1 ? '' : 's'}
+          {matchName ? ` with ${matchName}'s chat` : ''} with Mr.OneHook?
+        </p>
+      </div>
+      <p className="text-[11px] text-text-muted leading-relaxed">
+        Only the excerpts below are sent, just for this answer. They&rsquo;re never stored or logged.
+      </p>
+      <ul className="space-y-2 max-h-56 overflow-y-auto">
+        {review.excerpts.map((excerpt, i) => (
+          <li
+            key={`${excerpt.sentAt}-${i}`}
+            className="rounded-xl bg-surface border border-border/60 p-3 text-xs"
+          >
+            <div className="flex items-center justify-between mb-1 text-[9px] uppercase tracking-widest opacity-50">
+              <span>{excerpt.speaker === 'self' ? 'You' : matchName || 'Match'}</span>
+              <span>{new Date(excerpt.sentAt).toLocaleString()}</span>
+            </div>
+            <p className="text-text leading-relaxed break-words">{excerpt.text}</p>
+          </li>
+        ))}
+      </ul>
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={disabled}
+          {...trackProps(UiElement.CHAT_MR_ONEHOOK_CONTEXT_SHARE, { action: 'dismiss' })}
+          className="flex-1 py-2 border border-border text-xs font-semibold rounded-xl hover:bg-surface-hover transition-colors text-text disabled:opacity-40 cursor-pointer"
+        >
+          Don&rsquo;t share
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={disabled}
+          {...trackProps(UiElement.CHAT_MR_ONEHOOK_CONTEXT_SHARE)}
+          className="flex-1 py-2 bg-accent text-bg text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer"
+        >
+          Share &amp; continue
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1298,6 +1618,7 @@ function EmptyState({
         <div className="flex flex-col gap-3">
           <button
             onClick={onOpenPicker}
+            {...trackProps(UiElement.CHAT_CONVERSATION_SWITCHER_OPEN)}
             className="w-full py-3 bg-accent text-bg text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
           >
             Open conversations
@@ -1305,6 +1626,7 @@ function EmptyState({
           {onNavigateToDiscovery && (
             <button
               onClick={onNavigateToDiscovery}
+              {...trackProps(UiElement.NAV_TAB_SELECT, { value: 'DISCOVER' })}
               className="w-full py-3 border border-border text-text text-xs font-semibold rounded-xl hover:bg-surface-hover transition-colors cursor-pointer"
             >
               Go to Discovery
@@ -1353,6 +1675,7 @@ function ConversationPickerModal({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-start justify-center p-4 md:p-6 md:pt-16"
           onClick={onClose}
+          data-track-exempt="backdrop: click-away that closes the conversation switcher; the explicit close control (chat.conversation_switcher_open dismiss) is tracked."
         >
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -1362,6 +1685,7 @@ function ConversationPickerModal({
             aria-label="Conversations"
             className="w-full max-w-md bg-surface-card text-text border border-border shadow-2xl max-h-[80vh] flex flex-col rounded-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
+            data-track-exempt="backdrop: modal container; stops backdrop dismissal, not an interactive control."
           >
             {/* Header: title, sort control immediately LEFT of the ✕ */}
             <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
@@ -1370,6 +1694,7 @@ function ConversationPickerModal({
                 <div className="relative">
                   <button
                     onClick={() => setSortOpen((v) => !v)}
+                    {...trackProps(UiElement.CHAT_CONVERSATION_SORT_OPEN)}
                     className="p-2 border border-border hover:border-accent hover:bg-surface-hover transition-colors flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold rounded-lg cursor-pointer text-text"
                     title="Sort conversations"
                     aria-haspopup="menu"
@@ -1380,7 +1705,7 @@ function ConversationPickerModal({
                   <AnimatePresence>
                     {sortOpen && (
                       <>
-                        <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
+                        <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} data-track-exempt="backdrop: click-away that closes the sort menu." />
                         <motion.div
                           initial={{ opacity: 0, y: -4 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -1397,6 +1722,7 @@ function ConversationPickerModal({
                                 setSort(opt.id);
                                 setSortOpen(false);
                               }}
+                              {...trackProps(UiElement.CHAT_CONVERSATION_SORT, { targetId: opt.id })}
                               className="w-full text-left px-4 py-2 text-xs hover:bg-surface-hover transition-colors flex items-center justify-between text-text cursor-pointer"
                             >
                               <span>{opt.label}</span>
@@ -1410,6 +1736,7 @@ function ConversationPickerModal({
                 </div>
                 <button
                   onClick={onClose}
+                  {...trackProps(UiElement.CHAT_CONVERSATION_SWITCHER_OPEN, { action: 'dismiss' })}
                   className="p-2 border border-border hover:border-accent hover:bg-bg transition-colors"
                   title="Close"
                   aria-label="Close conversations"
@@ -1428,13 +1755,16 @@ function ConversationPickerModal({
 
             {/* List */}
             <div className="flex-1 overflow-y-auto px-3 pb-3 min-h-0">
-              {sorted.map((row) => {
+              {sorted.map((row, rowIndex) => {
                 const isActive =
                   row.id === selection || (row.isMrOneHook && selection === MR_ONEHOOK);
                 return (
                   <button
                     key={row.id}
                     onClick={() => onSelect(row.isMrOneHook ? MR_ONEHOOK : row.id)}
+                    {...(row.isMrOneHook
+                      ? trackProps(UiElement.CHAT_MR_ONEHOOK_OPEN)
+                      : trackProps(UiElement.CHAT_CONVERSATION_SWITCH, { index: rowIndex, targetId: row.id }))}
                     className={`w-full flex items-center gap-3 p-3 text-left transition-colors relative cursor-pointer ${
                       isActive ? 'bg-surface font-semibold text-text' : 'hover:bg-surface-hover text-text'
                     }`}
@@ -1525,14 +1855,16 @@ function AddByUsernameModal({ open, onClose }: { open: boolean; onClose: () => v
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6"
           onClick={onClose}
+          data-track-exempt="backdrop: click-away that closes the add-by-username dialog; the explicit close control (chat.add_hook_open dismiss) is tracked."
         >
           <div
             className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-6 shadow-2xl rounded-2xl"
             onClick={(e) => e.stopPropagation()}
+            data-track-exempt="backdrop: modal container; stops backdrop dismissal, not an interactive control."
           >
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-text">Add by username</h3>
-              <button onClick={onClose} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
+              <button onClick={onClose} {...trackProps(UiElement.CHAT_ADD_HOOK_OPEN, { action: 'dismiss' })} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1552,6 +1884,7 @@ function AddByUsernameModal({ open, onClose }: { open: boolean; onClose: () => v
               <button
                 onClick={onClose}
                 disabled={submitting}
+                {...trackProps(UiElement.CHAT_ADD_HOOK_OPEN, { action: 'dismiss' })}
                 className="flex-1 py-3 border border-border text-xs font-semibold rounded-xl hover:bg-surface-hover transition-colors text-text cursor-pointer"
               >
                 Cancel
@@ -1559,6 +1892,7 @@ function AddByUsernameModal({ open, onClose }: { open: boolean; onClose: () => v
               <button
                 onClick={submit}
                 disabled={submitting || !username.trim()}
+                {...trackProps(UiElement.DISCOVER_ADD_HOOK_SUBMIT)}
                 className="flex-1 py-3 bg-accent text-bg text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-30 flex items-center justify-center gap-2 cursor-pointer"
               >
                 {submitting ? <LoadingSpinner size="sm" /> : 'Send request'}
@@ -1596,14 +1930,16 @@ function WallpaperPickerModal({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6"
           onClick={onClose}
+          data-track-exempt="backdrop: click-away that closes the wallpaper picker; the explicit close control (chat.wallpaper_open dismiss) is tracked."
         >
           <div
             className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-6 shadow-2xl rounded-2xl"
             onClick={(e) => e.stopPropagation()}
+            data-track-exempt="backdrop: modal container; stops backdrop dismissal, not an interactive control."
           >
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-text">Choose wallpaper</h3>
-              <button onClick={onClose} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
+              <button onClick={onClose} {...trackProps(UiElement.CHAT_WALLPAPER_OPEN, { action: 'dismiss' })} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1645,16 +1981,18 @@ function ProfileInspectorModal({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6"
           onClick={onClose}
+          data-track-exempt="backdrop: click-away that closes the peer profile sheet; the explicit close control (chat.profile_open dismiss) is tracked."
         >
           <div
             className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-5 shadow-2xl max-h-[85vh] overflow-y-auto rounded-2xl"
             onClick={(e) => e.stopPropagation()}
+            data-track-exempt="backdrop: modal container; stops backdrop dismissal, not an interactive control."
           >
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-text">
                 {isMrOneHook ? 'About Mr.OneHook' : 'Profile'}
               </h3>
-              <button onClick={onClose} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
+              <button onClick={onClose} {...trackProps(UiElement.CHAT_PROFILE_OPEN, { action: 'dismiss' })} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1764,7 +2102,10 @@ function ReportBlockModal({
               </label>
               <select
                 value={reason}
-                onChange={(e) => onReason(e.target.value as BlockReason)}
+                onChange={(e) => {
+                  trackUi(UiElement.CHAT_REPORT_REASON_SELECT);
+                  onReason(e.target.value as BlockReason);
+                }}
                 className="w-full p-3 border border-border text-xs bg-surface text-text rounded-xl outline-none focus:border-accent"
               >
                 {BLOCK_REASONS.map((r) => (
@@ -1778,6 +2119,7 @@ function ReportBlockModal({
               <button
                 onClick={onCancel}
                 disabled={submitting}
+                {...trackProps(UiElement.CHAT_BLOCK_CONFIRM, { action: 'dismiss' })}
                 className="flex-1 py-3 border border-border text-xs font-semibold rounded-xl hover:bg-surface-hover transition-colors text-text cursor-pointer"
               >
                 Cancel
@@ -1785,6 +2127,7 @@ function ReportBlockModal({
               <button
                 onClick={() => onConfirm(reason)}
                 disabled={submitting}
+                {...trackProps(UiElement.CHAT_BLOCK_CONFIRM)}
                 className="flex-1 py-3 bg-red-600 text-white text-xs font-semibold rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 {submitting ? <LoadingSpinner size="sm" /> : 'Block & report'}

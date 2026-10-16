@@ -4,6 +4,13 @@ import { motion } from 'motion/react';
 import { Mail } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
+
+/** Map an email address to the catalog's landing.email_link mailbox value set. */
+function mailboxValue(email: string): string {
+  const local = email.split('@')[0]?.toLowerCase() ?? '';
+  return ['privacy', 'security', 'support', 'legal', 'careers'].find((m) => local.includes(m)) ?? 'other';
+}
 
 export function Contact() {
   const navigate = useNavigate();
@@ -94,6 +101,7 @@ export function Contact() {
                 <h3 className="text-xl font-bold mb-2">{method.title}</h3>
                 <a
                   href={`mailto:${method.value}`}
+                  {...trackProps(UiElement.LANDING_EMAIL_LINK, { value: mailboxValue(method.value) })}
                   className="text-accent font-mono text-sm hover:opacity-70 transition-opacity block mb-3"
                 >
                   {method.value}
@@ -214,6 +222,7 @@ export function Contact() {
                 See our{' '}
                 <button
                   onClick={() => navigate('/privacy')}
+                  {...trackProps(UiElement.LANDING_POLICY_LINK)}
                   className="text-accent hover:underline"
                 >
                   Privacy Policy

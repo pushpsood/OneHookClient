@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Check, Minus, Sparkles, Smartphone } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { hideMrOneHook } from '../Chatbot/ChatbotWidget';
 import {
   ANNUAL_DISCOUNT_LABEL,
   APP_DOWNLOAD_URL,
@@ -14,6 +15,7 @@ import {
   type FeatureValue,
   type MembershipTier,
 } from '../../config/membership.config';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /** Renders a boolean as a check / dash, or a string value verbatim. */
 function FeatureCell({ value }: { value: FeatureValue }) {
@@ -51,6 +53,7 @@ function BillingToggle({
             type="button"
             aria-pressed={active}
             onClick={() => onChange(p)}
+            {...trackProps(UiElement.LANDING_PRICING_PERIOD_SELECT)}
             className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-[0.15em] transition-colors ${
               active ? 'bg-accent text-white' : 'opacity-60 hover:opacity-100'
             }`}
@@ -73,6 +76,7 @@ function DownloadCta({ tier, className = '' }: { tier: MembershipTier; className
       href={APP_DOWNLOAD_URL}
       target="_blank"
       rel="noreferrer"
+      {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
       className={`inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-full text-[11px] font-black uppercase tracking-[0.2em] transition-opacity hover:opacity-90 ${
         primary
           ? 'bg-accent text-white'
@@ -176,7 +180,7 @@ export function Pricing() {
       <SiteHeader pageTitle="Pricing" />
 
       {/* Hero */}
-      <section className="py-16 px-6 bg-gradient-to-b from-bg to-white">
+      <section {...hideMrOneHook} className="py-16 px-6 bg-gradient-to-b from-bg to-white">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -276,6 +280,7 @@ export function Pricing() {
               href={APP_DOWNLOAD_URL}
               target="_blank"
               rel="noreferrer"
+              {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
               className="inline-flex items-center gap-2 px-6 py-3 bg-accent text-white rounded-full text-[11px] font-black uppercase tracking-[0.2em] hover:opacity-90 transition-opacity"
             >
               <Smartphone className="w-3.5 h-3.5" /> Get the app
@@ -285,6 +290,7 @@ export function Pricing() {
       </section>
 
       <SiteFooter />
+
     </div>
   );
 }

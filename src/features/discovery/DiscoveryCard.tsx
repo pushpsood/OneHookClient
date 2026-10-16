@@ -4,7 +4,8 @@ import { MediaImage } from '../../components/common/MediaImage';
 import { useMediaSrc } from '../../utils/media-url';
 import { pictureTransformStyle } from '../../utils/photo-transform';
 import { mediaLikeType, type LikeTarget } from './like-target';
-import { trackMediaView, trackSectionView, trackPromptView } from '../../lib/analytics/analytics';
+import { trackMediaView, trackSectionView, trackPromptView, Screen, CardVariant, UiElement, trackProps } from '../../lib/analytics/analytics';
+import { usePhotoLightbox } from '../../components/common/PhotoLightbox';
 
 /**
  * DiscoveryCard — the canonical profile surface, matched to the iOS app (the UI source of truth,
@@ -76,7 +77,7 @@ export interface DiscoveryCardProps {
 }
 
 type Section = 'PHOTOS' | 'BIO' | 'INTERESTS';
-const CARD_VARIANT = 'interleaved'; // matches the iOS discovery card design
+const CARD_VARIANT = CardVariant.INTERLEAVED; // matches the iOS discovery card design
 
 const humanize = (v: string): string => v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const mediaTypeOf = (key: string): 'image' | 'video' => (mediaLikeType(key) === 'VIDEO' ? 'video' : 'image');
@@ -126,6 +127,7 @@ function CommentButton({
         onComment(target);
       }}
       aria-label={`Comment on ${displayName}'s ${target.label.toLowerCase()} to like`}
+      {...trackProps(UiElement.DISCOVER_ELEMENT_LIKE, { value: target.type })}
       className={`inline-flex items-center gap-1.5 text-xs font-semibold bg-surface-card text-text border border-border rounded-full px-3 py-1.5 hover:bg-surface-hover transition-colors cursor-pointer ${className}`}
     >
       <Heart className="w-3.5 h-3.5 text-red-500 fill-red-500" /> {label}
@@ -145,6 +147,7 @@ function PhotoBlock({
   isPreview,
   onComment,
   displayName,
+  onOpen,
 }: {
   photoKey: string;
   index: number;
@@ -153,6 +156,8 @@ function PhotoBlock({
   isPreview: boolean;
   onComment?: (t: LikeTarget) => void;
   displayName: string;
+  /** Open this photo full screen. */
+  onOpen?: (index: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const startRef = useRef<number | null>(null);
@@ -166,7 +171,7 @@ function PhotoBlock({
           dwellMs: Date.now() - startRef.current,
           index,
           viewedUserId: candidateId,
-          context: 'discovery',
+          context: Screen.DISCOVER,
           cardVariant: CARD_VARIANT,
         });
         startRef.current = null;
@@ -194,14 +199,23 @@ function PhotoBlock({
 
   return (
     <div ref={ref} className="relative aspect-[3/4] overflow-hidden rounded-xl border border-border bg-surface group">
-      <MediaImage
-        src={photoKey}
-        alt={displayName}
-        loading={index === 0 ? 'eager' : 'lazy'}
-        decoding="async"
-        style={pictureTransformStyle(transform)}
-        className="w-full h-full object-cover"
-      />
+      <button
+        type="button"
+        onClick={() => onOpen?.(index)}
+        disabled={!onOpen || mediaTypeOf(photoKey) !== 'image'}
+        aria-label={`View ${displayName}'s photo ${index + 1} full screen`}
+        {...trackProps(UiElement.DISCOVER_PHOTO_OPEN, { index })}
+        className="block w-full h-full cursor-zoom-in disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <MediaImage
+          src={photoKey}
+          alt={displayName}
+          loading={index === 0 ? 'eager' : 'lazy'}
+          decoding="async"
+          style={pictureTransformStyle(transform)}
+          className="w-full h-full object-cover"
+        />
+      </button>
       <div className="absolute bottom-3 right-3 z-10">
         <CommentButton
           onComment={onComment}
@@ -343,6 +357,14 @@ export function DiscoveryCard({
       ? candidate.pictures
       : [];
   const displayName = candidate.displayName || candidate.name || 'Anonymous';
+  // Full screen shows still photos only (videos play inline).
+  const fullscreenPhotos = photos.filter((p: string) => mediaTypeOf(p) === 'image');
+  const { open: openPhoto, lightbox } = usePhotoLightbox({
+    photos: fullscreenPhotos,
+    ownerName: displayName,
+    trackContext: Screen.DISCOVER,
+    viewedUserId: candidate.id,
+  });
   const age = candidate.age ? Number(candidate.age) : null;
   const location =
     typeof candidate.location === 'string'
@@ -383,7 +405,7 @@ export function DiscoveryCard({
         trackSectionView(currentSectionRef.current, {
           viewedUserId: candidate.id,
           dwellMs: now - sectionStartRef.current,
-          context: 'discovery',
+          context: Screen.DISCOVER,
           cardVariant: CARD_VARIANT,
         });
         currentSectionRef.current = current;
@@ -397,7 +419,7 @@ export function DiscoveryCard({
       trackSectionView(currentSectionRef.current, {
         viewedUserId: candidate.id,
         dwellMs: Date.now() - sectionStartRef.current,
-        context: 'discovery',
+        context: Screen.DISCOVER,
         cardVariant: CARD_VARIANT,
       });
     };
@@ -422,7 +444,7 @@ export function DiscoveryCard({
       audioRef.current.play();
       setIsPlayingAudio(true);
       if (!isPreview && audioKey) {
-        trackMediaView(audioKey, 'voice', { viewedUserId: candidate.id, context: 'discovery', cardVariant: CARD_VARIANT });
+        trackMediaView(audioKey, 'voice', { viewedUserId: candidate.id, context: Screen.DISCOVER, cardVariant: CARD_VARIANT });
       }
     }
   };
@@ -459,6 +481,7 @@ export function DiscoveryCard({
         <button
           type="button"
           onClick={togglePlayAudio}
+          {...trackProps(UiElement.DISCOVER_VOICE_PLAY, { value: isPlayingAudio ? 'pause' : 'play' })}
           className="w-10 h-10 rounded-full bg-ig-blue text-white flex items-center justify-center shrink-0 cursor-pointer hover:opacity-90"
           title={isPlayingAudio ? 'Pause Voice Note' : 'Play Voice Note'}
         >
@@ -488,7 +511,7 @@ export function DiscoveryCard({
           setIsPlayingAudio(false);
           setPlaybackProgress(0);
           if (!isPreview && audioKey) {
-            trackMediaView(audioKey, 'voice', { viewedUserId: candidate.id, context: 'discovery', cardVariant: CARD_VARIANT, playedToCompletion: true });
+            trackMediaView(audioKey, 'voice', { viewedUserId: candidate.id, context: Screen.DISCOVER, cardVariant: CARD_VARIANT, playedToCompletion: true });
           }
         }}
         className="hidden"
@@ -510,6 +533,7 @@ export function DiscoveryCard({
                   onComment?.({ type: 'INTEREST', ref: interest, label: 'Interest', preview: interest });
                 }}
                 aria-label={`Comment on interest ${interest} to like`}
+                {...trackProps(UiElement.DISCOVER_ELEMENT_LIKE, { value: 'INTEREST' })}
                 className="px-3 py-1 border border-border rounded-full text-xs font-medium text-text-secondary bg-surface-card hover:bg-surface-hover transition-colors cursor-pointer inline-flex items-center gap-1.5"
               >
                 <Heart className="w-3 h-3 text-red-500" /> {interest}
@@ -559,6 +583,7 @@ export function DiscoveryCard({
         isPreview={isPreview}
         onComment={onComment}
         displayName={displayName}
+        onOpen={isPreview ? undefined : (i) => openPhoto(fullscreenPhotos.indexOf(photos[i]))}
       />
     ) : null;
   const promptNode = () => {
@@ -636,6 +661,7 @@ export function DiscoveryCard({
             disabled={rosesRemaining === 0}
             aria-label={rosesRemaining == null ? 'Send a rose' : `Send a rose, ${rosesRemaining} left today`}
             title={rosesRemaining == null ? 'Send a rose' : `Send a rose · ${rosesRemaining} left today`}
+            {...trackProps(UiElement.DISCOVER_ROSE_BUTTON)}
             className="relative shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <RoseIcon spent={rosesRemaining === 0} size={40} />
@@ -666,6 +692,7 @@ export function DiscoveryCard({
             <button
               type="button"
               onClick={onPass}
+              {...trackProps(UiElement.DISCOVER_PASS_BUTTON)}
               className="w-full py-3.5 border border-border rounded-full text-sm font-semibold text-text hover:bg-surface-hover transition-colors cursor-pointer"
             >
               Pass
@@ -681,6 +708,7 @@ export function DiscoveryCard({
           </div>
         ) : null}
       </div>
+      {lightbox}
     </article>
   );
 }

@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react';
 import { CHAT_WALLPAPERS, type ChatWallpaper } from '../../lib/chat-appearance';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * Reusable wallpaper swatch grid. Shared by the shield-menu "Choose wallpaper" modal and the chat
@@ -19,6 +20,7 @@ export function WallpaperGrid({
         <button
           key={w.id}
           onClick={() => onChoose(w.id)}
+          {...trackProps(UiElement.CHAT_SETTINGS_WALLPAPER_SELECT, { targetId: w.id })}
           className={`relative aspect-[3/4] overflow-hidden border transition-all ${
             current.id === w.id
               ? 'border-accent ring-2 ring-accent'

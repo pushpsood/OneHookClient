@@ -8,7 +8,7 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { DiscoveryCard } from './DiscoveryCard';
 import { CommentComposer } from './CommentComposer';
 import type { LikeTarget } from './like-target';
-import { trackCardImpression, trackCardSwipe } from '../../lib/analytics/analytics';
+import { trackCardImpression, trackCardSwipe, UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
  * DiscoveryView — ONE profile at a time, matched to the iOS discovery experience.
@@ -71,9 +71,15 @@ export function DiscoveryView({
     };
   }, []);
 
-  // Impression for the currently shown profile.
+  // Impression for the currently shown profile, emitted with its dwell (time on screen) when the
+  // card is replaced or the view unmounts — this `durationMs` drives GCP's dwell-velocity scoring.
   useEffect(() => {
-    if (currentCandidate) trackCardImpression(currentCandidate.id, 0);
+    if (!currentCandidate) return;
+    const id = currentCandidate.id;
+    const shownAt = Date.now();
+    return () => {
+      trackCardImpression(id, 0, Date.now() - shownAt);
+    };
   }, [currentCandidate?.id]);
 
   const nameOf = (c: DiscoveryCandidate) =>
@@ -139,6 +145,7 @@ export function DiscoveryView({
           <p className="text-sm text-text-secondary">{error.message}</p>
           <button
             onClick={onRetry}
+            {...trackProps(UiElement.DISCOVER_RETRY)}
             className="w-full py-3 bg-ig-blue text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
           >
             Try Again
