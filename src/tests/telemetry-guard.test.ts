@@ -16,6 +16,7 @@
  * cannot reach are genuinely dead code; the second test pins that unreachable set so the blind spot
  * stays small, visible and reviewed.
  */
+import { relative } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { scanAll, scanSource, unreachableTsxFiles, type Offender } from './telemetry-guard-scan';
 
@@ -37,13 +38,13 @@ const EXPECTED_UNREACHABLE = [
 describe('web no-untracked-control guard', () => {
   it('every interaction site is tracked or explicitly exempt', () => {
     const offenders = scanAll(SRC_ROOT).map(
-      (o) => `${o.file.split('/src/')[1]}:${o.line} <${o.tag}> [${o.problem}${o.detail ? ': ' + o.detail : ''}] ${o.snippet}`
+      (o) => `${relative(SRC_ROOT, o.file)}:${o.line} <${o.tag}> [${o.problem}${o.detail ? ': ' + o.detail : ''}] ${o.snippet}`
     );
     expect(offenders).toEqual([]);
   });
 
   it('keeps the provably-unreachable surface bounded and documented', () => {
-    const unreachable = unreachableTsxFiles(SRC_ROOT).map((f) => f.split('/src/')[1]);
+    const unreachable = unreachableTsxFiles(SRC_ROOT).map((f) => relative(SRC_ROOT, f));
     // Pinned exactly: dead code is the only surface the guard does not scan, and it must stay small.
     expect(unreachable).toEqual(EXPECTED_UNREACHABLE);
     expect(unreachable.length).toBeLessThan(40);
