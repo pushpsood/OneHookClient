@@ -1,7 +1,8 @@
-import { Home, Compass, MessageCircle, Heart, Search, Clapperboard, SquarePlus } from 'lucide-react';
+import { Home, Compass, MessageCircle, Heart, Search, Clapperboard, SquarePlus, Settings } from 'lucide-react';
 import { MediaImage } from '../components/common/MediaImage';
+import { UiElement, APP_TAB_SCREEN, trackProps } from '../lib/analytics/analytics';
 
-export type AppTab = 'DISCOVERY' | 'MATCHES' | 'LIKES' | 'PROFILE';
+export type AppTab = 'DISCOVERY' | 'MATCHES' | 'LIKES' | 'PROFILE' | 'SETTINGS';
 
 interface BottomTabBarProps {
   activeTab: AppTab;
@@ -36,6 +37,7 @@ export function BottomTabBar({
         type="button"
         onClick={() => onTabChange('DISCOVERY')}
         aria-label="Home"
+        {...trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN.DISCOVERY })}
         className={`relative flex items-center justify-center p-3 flex-1 min-h-[48px] transition-colors cursor-pointer ${
           activeTab === 'DISCOVERY' ? 'text-text' : 'text-text-muted hover:text-text'
         }`}
@@ -58,6 +60,7 @@ export function BottomTabBar({
           }
         }}
         aria-label="Search"
+        {...trackProps(UiElement.NAV_SEARCH_OPEN)}
         className="relative flex items-center justify-center p-3 flex-1 min-h-[48px] text-text-muted hover:text-text transition-colors cursor-pointer"
       >
         <Search className="w-6 h-6" strokeWidth={1.75} />
@@ -68,6 +71,7 @@ export function BottomTabBar({
         type="button"
         onClick={() => onTabChange('DISCOVERY')}
         aria-label="Reels"
+        {...trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN.DISCOVERY })}
         className="relative flex items-center justify-center p-3 flex-1 min-h-[48px] text-text-muted hover:text-text transition-colors cursor-pointer"
       >
         <Clapperboard className="w-6 h-6" strokeWidth={1.75} />
@@ -78,6 +82,7 @@ export function BottomTabBar({
         type="button"
         onClick={() => onTabChange('MATCHES')}
         aria-label="Messages"
+        {...trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN.MATCHES })}
         className={`relative flex items-center justify-center p-3 flex-1 min-h-[48px] transition-colors cursor-pointer ${
           activeTab === 'MATCHES' ? 'text-text' : 'text-text-muted hover:text-text'
         }`}
@@ -99,6 +104,7 @@ export function BottomTabBar({
         type="button"
         onClick={() => onTabChange('PROFILE')}
         aria-label="Profile"
+        {...trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN.PROFILE })}
         className="relative flex items-center justify-center p-3 flex-1 min-h-[48px] cursor-pointer"
       >
         <div
@@ -118,6 +124,22 @@ export function BottomTabBar({
             </div>
           )}
         </div>
+      </button>
+
+      {/* Settings */}
+      <button
+        type="button"
+        onClick={() => onTabChange('SETTINGS')}
+        aria-label="Settings"
+        {...trackProps(UiElement.PROFILE_SETTINGS_OPEN)}
+        className={`relative flex items-center justify-center p-3 flex-1 min-h-[48px] transition-colors cursor-pointer ${
+          activeTab === 'SETTINGS' ? 'text-text' : 'text-text-muted hover:text-text'
+        }`}
+      >
+        <Settings
+          className="w-6 h-6"
+          strokeWidth={activeTab === 'SETTINGS' ? 2.5 : 1.75}
+        />
       </button>
     </nav>
   );

@@ -15,6 +15,7 @@ import { MediaImage } from '../components/common/MediaImage';
 import { useTheme } from '../lib/theme';
 import type { AppTab } from './BottomTabBar';
 import type { UserProfile } from '../types';
+import { UiElement, APP_TAB_SCREEN, trackProps } from '../lib/analytics/analytics';
 
 interface DesktopSidebarProps {
   activeTab: AppTab;
@@ -35,7 +36,6 @@ export function DesktopSidebar({
   likesCount = 0,
   unreadCount = 0,
   onLogout,
-  onOpenSettings,
 }: DesktopSidebarProps) {
   const { resolvedTheme, toggleTheme, theme, setTheme } = useTheme();
   const [isHovered, setIsHovered] = useState(false);
@@ -95,6 +95,12 @@ export function DesktopSidebar({
       isProfile: true,
       badge: 0,
     },
+    {
+      id: 'SETTINGS' as AppTab,
+      label: 'Settings',
+      icon: Settings,
+      badge: 0,
+    },
   ];
 
   return (
@@ -123,6 +129,9 @@ export function DesktopSidebar({
                   key={`${item.label}-${idx}`}
                   type="button"
                   onClick={() => onTabChange(item.id)}
+                  {...(item.id === 'SETTINGS'
+                    ? trackProps(UiElement.PROFILE_SETTINGS_OPEN)
+                    : trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN[item.id] }))}
                   className={`relative flex items-center ${
                     isHovered ? 'justify-start px-3' : 'justify-center px-0'
                   } py-3 rounded-xl transition-all group cursor-pointer ${
@@ -190,6 +199,7 @@ export function DesktopSidebar({
                 setIsMoreOpen(!isMoreOpen);
                 setIsAppearanceSubmenu(false);
               }}
+              {...trackProps(UiElement.NAV_MENU_OPEN)}
               className={`w-full flex items-center ${
                 isHovered ? 'justify-start gap-4 px-3' : 'justify-center px-0'
               } py-3 rounded-xl transition-all cursor-pointer ${
@@ -208,19 +218,8 @@ export function DesktopSidebar({
                   <div className="flex flex-col text-sm text-text">
                     <button
                       type="button"
-                      onClick={() => {
-                        onOpenSettings?.();
-                        setIsMoreOpen(false);
-                      }}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-hover transition-colors text-left cursor-pointer"
-                    >
-                      <Settings className="w-4 h-4 shrink-0" />
-                      <span>Settings</span>
-                    </button>
-
-                    <button
-                      type="button"
                       onClick={() => setIsAppearanceSubmenu(true)}
+                      {...trackProps(UiElement.SETTINGS_THEME_OPEN)}
                       className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-surface-hover transition-colors text-left cursor-pointer"
                     >
                       <div className="flex items-center gap-3">
@@ -240,6 +239,7 @@ export function DesktopSidebar({
                         onTabChange('DISCOVERY');
                         setIsMoreOpen(false);
                       }}
+                      {...trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN.DISCOVERY })}
                       className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-hover transition-colors text-left cursor-pointer"
                     >
                       <Sparkles className="w-4 h-4 shrink-0" />
@@ -254,6 +254,7 @@ export function DesktopSidebar({
                         setIsMoreOpen(false);
                         onLogout();
                       }}
+                      {...trackProps(UiElement.SETTINGS_SIGN_OUT)}
                       className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-hover text-red-500 transition-colors text-left cursor-pointer"
                     >
                       <LogOut className="w-4 h-4 shrink-0" />
@@ -267,6 +268,7 @@ export function DesktopSidebar({
                       <button
                         type="button"
                         onClick={() => setIsAppearanceSubmenu(false)}
+                        {...trackProps(UiElement.SETTINGS_THEME_OPEN, { action: 'dismiss' })}
                         className="text-xs text-text-secondary hover:text-text cursor-pointer"
                       >
                         ← Back
@@ -279,6 +281,7 @@ export function DesktopSidebar({
                       <button
                         type="button"
                         onClick={toggleTheme}
+                        {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: resolvedTheme === 'dark' ? 'light' : 'dark' })}
                         className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
                           resolvedTheme === 'dark' ? 'bg-ig-blue justify-end' : 'bg-border justify-start'
                         }`}
@@ -291,6 +294,7 @@ export function DesktopSidebar({
                       <button
                         type="button"
                         onClick={() => setTheme('light')}
+                        {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: 'light' })}
                         className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer ${
                           theme === 'light' ? 'bg-surface-hover font-semibold' : 'hover:bg-surface-hover'
                         }`}
@@ -304,6 +308,7 @@ export function DesktopSidebar({
                       <button
                         type="button"
                         onClick={() => setTheme('dark')}
+                        {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: 'dark' })}
                         className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer ${
                           theme === 'dark' ? 'bg-surface-hover font-semibold' : 'hover:bg-surface-hover'
                         }`}
@@ -317,6 +322,7 @@ export function DesktopSidebar({
                       <button
                         type="button"
                         onClick={() => setTheme('system')}
+                        {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: 'system' })}
                         className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer ${
                           theme === 'system' ? 'bg-surface-hover font-semibold' : 'hover:bg-surface-hover'
                         }`}

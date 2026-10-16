@@ -3,6 +3,7 @@ import { Mascot } from './Mascot';
 import { chatbotUrl } from '../../utils/env.config';
 import { PUBLIC_PRODUCT_CHAT_PATH } from '../../lib/mr-onehook-contract';
 import { Maximize2, Minimize2, X } from 'lucide-react';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import './ChatbotWidget.css'; // Add a little standard CSS or use tailwind
 
 type Mood = 'Happy' | 'Neutral' | 'Thinking' | 'Sad' | 'Excited';
@@ -13,10 +14,53 @@ interface Message {
 }
 
 export interface ChatbotWidgetProps {
+  /** Extra page-level switch; the widget also hides itself over `data-mr-onehook-hide` zones. */
   isVisible?: boolean;
 }
 
+/**
+ * Mark any section with this attribute (e.g. a page hero) and Mr OneHook stays hidden while it fills
+ * the screen. Same rule the landing page always used: the mascot appears once the content after the
+ * zone has scrolled into the bottom 10% of the viewport.
+ */
+export const MR_ONEHOOK_HIDE_ATTR = 'data-mr-onehook-hide';
+/** Spread onto a section to hide Mr OneHook while it fills the screen: `<section {...hideMrOneHook}>`. */
+export const hideMrOneHook = { [MR_ONEHOOK_HIDE_ATTR]: '' } as const;
+const HIDE_UNTIL = 0.9;
+
+function isInsideHideZone(): boolean {
+  const vh = window.innerHeight;
+  return [...document.querySelectorAll(`[${MR_ONEHOOK_HIDE_ATTR}]`)].some((zone) => {
+    const r = zone.getBoundingClientRect();
+    return r.top < vh && r.bottom > vh * HIDE_UNTIL;
+  });
+}
+
+/** Relative luminance of a CSS colour string, or null when it is (nearly) transparent. */
+function luminance(color: string): number | null {
+  const m = color.match(/rgba?\(([^)]+)\)/);
+  if (!m) return null;
+  const [r, g, b, a = 1] = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+  if (a < 0.5) return null;
+  const lin = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+/** True when the first solid background under (x, y), excluding the widget itself, is dark. */
+function isDarkBehind(x: number, y: number, self: Element | null): boolean {
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (self && self.contains(el)) continue;
+    const l = luminance(getComputedStyle(el).backgroundColor);
+    if (l !== null) return l < 0.18;
+  }
+  return false;
+}
+
 export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }) => {
+  const [outsideHideZone, setOutsideHideZone] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -121,15 +165,9 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
 
   useEffect(() => {
     const handleScroll = () => {
+      setOutsideHideZone(!isInsideHideZone());
       if (isOpen) return;
-      const x = window.innerWidth - 60;
-      const y = window.innerHeight - 60;
-      const elements = document.elementsFromPoint(x, y);
-      const isDark = elements.some(
-        (el) =>
-          el.classList && (el.classList.contains('bg-accent') || el.classList.contains('bg-black'))
-      );
-      setIsOverDark(isDark);
+      setIsOverDark(isDarkBehind(window.innerWidth - 60, window.innerHeight - 60, containerRef.current));
 
       const inPageMascot = document.getElementById('mascot-container');
       if (inPageMascot) {
@@ -141,10 +179,19 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
       }
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
-    // Run once on mount after a small delay
-    setTimeout(handleScroll, 100);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('resize', handleScroll);
+    handleScroll();
+    // Run again once the page has painted (fonts/images can shift layout)
+    const t = window.setTimeout(handleScroll, 100);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
   }, [isOpen]);
+
+  // Once open, never hide the conversation just because a hide zone scrolled back into view.
+  const shown = isVisible && (outsideHideZone || isOpen);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -205,12 +252,13 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
   return (
     <div
       ref={containerRef}
-      className={`chatbot-widget-container ${isOpen ? 'open' : 'closed'} ${isHovered ? 'hovered' : ''} ${isFullScreen ? 'fullscreen' : ''} transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}
+      className={`chatbot-widget-container ${isOpen ? 'open' : 'closed'} ${isHovered ? 'hovered' : ''} ${isFullScreen ? 'fullscreen' : ''} transition-all duration-500 ${shown ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}
+      aria-hidden={shown ? undefined : true}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {!isOpen && (
-        <div className="chatbot-trigger" onClick={() => setIsOpen(true)}>
+        <div className="chatbot-trigger" onClick={() => setIsOpen(true)} {...trackProps(UiElement.LANDING_CHATBOT_WIDGET, { value: 'open' })}>
           <div className="interactive-text bg-white text-black text-xs font-bold px-3 py-1 rounded-full shadow-lg absolute -top-4 left-1/2 whitespace-nowrap animate-float-thought pointer-events-none z-10">
             {isInPageMascotVisible ? 'Say hi to Mr.OneHook' : 'Talk to Mr.OneHook!'}
           </div>
@@ -239,6 +287,7 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
                   href="https://onehook.club/app"
                   target="_blank"
                   rel="noreferrer"
+                  {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
                   className="ml-2 px-2 py-1 bg-white text-pink-600 text-[10px] font-bold rounded-md hover:bg-pink-50 transition-colors uppercase tracking-wider"
                 >
                   Download App
@@ -247,6 +296,7 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setIsFullScreen(!isFullScreen)}
+                  {...trackProps(UiElement.LANDING_CHATBOT_WIDGET, { value: 'fullscreen' })}
                   className="text-white hover:text-gray-200 transition-colors"
                   title={isFullScreen ? 'Minimize' : 'Full screen'}
                 >
@@ -254,6 +304,7 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
                 </button>
                 <button
                   onClick={() => setIsOpen(false)}
+                  {...trackProps(UiElement.LANDING_CHATBOT_WIDGET, { value: 'close' })}
                   className="text-white hover:text-gray-200 transition-colors"
                   title="Close"
                 >
@@ -288,6 +339,7 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
                   />
                   <button
                     onClick={() => setSetupComplete(true)}
+                    {...trackProps(UiElement.LANDING_CHATBOT_WIDGET, { value: 'start' })}
                     className="bg-pink-600 text-white p-2 rounded mt-2 hover:bg-pink-700"
                   >
                     Start chatting
@@ -331,6 +383,7 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
                 />
                 <button
                   onClick={handleSend}
+                  {...trackProps(UiElement.LANDING_CHATBOT_WIDGET, { value: 'send' })}
                   className="bg-pink-600 text-white rounded-full px-3 text-sm font-bold hover:bg-pink-700"
                 >
                   Send

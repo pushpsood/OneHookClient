@@ -16,9 +16,10 @@ import { LikesYouView } from '../features/discovery/LikesYouView';
 import type { LikeTargetType } from '../api/rest';
 import { ChatView } from '../features/chat/ChatView';
 import { ProfileView } from '../features/profile/ProfileView';
+import { SettingsView } from '../features/settings/SettingsView';
 import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
 import { useHistoryUnlock } from '../hooks/use-history-unlock';
-import { startAnalytics, stopAnalytics, trackScreenView, trackHookedStateView } from '../lib/analytics/analytics';
+import { startAnalytics, stopAnalytics, trackScreenView, trackHookedStateView, APP_TAB_SCREEN, HookedStateAction, UiElement, trackProps } from '../lib/analytics/analytics';
 import { BottomTabBar, type AppTab } from './BottomTabBar';
 import { TopBar } from './TopBar';
 import { DesktopSidebar } from './DesktopSidebar';
@@ -60,7 +61,6 @@ export function AppContent() {
   const { refetch: refetchUserState } = useUserState();
   const premium = useAppStore(isPremium);
   const [upgrading, setUpgrading] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -110,13 +110,14 @@ export function AppContent() {
   }, []);
 
   useEffect(() => {
-    trackScreenView(appState);
+    // Web routing state uses its own tab names; analytics always reports the canonical catalog screen.
+    trackScreenView(APP_TAB_SCREEN[appState as AppTab]);
   }, [appState]);
 
   // The "one connection at a time" exclusivity overlay was shown — differentiator research signal.
   useEffect(() => {
     if (userState?.state === UserState.HOOKED && appState === 'DISCOVERY') {
-      trackHookedStateView('shown');
+      trackHookedStateView(HookedStateAction.SHOWN);
     }
   }, [userState?.state, appState]);
 
@@ -210,12 +211,14 @@ export function AppContent() {
                 logout();
                 navigate('/login');
               }}
+              {...trackProps(UiElement.SETTINGS_SIGN_OUT)}
               className="w-full py-3 bg-accent text-bg text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
             >
               Back to Sign In
             </button>
             <button
               onClick={() => refetchProfile()}
+              {...trackProps(UiElement.PROFILE_RETRY)}
               className="w-full py-3 border border-border text-sm font-semibold rounded-lg hover:bg-surface-hover transition-colors cursor-pointer"
             >
               Try Again
@@ -238,7 +241,7 @@ export function AppContent() {
         onNavigateToChat={() => setAppState('MATCHES')}
         onNavigateToLikes={() => setAppState('LIKES')}
         onNavigateToDiscovery={() => setAppState('DISCOVERY')}
-        onOpenSettings={() => setShowSettings(!showSettings)}
+        onOpenSettings={() => setAppState('SETTINGS')}
         premium={premium}
         userPhoto={userPhoto}
       />
@@ -251,7 +254,6 @@ export function AppContent() {
           onTabChange={setAppState}
           currentUser={currentUser}
           onLogout={handleLogout}
-          onOpenSettings={() => setShowSettings(!showSettings)}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenCreate={() => setIsCreateOpen(true)}
         />
@@ -334,11 +336,26 @@ export function AppContent() {
                 className="h-full overflow-y-auto bg-bg text-text"
               >
                 <div className="max-w-[700px] mx-auto p-4 sm:p-8">
-                  <ProfileView
+                  <ProfileView user={currentUser} />
+                </div>
+              </motion.div>
+            )}
+            {appState === 'SETTINGS' && (
+              <motion.div
+                key="settings"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="h-full overflow-y-auto bg-bg text-text"
+              >
+                <div className="max-w-[700px] mx-auto p-4 sm:p-8">
+                  <SettingsView
                     user={currentUser}
                     onUpgrade={handleUpgrade}
                     upgrading={upgrading}
                     onVerified={refetchProfile}
+                    onLogout={handleLogout}
                   />
                 </div>
               </motion.div>
@@ -397,7 +414,11 @@ export function AppContent() {
                 </p>
               </div>
               <button
-                onClick={() => setAppState('MATCHES')}
+                onClick={() => {
+                  trackHookedStateView(HookedStateAction.GO_TO_CHAT);
+                  setAppState('MATCHES');
+                }}
+                {...trackProps(UiElement.NAV_HOOKED_GO_TO_CHAT)}
                 className="w-full py-3 bg-accent text-bg text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
               >
                 Go to Messages
