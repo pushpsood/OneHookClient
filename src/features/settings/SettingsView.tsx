@@ -1,8 +1,10 @@
 import { lazy, Suspense, type ReactNode } from 'react';
+import { subscriptionTierDisplayName } from 'onehook-api-client/membership';
+import { MOST_POPULAR_TIER, PAID_TIER_NAMES } from '../../config/membership.config';
 import { motion } from 'motion/react';
 import { SlidersHorizontal, UserCog, Sparkles, LogOut, Check } from 'lucide-react';
 import type { UserProfile } from '../../types';
-import { isPremium, useAppStore } from '../../store/app-store';
+import { isPaidTier, useAppStore } from '../../store/app-store';
 import { AppearanceCard } from '../../components/profile/AppearanceCard';
 import { AccountSettingsCard } from '../../components/profile/AccountSettingsCard';
 import { DeviceManagementCard } from '../../components/profile/DeviceManagementCard';
@@ -35,8 +37,10 @@ export function SettingsView({
   onLogout?: () => void;
 }) {
   const { userState } = useAppStore();
-  const premium = useAppStore(isPremium);
-  const tierLabel = userState?.subscriptionTier ?? '—';
+  const paid = useAppStore(isPaidTier);
+  const tierLabel = userState?.subscriptionTier
+    ? subscriptionTierDisplayName(userState.subscriptionTier)
+    : '—';
 
   return (
     <motion.div
@@ -79,14 +83,14 @@ export function SettingsView({
               {tierLabel}
             </span>
           </div>
-          {userState != null && !premium && (
+          {userState != null && !paid && (
             <button
               onClick={onUpgrade}
               disabled={upgrading}
               {...trackProps(UiElement.PROFILE_UPGRADE_OPEN)}
               className="w-full py-4 bg-accent text-bg text-[11px] font-black uppercase tracking-[0.4em] hover:scale-[1.01] transition-all disabled:opacity-40 rounded-xl"
             >
-              {upgrading ? 'Upgrading…' : 'Upgrade to Premium'}
+              {upgrading ? 'Upgrading…' : `Upgrade to ${MOST_POPULAR_TIER.displayName}`}
             </button>
           )}
         </div>
@@ -129,15 +133,15 @@ export function SettingsView({
           </div>
           <p className="text-xs text-text-secondary leading-relaxed max-w-md">
             Mr OneHook is your AI companion. He helps you understand your connections and get more
-            out of OneHook. Full access to the AI companion is included with Premium.
+            out of OneHook. Full access to the AI companion is included with {PAID_TIER_NAMES}.
           </p>
           <div className="flex items-center gap-2 text-xs">
-            {premium ? (
+            {paid ? (
               <span className="inline-flex items-center gap-1.5 text-green-600 font-semibold">
                 <Check className="w-3.5 h-3.5" /> Included with your plan
               </span>
             ) : (
-              <span className="text-text-secondary">Upgrade to Premium for full access.</span>
+              <span className="text-text-secondary">Upgrade to {MOST_POPULAR_TIER.displayName} for full access.</span>
             )}
           </div>
 

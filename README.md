@@ -77,7 +77,7 @@ independently in pipeline settings.
 
 The signed-in chat surface uses `POST /api/member/product-connection-chat` with the Cognito **ID token** (the member route verifies `aud` and reads the member's `roles`/tier from claims the access token does not carry). Members can choose product-only mode or one active match. Match messages remain end-to-end encrypted and are searched only after local decryption; when the service returns `needsMoreContext`, the browser selects bounded readable excerpts, displays the exact excerpt review panel, and sends them only after confirmation. Excerpts carry only `speaker`, `sentAt`, and `text` and are never persisted in the local Mr OneHook transcript.
 
-Non-FREE tiers request server-side AI-session persistence, while the server remains authoritative. Returned session IDs are stored per user and product/match scope; stale, expired, denied, or unavailable sessions are forgotten and the same question is retried without persistence. The public landing widget remains separate on `POST /api/public/product-chat` without an authorization header.
+Paid (Super / Infinity) tiers request server-side AI-session persistence, while the server remains authoritative. Returned session IDs are stored per user and product/match scope; stale, expired, denied, or unavailable sessions are forgotten and the same question is retried without persistence. The public landing widget remains separate on `POST /api/public/product-chat` without an authorization header.
 
 **Entitlement.** Mr OneHook is gated by the `context.chat` permission, granted to members in the `mr-onehook` Cognito group (the backend returns `403 INSUFFICIENT_PERMISSION` otherwise). The client classifies terminal availability — `NOT_ENTITLED` (403), `NOT_AUTHENTICATED` (401 `AUTH_REQUIRED`/`INVALID_ACCESS_TOKEN`), `NOT_CONFIGURED` (404/503) — via `classifyMemberChatAvailability`, surfaces a clear one-time message, and disables the composer rather than showing a retryable error. A recognised-but-unrelated code (e.g. a session or per-request validation code) is handled on its own path and never gates the feature.
 
@@ -141,14 +141,14 @@ which owns the connection state machine and the entitlement, and published to th
 
 It is deliberately **not** read from the profile: the Profile service intentionally omits
 `subscriptionTier` from its read model, so reading it off a profile silently yields `undefined` —
-which previously made *every* user render as `PREMIUM` and hid the upgrade CTA from free users.
+which previously made *every* user render as a paid tier and hid the upgrade CTA from free users.
 
 `isPremium` **fails closed**: until the snapshot loads the UI shows `BASIC`, so it never briefly
 promises premium.
 
 > **The UI is not a security boundary.** A user can edit their own browser and reveal a premium
 > control; clicking it still fails, because entitlement is enforced independently server-side (State
-> enforces capacity in a DynamoDB condition expression, Chat rejects premium mutations for `FREE`
+> enforces capacity in a DynamoDB condition expression, Chat rejects premium mutations for `MUST`
 > callers, Profile derives the tier from the verified JWT claim and ignores any tier in a request
 > body). Tier in the client is a **rendering input only**.
 

@@ -66,7 +66,8 @@ import {
   toSelectableMessages,
   type ExcerptSelectionRequest,
 } from '../../lib/mr-onehook-excerpts';
-import { SubscriptionTier } from '../../types';
+import { DEFAULT_SUBSCRIPTION_TIER } from 'onehook-api-client/membership';
+import type { SubscriptionTier } from '../../types';
 import { ChatSettingsSheet } from '../../components/chat/ChatSettingsSheet';
 import { AttachmentBubble } from '../../components/chat/AttachmentBubble';
 import { AttachmentComposer } from '../../components/chat/AttachmentComposer';
@@ -692,7 +693,7 @@ export function ChatView({
           currentUser={currentUser}
           wallpaper={wallpaper}
           matches={matches}
-          tier={userState?.subscriptionTier ?? SubscriptionTier.FREE}
+          tier={userState?.subscriptionTier ?? DEFAULT_SUBSCRIPTION_TIER}
         />
       ) : loadingMatches && !activeMatch ? (
         <div className="flex-1 flex items-center justify-center">

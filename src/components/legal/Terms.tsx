@@ -305,13 +305,13 @@ export function Terms() {
 
             <h3 className="text-2xl font-bold mb-3 mt-6">Pricing</h3>
             <p className="opacity-70">
-              OneHook currently offers a free tier with optional paid premium features. Pricing is
+              OneHook currently offers a free tier with optional paid membership tiers. Pricing is
               subject to change upon 30 days' notice.
             </p>
 
             <h3 className="text-2xl font-bold mb-3 mt-6">Billing</h3>
             <p className="opacity-70">
-              Premium subscriptions renew automatically unless cancelled. You may cancel anytime in
+              Paid memberships renew automatically unless cancelled. You may cancel anytime in
               account settings.
             </p>
 

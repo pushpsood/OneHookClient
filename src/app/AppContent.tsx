@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Lock } from 'lucide-react';
 import { UserState } from '../types';
-import { isPremium, useAppStore } from '../store/app-store';
+import { isPaidSubscriptionTier, subscriptionTierDisplayName } from 'onehook-api-client/membership';
+import { isPaidTier, useAppStore } from '../store/app-store';
 import { useCandidates, useProfile, useSwipe, useUserState } from '../hooks/use-api';
 import { useUserLocation } from '../hooks/use-user-location';
 import { ApiError } from '../lib/api-client';
@@ -59,7 +60,10 @@ export function AppContent() {
   } = useProfile();
 
   const { refetch: refetchUserState } = useUserState();
-  const premium = useAppStore(isPremium);
+  const paid = useAppStore(isPaidTier);
+  const paidTierName = userState?.subscriptionTier
+    ? subscriptionTierDisplayName(userState.subscriptionTier)
+    : undefined;
   const [upgrading, setUpgrading] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -77,7 +81,11 @@ export function AppContent() {
       const auth = getCognitoAuth();
       await auth.refreshAccessToken();
       await Promise.all([refetchUserState(), refetchProfile()]);
-      showToast('Welcome to Premium! 🎉', 'success');
+      const tier = useAppStore.getState().userState?.subscriptionTier;
+      showToast(
+        isPaidSubscriptionTier(tier) ? `Welcome to ${subscriptionTierDisplayName(tier!)}! 🎉` : 'Your membership is up to date.',
+        'success',
+      );
     } catch (error) {
       console.error('Upgrade failed:', error);
       showToast("We couldn't complete your upgrade. Please try again.", 'error');
@@ -242,7 +250,7 @@ export function AppContent() {
         onNavigateToLikes={() => setAppState('LIKES')}
         onNavigateToDiscovery={() => setAppState('DISCOVERY')}
         onOpenSettings={() => setAppState('SETTINGS')}
-        premium={premium}
+        paidTierName={paid ? paidTierName : undefined}
         userPhoto={userPhoto}
       />
 

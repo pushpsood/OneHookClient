@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { DiscoveryCandidate, UserProfile, Match, UserStateSnapshot, SubscriptionTier } from '../types';
+import { isPaidSubscriptionTier } from 'onehook-api-client/membership';
+import { DiscoveryCandidate, UserProfile, Match, UserStateSnapshot } from '../types';
 
 interface AppState {
   // User state
@@ -89,13 +90,13 @@ export const useAppStore = create<AppState>((set) => ({
 }));
 
 /**
- * Whether the caller is on a paid tier, derived from the authoritative State snapshot.
+ * Whether the caller is on a paid tier (Super / Infinity), derived from the authoritative State
+ * snapshot via the backend-owned membership catalogue in onehook-api-client.
  *
- * <p>Returns `false` until the snapshot has loaded, so the UI fails closed (shows BASIC) rather
- * than briefly promising premium. This is a presentation decision only — the server independently
- * enforces entitlement on every premium operation.</p>
+ * <p>Returns `false` until the snapshot has loaded, so the UI fails closed (shows the free tier)
+ * rather than briefly promising a paid tier. This is a presentation decision only — the server
+ * independently enforces entitlement on every paid-tier operation.</p>
  */
-export function isPremium(state: Pick<AppState, 'userState'>): boolean {
-  const tier = state.userState?.subscriptionTier;
-  return tier != null && tier !== SubscriptionTier.FREE;
+export function isPaidTier(state: Pick<AppState, 'userState'>): boolean {
+  return isPaidSubscriptionTier(state.userState?.subscriptionTier);
 }

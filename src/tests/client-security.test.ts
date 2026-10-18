@@ -50,7 +50,7 @@ describe('client security guard rails', () => {
   it('contains no always-true authentication or entitlement checks', () => {
     for (const { path, text } of sources) {
       expect(text, `${path} must not short-circuit a boolean check to true`).not.toMatch(
-        /(isAuthenticated|isVerified|isPremium|hasAccess)\s*\([^)]*\)\s*:\s*boolean\s*\{\s*return true;/
+        /(isAuthenticated|isVerified|isPaidTier|hasAccess)\s*\([^)]*\)\s*:\s*boolean\s*\{\s*return true;/
       );
     }
   });

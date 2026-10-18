@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { UiElement, trackProps } from '../lib/analytics/analytics';
+import { MOST_POPULAR_TIER, PAID_TIER_NAMES } from '../config/membership.config';
 import { motion, AnimatePresence, useMotionValue, useSpring, useScroll, useTransform, useReducedMotion, type MotionValue } from 'motion/react';
 import {
   Heart,
@@ -227,6 +228,178 @@ function Accent({ children, tone = 'silver' }: { children: React.ReactNode; tone
   );
 }
 
+const HERO_WORDS = ['One', 'connection', 'Zero', 'distractions'] as const;
+/** Let the hero's entrance animation finish before the first switch. */
+const HERO_ACCENT_START_DELAY_MS = 1600;
+/** Each hold is randomised inside this window so the rhythm never settles into a beat. */
+const HERO_ACCENT_HOLD_MIN_MS = 1300;
+const HERO_ACCENT_HOLD_MAX_MS = 2700;
+/** How long a "misfire" flashes on the wrong word before the accent lands where it was going. */
+const HERO_ACCENT_MISFIRE_MS = 110;
+/** Chance that a hop briefly misfires onto another word first. */
+const HERO_ACCENT_MISFIRE_CHANCE = 0.18;
+
+const rand = (min: number, max: number) => min + Math.random() * (max - min);
+const sign = () => (Math.random() < 0.5 ? -1 : 1);
+
+/**
+ * Next accent position. Mostly the very next word (keeps the sentence reading in order), but now
+ * and then it skips one or two ahead, so the loop never looks mechanical.
+ */
+function nextHeroWord(current: number) {
+  const r = Math.random();
+  const step = r < 0.65 ? 1 : r < 0.9 ? 2 : 3;
+  return (current + step) % HERO_WORDS.length;
+}
+
+/** Fresh slice positions / jitter direction for every glitch, consumed by the CSS keyframes. */
+function glitchVars(): React.CSSProperties {
+  const slice = () => `${Math.round(rand(8, 62))}%`;
+  return {
+    '--g-a1': slice(),
+    '--g-b1': slice(),
+    '--g-a2': slice(),
+    '--g-b2': slice(),
+    '--g-x': `${(sign() * rand(0.03, 0.07)).toFixed(3)}em`,
+    '--g-c': `${(sign() * rand(0.03, 0.06)).toFixed(3)}em`,
+  } as React.CSSProperties;
+}
+
+type HeroAccentState = {
+  active: number;
+  /** Word that just lost the accent and plays the short release jitter. */
+  released: number | null;
+  /** Per-transition randomness for the incoming glitch. */
+  vars: React.CSSProperties;
+  /** Bumped on every transition so the glitch restarts even if the same word repeats. */
+  tick: number;
+};
+
+/**
+ * Hero headline in which the Playfair accent hops between the four words with a short, sliced
+ * chromatic glitch, pulling the eye across the whole promise. Order is mostly sequential, with
+ * random skips, random hold times, occasional misfires and freshly randomised slices each time.
+ *
+ * Each word's box is sized to the form currently shown (measured, with a short width transition),
+ * so spacing between words always matches normal text and the centred line eases rather than jumps.
+ * Screen readers get the plain sentence once; reduced-motion users get the static "One" accent.
+ */
+function HeroHeadline() {
+  const reduceMotion = useReducedMotion();
+  const [state, setState] = useState<HeroAccentState>({ active: 0, released: null, vars: {}, tick: 0 });
+  // Glitch classes apply only once cycling starts, so first paint is the clean static headline.
+  const [cycling, setCycling] = useState(false);
+
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const plainRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const accentRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const [widths, setWidths] = useState<{ plain: number[]; accent: number[] } | null>(null);
+
+  // Measure both forms of every word; re-measure on resize (fluid font size) and after webfonts load.
+  useLayoutEffect(() => {
+    const measure = () => {
+      const read = (els: (HTMLSpanElement | null)[]) => HERO_WORDS.map((_, i) => els[i]?.offsetWidth ?? 0);
+      const next = { plain: read(plainRefs.current), accent: read(accentRefs.current) };
+      setWidths((prev) =>
+        prev && prev.plain.join() === next.plain.join() && prev.accent.join() === next.accent.join() ? prev : next,
+      );
+    };
+    measure();
+    let alive = true;
+    document.fonts?.ready.then(() => alive && measure());
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (headingRef.current) ro?.observe(headingRef.current);
+    return () => {
+      alive = false;
+      ro?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion) {
+      setState({ active: 0, released: null, vars: {}, tick: 0 });
+      setCycling(false);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout>;
+    const moveTo = (target: number) =>
+      setState((s) => ({ active: target, released: s.active, vars: glitchVars(), tick: s.tick + 1 }));
+
+    const hop = (current: number) => {
+      const target = nextHeroWord(current);
+      const others = HERO_WORDS.map((_, i) => i).filter((i) => i !== current && i !== target);
+      if (Math.random() < HERO_ACCENT_MISFIRE_CHANCE && others.length) {
+        // Misfire: flick onto a wrong word for a beat, then land on the real target.
+        moveTo(others[Math.floor(Math.random() * others.length)]);
+        timer = setTimeout(() => {
+          moveTo(target);
+          schedule(target);
+        }, HERO_ACCENT_MISFIRE_MS);
+        return;
+      }
+      moveTo(target);
+      schedule(target);
+    };
+    const schedule = (current: number) => {
+      timer = setTimeout(() => hop(current), rand(HERO_ACCENT_HOLD_MIN_MS, HERO_ACCENT_HOLD_MAX_MS));
+    };
+
+    timer = setTimeout(() => {
+      setCycling(true);
+      hop(0);
+    }, HERO_ACCENT_START_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [reduceMotion]);
+
+  const word = (index: number) => {
+    const isActive = index === state.active;
+    const glitchOut = cycling && index === state.released ? ' oh-glitch-out' : '';
+    const glitchIn = cycling ? ' oh-glitch-in' : '';
+    const width = widths ? (isActive ? widths.accent[index] : widths.plain[index]) : undefined;
+    return (
+      <span
+        className="inline-grid grid-cols-[minmax(0,1fr)] justify-items-center align-baseline transition-[width] duration-200 ease-out"
+        style={width ? { width } : undefined}
+      >
+        <span
+          key={`p-${index}-${glitchOut ? state.tick : 0}`}
+          ref={(el) => {
+            plainRefs.current[index] = el;
+          }}
+          className={`[grid-area:1/1] w-max transition-opacity duration-150 ${isActive ? 'opacity-0' : `opacity-100${glitchOut}`}`}
+        >
+          {HERO_WORDS[index]}
+        </span>
+        <span
+          key={`a-${index}-${isActive ? state.tick : 0}`}
+          ref={(el) => {
+            accentRefs.current[index] = el;
+          }}
+          className={`[grid-area:1/1] w-max transition-opacity duration-150 ${isActive ? `opacity-100${glitchIn}` : 'opacity-0'}`}
+          style={isActive ? state.vars : undefined}
+        >
+          <Accent tone="silver">{HERO_WORDS[index]}</Accent>
+        </span>
+      </span>
+    );
+  };
+
+  return (
+    <h1
+      ref={headingRef}
+      className="font-light tracking-[-0.03em] leading-[1.03] text-white mb-6 drop-shadow-lg"
+      style={{ fontSize: 'clamp(2.75rem, 8vw, 5.5rem)' }}
+    >
+      <span className="sr-only">One connection. Zero distractions.</span>
+      <span aria-hidden="true">
+        {word(0)} {word(1)}.
+        <br />
+        {word(2)} {word(3)}.
+      </span>
+    </h1>
+  );
+}
+
 /** Dummy profile shown inside the manifesto phone — editorial, not a real member. */
 const PHONE_PROFILE = {
   name: 'Isha',
@@ -279,7 +452,7 @@ const PHONE_THREAD = [
 /** Rows for the Profile hub (mirrors the iOS ProfileViewController summary + sections). */
 const PHONE_PROFILE_ROWS = [
   { label: 'Edit profile', hint: 'Photos · prompts · voice' },
-  { label: 'Membership', hint: 'Premium' },
+  { label: 'Membership', hint: MOST_POPULAR_TIER.displayName },
   { label: 'Notifications', hint: '' },
   { label: 'Privacy & safety', hint: '' },
   { label: 'Appearance', hint: 'System' },
@@ -524,7 +697,7 @@ function ManifestoPhone({ progress, reduce }: { progress: MotionValue<number>; r
                     <PhoneVerified className="h-3.5 w-3.5" />
                   </div>
                   <div className="mt-1.5 flex gap-1.5">
-                    <span className="rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-white" style={{ background: OH_INK }}>Premium</span>
+                    <span className="rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-white" style={{ background: OH_INK }}>{MOST_POPULAR_TIER.displayName}</span>
                     <span className="rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-wider" style={{ borderColor: OH_BORDER, color: muted }}>Verified</span>
                   </div>
                 </div>
@@ -548,7 +721,7 @@ function ManifestoPhone({ progress, reduce }: { progress: MotionValue<number>; r
                 <p className={`mt-5 ${label}`} style={{ color: muted }}>OneHook AI</p>
                 <div className="mt-2 border p-3" style={{ borderColor: OH_BORDER }}>
                   <p className="text-[11px] font-bold" style={{ color: OH_INK }}>Mr OneHook</p>
-                  <p className="mt-0.5 text-[9.5px] leading-relaxed" style={{ color: muted }}>Your AI wingmate. Reads meaning, not keywords. Included with Premium.</p>
+                  <p className="mt-0.5 text-[9.5px] leading-relaxed" style={{ color: muted }}>Your AI wingmate. Reads meaning, not keywords. Included with {PAID_TIER_NAMES}.</p>
                 </div>
               </div>
             </motion.div>
@@ -1388,14 +1561,7 @@ export function Landing() {
             </Kicker>
           </div>
 
-          <h1
-            className="font-light tracking-[-0.03em] leading-[1.03] text-white mb-6 drop-shadow-lg"
-            style={{ fontSize: 'clamp(2.75rem, 8vw, 5.5rem)' }}
-          >
-            <Accent tone="silver">One</Accent> connection.
-            <br />
-            Zero distractions.
-          </h1>
+          <HeroHeadline />
 
           <p className="relative mx-auto mb-10 max-w-2xl text-lg md:text-2xl font-light leading-relaxed text-white/85 drop-shadow-md">
             {/* Invisible sizer reserves the final space so buttons below don't

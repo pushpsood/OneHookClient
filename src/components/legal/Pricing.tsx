@@ -191,7 +191,8 @@ export function Pricing() {
           </h1>
           <p className="text-lg opacity-60 max-w-2xl mx-auto">
             Messaging is free forever — keep OneHook as your everyday encrypted messenger.
-            Paid tiers add discovery reach for when you&apos;re actively dating. Only Infinity
+            Paid tiers add discovery reach for when you&apos;re actively dating. Only{' '}
+            {MEMBERSHIP_TIERS.filter((t) => t.maxConnections > 1).map((t) => t.displayName).join(' and ')}{' '}
             lets you hold more than one connection at a time.
           </p>
           <div className="mt-8 flex justify-center">

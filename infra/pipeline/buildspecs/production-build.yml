@@ -31,6 +31,7 @@ phases:
         test -s cdk.out.prod/manifest.json
         test -s cdk.out.prod/OneHook-Frontend-prod.template.json
         test -s cdk.out.prod/OneHook-Certificate-prod.template.json
+        test -s cdk.out.prod/OneHook-ChatbotDns-prod.template.json
 
 artifacts:
   files:

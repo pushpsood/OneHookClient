@@ -18,8 +18,8 @@ interface TopBarProps {
   title?: string;
   /** Current user's profile photo for the wordmark area. */
   userPhoto?: string;
-  /** Whether the user is premium. */
-  premium?: boolean;
+  /** Brand name of the caller's paid tier (Super / Infinity), or undefined on the free tier. */
+  paidTierName?: string;
   /** Likes count badge */
   likesCount?: number;
   /** Unread messages count badge */
@@ -31,7 +31,7 @@ interface TopBarProps {
 export function TopBar({
   onNavigateToDiscovery,
   onBack,
-  premium,
+  paidTierName,
   centerContent,
 }: TopBarProps) {
   const { resolvedTheme, toggleTheme } = useTheme();
@@ -68,14 +68,14 @@ export function TopBar({
               {...trackProps(UiElement.NAV_HOME_LOGO)}
             >
               <BrandWordmark className="text-xl sm:text-2xl font-bold tracking-tight text-text group-hover/logo:opacity-85 transition-opacity" text="OneHook" />
-              {premium && (
-                <span className="text-[9px] px-1.5 py-0.5 bg-accent text-bg rounded-full tracking-widest font-bold leading-none">
-                  PRO
+              {paidTierName && (
+                <span className="text-[9px] px-1.5 py-0.5 bg-accent text-bg rounded-full tracking-widest font-bold leading-none uppercase">
+                  {paidTierName}
                 </span>
               )}
             </div>
             <div className="pointer-events-none absolute left-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/logo:opacity-100 transition-all duration-150 shadow-md z-50">
-              {premium ? 'OneHook (PRO)' : 'OneHook Home'}
+              {paidTierName ? `OneHook ${paidTierName}` : 'OneHook Home'}
             </div>
           </div>
         </div>

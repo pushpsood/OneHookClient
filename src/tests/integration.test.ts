@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { maxConnectionsForTier } from 'onehook-api-client/membership';
 import { StateApi } from '../api/state';
 import { UserState, SubscriptionTier, RankedCandidate, DiscoverResponse } from '../types';
 
@@ -14,9 +15,9 @@ describe('StateApi: Single-Threaded Constraint', () => {
     expect(initialState.maxConnections).toBe(1);
   });
 
-  it('GOLD tier should allow up to 3 concurrent connections', () => {
-    const goldState = { maxConnections: 3, subscriptionTier: SubscriptionTier.GOLD };
-    expect(goldState.maxConnections).toBe(3);
+  it('only the top tier (Infinity) allows more than one concurrent connection', () => {
+    expect(maxConnectionsForTier(SubscriptionTier.SUPER)).toBe(1);
+    expect(maxConnectionsForTier(SubscriptionTier.INFINITY)).toBe(3);
   });
 
   it('hook creation payload should include both userA and userB', () => {

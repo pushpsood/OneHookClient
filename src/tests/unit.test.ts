@@ -12,7 +12,7 @@ describe('MatchingApi: Unit Tests', () => {
     interestedIn: ['Tech', 'Art'],
     photos: [],
     location: { lat: 0, lng: 0, geohash: '' },
-    subscriptionTier: SubscriptionTier.FREE,
+    subscriptionTier: SubscriptionTier.MUST,
     activeConnections: 0,
     currentState: UserState.AVAILABLE,
     currentMatches: [],
@@ -26,8 +26,8 @@ describe('MatchingApi: Unit Tests', () => {
     expect(url).toContain('lon=0');
   });
 
-  it('free-tier user should have FREE subscription tier', () => {
-    expect(mockUser.subscriptionTier).toBe(SubscriptionTier.FREE);
+  it('free-tier user should have the MUST subscription tier', () => {
+    expect(mockUser.subscriptionTier).toBe(SubscriptionTier.MUST);
   });
 });
 
@@ -300,7 +300,7 @@ describe('Discovery Profile & Preview: Shared Data Representation', () => {
       prompts: [{ promptId: 'Dating me looks like...', answer: 'Spontaneous coffee dates' }],
       interests: ['Design', 'Coffee', 'Running'],
       location: { lat: 37.77, lng: -122.41, geohash: '9q8yy' },
-      subscriptionTier: SubscriptionTier.FREE,
+      subscriptionTier: SubscriptionTier.MUST,
       activeConnections: 0,
       currentState: UserState.AVAILABLE,
       currentMatches: [],

@@ -16,7 +16,7 @@ export type { ChatMessage, MessageReceipt, DeletedMessage };
  * Design philosophy (see OneHookBackend/packages/chat):
  *  - Real-time messaging is served by AWS AppSync GraphQL over WebSocket (NOT
  *    REST). History is read ONLY via the `getMessages` query. Delivery/read
- *    receipts and message deletion are PREMIUM-tier mutations (the server
+ *    receipts and message deletion are paid-tier mutations (the server
  *    enforces the tier from the caller's JWT).
  *  - Messages carry only `ciphertext`; the server never sees plaintext (E2EE).
  *  - REST (via the generated SDK) is used only for multi-device key management and
@@ -182,7 +182,7 @@ export const ChatMessagingApi = {
     return data.sendMessage;
   },
 
-  /** PREMIUM only — the server rejects FREE-tier callers. */
+  /** Paid tiers only — the server rejects free-tier callers. */
   markAsDelivered: async (
     matchId: string,
     timestamp: number,
@@ -198,7 +198,7 @@ export const ChatMessagingApi = {
     return data.markAsDelivered;
   },
 
-  /** PREMIUM only — the server rejects FREE-tier callers. */
+  /** Paid tiers only — the server rejects free-tier callers. */
   markAsRead: async (
     matchId: string,
     timestamp: number,
@@ -214,7 +214,7 @@ export const ChatMessagingApi = {
     return data.markAsRead;
   },
 
-  /** PREMIUM only — deletes a single message for everyone. */
+  /** Paid tiers only — deletes a single message for everyone. */
   deleteMessage: async (matchId: string, timestamp: number): Promise<DeletedMessage | null> => {
     const data = await graphql<{ deleteMessage: DeletedMessage }>(DELETE_MESSAGE, {
       matchId,
@@ -467,7 +467,7 @@ async function chatRest<T>(method: string, path: string, body?: unknown): Promis
  * belong to claiming a pre-key bundle.
  */
 export const ChatApi = {
-  /** Hard-delete all messages for a match (PREMIUM, e.g. on unmatch). */
+  /** Hard-delete all messages for a match (paid tiers, e.g. on unmatch). */
   deleteMatchMessages: (matchId: string) => sdkClient.deleteMatchMessages({ matchId }),
 
   // --- Attachment media (E2EE) ---

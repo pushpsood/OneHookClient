@@ -18,7 +18,7 @@ import type { UserStateSnapshot } from '../types';
  *    `MutualMatch` event so a client cannot fabricate a connection.
  */
 export const StateApi = {
-  /** Initialize the caller's state record. Body-less; the tier is always seeded FREE server-side. */
+  /** Initialize the caller's state record. Body-less; the tier is always seeded MUST server-side. */
   initUser: async () => {
     return (sdkClient as any).initUser({});
   },

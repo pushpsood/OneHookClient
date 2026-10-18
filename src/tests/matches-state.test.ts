@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { maxConnectionsForTier } from 'onehook-api-client/membership';
 import { UserState, SubscriptionTier, UserStateSnapshot, UserProfile } from '../types';
 import { StateApi } from '../api/state';
 
@@ -10,7 +11,7 @@ describe('Matches: State Service Extension', () => {
     displayName: 'Pushp',
     photos: ['media/photo1.jpg'],
     location: { lat: 37.77, lng: -122.41, geohash: '9q8yy' },
-    subscriptionTier: SubscriptionTier.FREE,
+    subscriptionTier: SubscriptionTier.MUST,
     activeConnections: 1,
     currentState: UserState.HOOKED,
     currentMatches: ['match-abc-456'],
@@ -21,7 +22,7 @@ describe('Matches: State Service Extension', () => {
     state: UserState.HOOKED,
     activeConnections: 1,
     matchIds: ['match-abc-456'],
-    subscriptionTier: SubscriptionTier.FREE,
+    subscriptionTier: SubscriptionTier.MUST,
   };
 
   const userStateAvailable: UserStateSnapshot = {
@@ -29,7 +30,7 @@ describe('Matches: State Service Extension', () => {
     state: UserState.AVAILABLE,
     activeConnections: 0,
     matchIds: [],
-    subscriptionTier: SubscriptionTier.FREE,
+    subscriptionTier: SubscriptionTier.MUST,
   };
 
   it('determines peer ID correctly from State service match record', () => {
@@ -58,16 +59,18 @@ describe('Matches: State Service Extension', () => {
     expect(peerB).toBe('usr-peer-789');
   });
 
-  it('computes connection capacity based on authoritative subscription tier', () => {
-    const freeCapacity = userStateHooked.subscriptionTier === SubscriptionTier.FREE ? 1 : 3;
-    expect(freeCapacity).toBe(1);
+  it('computes connection capacity from the backend-owned tier catalogue', () => {
+    expect(maxConnectionsForTier(userStateHooked.subscriptionTier)).toBe(1);
 
     const goldState: UserStateSnapshot = {
       ...userStateHooked,
-      subscriptionTier: SubscriptionTier.GOLD,
+      subscriptionTier: SubscriptionTier.SUPER,
     };
-    const goldCapacity = goldState.subscriptionTier === SubscriptionTier.FREE ? 1 : 3;
-    expect(goldCapacity).toBe(3);
+    // Super keeps the one-connection rule; only the top tier relaxes it.
+    expect(maxConnectionsForTier(goldState.subscriptionTier)).toBe(1);
+    expect(maxConnectionsForTier(SubscriptionTier.INFINITY)).toBe(3);
+    // An unknown / missing tier fails closed to the free ceiling.
+    expect(maxConnectionsForTier(undefined)).toBe(1);
   });
 
   it('unhooking resets active connections and transitions state to AVAILABLE', () => {

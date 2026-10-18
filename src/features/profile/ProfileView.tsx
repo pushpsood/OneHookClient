@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, type ReactNode, type ChangeEvent } from 'react';
+import { subscriptionTierDisplayName } from 'onehook-api-client/membership';
 import { motion } from 'motion/react';
 import {
   CheckCircle2,
@@ -166,7 +167,9 @@ export function ProfileView({
   user: UserProfile;
 }) {
   const { userState, setCurrentUser } = useAppStore();
-  const tierLabel = userState?.subscriptionTier ?? '—';
+  const tierLabel = userState?.subscriptionTier
+    ? subscriptionTierDisplayName(userState.subscriptionTier)
+    : '—';
   const { showToast } = useToast();
   const { prefs, save: savePreferences, saving } = usePreferences(user.id);
   const fieldStatus = user.fieldModerationStatus || {};

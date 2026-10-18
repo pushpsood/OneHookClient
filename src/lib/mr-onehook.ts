@@ -11,13 +11,14 @@
  * context (`needsMoreContext`) AND the user explicitly approves the excerpts the device selected.
  * Excerpts are never persisted — not in the transcript, not in the session payload, not in logs.
  *
- * Session persistence is tier-gated: only a non-FREE local display tier requests it, and any
+ * Session persistence is tier-gated: only a paid (Super / Infinity) local display tier requests it, and any
  * server-side session denial is handled by transparently retrying the same question without a
  * session so the user still gets an answer.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { chatbotUrl } from '../utils/env.config';
-import { SubscriptionTier } from '../types';
+import { isPaidSubscriptionTier } from 'onehook-api-client/membership';
+import type { SubscriptionTier } from '../types';
 import {
   buildMemberChatRequestBody,
   classifyMemberChatAvailability,
@@ -89,7 +90,7 @@ export interface PendingExcerptReview {
 export interface UseMrOneHookChatOptions {
   userId: string;
   scope: MrOneHookScope;
-  /** Verified local display tier; only a non-FREE tier requests session persistence. */
+  /** Verified local display tier; only a paid (Super / Infinity) tier requests session persistence. */
   tier: SubscriptionTier;
   /** Supplied for match scope so a `needsMoreContext` turn can search local history. */
   resolveLocalExcerpts?: LocalExcerptResolver;
@@ -194,7 +195,7 @@ function toEpochMs(iso?: string): number | undefined {
 export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHookChat {
   const { userId, scope, tier, resolveLocalExcerpts } = options;
   const matchId = scope.type === 'match' ? scope.matchId : undefined;
-  const persistAllowed = tier !== SubscriptionTier.FREE;
+  const persistAllowed = isPaidSubscriptionTier(tier);
   const key = scopeKey(scope);
 
   const [messages, setMessages] = useState<MrOneHookMessage[]>(() => loadTranscript(userId, scope));

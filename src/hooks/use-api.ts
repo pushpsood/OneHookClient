@@ -99,7 +99,7 @@ export function useProfile(userId?: string) {
  * <p>This is the single place the UI learns the subscription tier and connection state. It is
  * deliberately sourced from the State service rather than the profile, because the Profile read
  * model intentionally omits `subscriptionTier` — reading it off a profile silently yields
- * `undefined`, which previously made every user look PREMIUM.</p>
+ * `undefined`, which previously made every user look like a paid tier.</p>
  *
  * <p>The same response also carries `matchIds`, so matches are derived here instead of issuing a
  * second identical request.</p>
@@ -445,8 +445,8 @@ interface PendingAttachmentUpload {
 /**
  * Chat messaging hook backed by AppSync GraphQL. Reads history via `getMessages`,
  * sends via `sendMessage`, and live-updates via the `onNewMessage` subscription.
- * Delivery/read receipts are premium-only mutations; failures there are ignored
- * for FREE-tier users (the server rejects them).
+ * Delivery/read receipts are paid-tier-only mutations; failures there are ignored
+ * for Must-tier users (the server rejects them).
  */
 export function useChatMessages(matchId: string, recipientId?: string) {
   const { currentUser } = useAppStore();
@@ -824,7 +824,7 @@ export function useChatMessages(matchId: string, recipientId?: string) {
           )
         );
       } catch (err) {
-        // Premium-gated server-side; ignore for FREE tier.
+        // Paid-tier-gated server-side; ignore for the free tier.
         console.debug('markAsDelivered skipped:', err);
       }
     },

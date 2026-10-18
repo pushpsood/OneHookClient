@@ -4,6 +4,7 @@ import { HostedZone } from 'aws-cdk-lib/aws-route53';
 import { Certificate, CertificateValidation } from 'aws-cdk-lib/aws-certificatemanager';
 import { Construct } from 'constructs';
 import { FrontendStack } from './frontend-stack.ts';
+import { ChatbotDnsStack } from './chatbot-dns-stack.ts';
 import { ACCOUNTS, DOMAINS, PRODUCTION_HOSTED_ZONE_ID } from './constants.ts';
 
 /**
@@ -113,6 +114,16 @@ new FrontendStack(app, `OneHook-Frontend-${stageName}`, {
   hostedZoneId: stage.hostedZoneId,
   includeWww: stage.includeWww,
   certificateArn: certStack.certificateArn,
+});
+
+// Mr OneHook chatbot custom domains (chatbot.gamma.onehook.club / chatbot.onehook.club). Both
+// stages' records live in this account's apex zone, so one stack serves gamma and prod.
+new ChatbotDnsStack(app, `OneHook-ChatbotDns-${stageName}`, {
+  env,
+  stackName: `OneHook-ChatbotDns-${stageName}`,
+  description: 'Route53 records for the Mr OneHook chatbot custom domains (Azure App Service)',
+  hostedZoneName: stage.hostedZoneName,
+  hostedZoneId: stage.hostedZoneId,
 });
 
 app.synth();

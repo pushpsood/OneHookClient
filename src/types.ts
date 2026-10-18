@@ -25,11 +25,11 @@ export enum UserState {
   HOOKED = 'HOOKED',
 }
 
-export enum SubscriptionTier {
-  FREE = 'FREE',
-  GOLD = 'GOLD',
-  PLATINUM = 'PLATINUM',
-}
+// Membership tiers are owned by the backend Smithy model (club.onehook.common#SubscriptionTier) and
+// consumed ONLY from onehook-api-client. Never re-declare tier names here — see
+// src/tests/membership-source-of-truth.test.ts.
+export { SubscriptionTier } from 'onehook-api-client';
+import type { SubscriptionTier } from 'onehook-api-client';
 
 /**
  * Authoritative, server-owned view of a user's connection state and entitlement.
@@ -40,8 +40,8 @@ export enum SubscriptionTier {
  * read model (see ProfileDtoMapper), so reading the tier off a profile always yields `undefined`.</p>
  *
  * <p>Treat these values as a <strong>rendering input only</strong>. Entitlement is enforced
- * server-side (DynamoDB capacity conditions, premium chat resolvers, the verified JWT claim), so a
- * tampered client can reveal a premium control but cannot use it.</p>
+ * server-side (DynamoDB capacity conditions, paid-tier chat resolvers, the verified JWT claim), so a
+ * tampered client can reveal a paid-tier control but cannot use it.</p>
  */
 export type UserStateSnapshot = {
   userId: string;

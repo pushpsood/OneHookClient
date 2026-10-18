@@ -60,3 +60,32 @@ export const APP_STORE_LINKS = {
    */
   fallback: 'https://onehook.club/app',
 } as const;
+
+/**
+ * Mr OneHook AI chatbot custom domains (Azure App Service, OneHookUXEnhancement/infra).
+ *
+ * User-facing hostnames follow the same stage convention as the backend API
+ * (`api.gamma.onehook.club` / `api.onehook.club`): the stage segment sits right before the apex,
+ * and prod has none. The records live in THIS account's apex `onehook.club` zone (there is no
+ * `gamma.onehook.club` zone; `api.gamma` is delegated straight from the apex too):
+ *
+ *   CNAME  chatbot[.gamma].onehook.club        -> <azureHost>
+ *   TXT    asuid.chatbot[.gamma].onehook.club  -> customDomainVerificationId
+ *
+ * `customDomainVerificationId` is Azure's per-subscription domain-ownership token (Terraform output
+ * `custom_domain_verification_id`). It is published in public DNS by design and is not a secret.
+ * Azure binds the hostname and issues a managed TLS certificate only once both records resolve.
+ */
+export const CHATBOT_DOMAINS = {
+  customDomainVerificationId: 'C98530B2C5BF3F29247D2553A19B55BEED4FB8312F2089192CB9CA43AF40E975',
+  stages: {
+    gamma: {
+      hostname: 'chatbot.gamma.onehook.club',
+      azureHost: 'onehook-chatbot-api.azurewebsites.net',
+    },
+    prod: {
+      hostname: 'chatbot.onehook.club',
+      azureHost: 'onehook-chatbot-api-prod.azurewebsites.net',
+    },
+  },
+} as const;

@@ -16,7 +16,8 @@ import {
   Send,
 } from 'lucide-react';
 import type { UserProfile, UserStateSnapshot, ChatMessageDTO } from '../../types';
-import { UserState, SubscriptionTier } from '../../types';
+import { maxConnectionsForTier } from 'onehook-api-client/membership';
+import { UserState } from '../../types';
 import { StateApi } from '../../api/state';
 import { ProfileApi } from '../../api/profile';
 import { useChatMessages } from '../../hooks/use-api';
@@ -79,8 +80,8 @@ export function MatchesView({
   const matchIds = userState?.matchIds || [];
   const activeConnections = userState?.activeConnections ?? matchIds.length;
   const isHooked = userState?.state === UserState.HOOKED;
-  const tier = userState?.subscriptionTier || SubscriptionTier.FREE;
-  const maxConnections = tier === SubscriptionTier.FREE ? 1 : 3;
+  // Ceiling comes from the backend-owned catalogue (Must 1 / Super 1 / Infinity 3); unknown → free.
+  const maxConnections = maxConnectionsForTier(userState?.subscriptionTier);
 
   const loadMatches = useCallback(async () => {
     if (!matchIds.length) {

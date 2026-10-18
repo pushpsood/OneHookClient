@@ -16,9 +16,11 @@ phases:
         test -s cdk.out.prod/manifest.json
         test -s cdk.out.prod/OneHook-Frontend-prod.template.json
         test -s cdk.out.prod/OneHook-Certificate-prod.template.json
+        test -s cdk.out.prod/OneHook-ChatbotDns-prod.template.json
         npx cdk deploy \
           OneHook-Certificate-prod \
           OneHook-Frontend-prod \
+          OneHook-ChatbotDns-prod \
           --app cdk.out.prod \
           --require-approval never \
           --outputs-file production-outputs.json

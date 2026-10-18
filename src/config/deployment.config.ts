@@ -38,7 +38,8 @@ export const BACKEND_DEPLOYMENTS = {
     // Custom domains active after DNS delegation - 2026-09-14
     apiBaseUrl: 'https://api.gamma.onehook.club',
     graphqlUrl: 'https://graphql.api.gamma.onehook.club/graphql',
-    chatbotUrl: 'https://onehook-chatbot-api.azurewebsites.net',
+    // Mr OneHook AI chatbot (Azure) behind its custom domain; prod is https://chatbot.onehook.club.
+    chatbotUrl: 'https://chatbot.gamma.onehook.club',
     cognitoRegion: 'ap-south-1',
     // Fresh deployment 2026-09-14 - new Cognito user pool after backend rebuild
     cognitoUserPoolId: 'ap-south-1_7cHT1Kxr6',
