@@ -5,39 +5,51 @@ interface LoadingSpinnerProps {
   fullScreen?: boolean;
 }
 
-export function LoadingSpinner({ size = 'md', fullScreen = false }: LoadingSpinnerProps) {
-  const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-8 h-8',
-    lg: 'w-12 h-12',
-  };
+/** Pixel dimensions for each named size. The full-screen loader uses a larger fixed size. */
+const SIZE_PX = {
+  sm: 20,
+  md: 40,
+  lg: 56,
+} as const;
 
-  const spinner = (
+const FULLSCREEN_PX = 124;
+
+/**
+ * The OneHook brand loader: the silver heart flips around the Y axis in 3D while the navy "1" stays
+ * fixed on top (matches the iOS HeartLoaderView and the index.html boot splash). This is the single
+ * loader used everywhere in the app — inline, per-view (menu switches), and full screen — so the
+ * loading experience is identical in every surface.
+ */
+function HeartLoader({ px }: { px: number }) {
+  return (
     <div
-      className={`${sizeClasses[size]} border-2 border-border border-t-accent rounded-full animate-spin`}
+      className="relative"
+      style={{ width: px, height: px, perspective: px * 5 }}
       role="status"
       aria-label="Loading"
-    />
+    >
+      <img
+        src="/media/LogoHeart.png"
+        alt=""
+        className="absolute inset-0 w-full h-full object-contain animate-oh-flip origin-center"
+      />
+      <img
+        src="/media/LogoOne.png"
+        alt=""
+        className="absolute inset-0 w-full h-full object-contain z-10"
+      />
+    </div>
   );
+}
 
+export function LoadingSpinner({ size = 'md', fullScreen = false }: LoadingSpinnerProps) {
   if (fullScreen) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center">
-        <div className="relative w-[124px] h-[124px]" style={{ perspective: '600px' }}>
-          <img
-            src="/media/LogoHeart.png"
-            alt=""
-            className="absolute inset-0 w-full h-full object-contain animate-oh-flip origin-center"
-          />
-          <img
-            src="/media/LogoOne.png"
-            alt=""
-            className="absolute inset-0 w-full h-full object-contain z-10"
-          />
-        </div>
+        <HeartLoader px={FULLSCREEN_PX} />
       </div>
     );
   }
 
-  return spinner;
+  return <HeartLoader px={SIZE_PX[size]} />;
 }

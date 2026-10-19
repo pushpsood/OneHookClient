@@ -18,8 +18,6 @@
   --color-tab-active: #1A1A1A;
   --color-tab-inactive: #737373;
   --color-ig-blue: #0095F6;
-
-  --animate-oh-flip: oh-flip 1.8s ease-in-out infinite;
 }
 
 @keyframes oh-flip {
@@ -87,6 +85,8 @@
   --color-tab-active: var(--color-tab-active);
   --color-tab-inactive: var(--color-tab-inactive);
   --color-ig-blue: var(--color-ig-blue);
+
+  --animate-oh-flip: oh-flip 1.8s ease-in-out infinite;
 }
 
 html {

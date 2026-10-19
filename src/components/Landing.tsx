@@ -39,6 +39,7 @@ import { AppleIcon, AndroidIcon } from './common/BrandIcons';
 import { SiteFooter } from './common/SiteFooter';
 import { AlienScanner } from './mascot';
 import { hideMrOneHook } from './Chatbot/ChatbotWidget';
+import { ScienceOrbitBackdrop } from './science/ScienceOrbitBackdrop';
 import { useAppStore } from '../store/app-store';
 import { getCognitoAuth } from '../lib/cognito-auth';
 
@@ -400,6 +401,193 @@ function HeroHeadline() {
   );
 }
 
+const PRINCIPLE_VALUES = [
+  {
+    icon: Focus,
+    title: 'Intention',
+    description: 'Every action is deliberate. Every match is a statement of purpose. No mindless scrolling.',
+  },
+  {
+    icon: Lock,
+    title: 'Constraint',
+    description: 'Limits breed depth. One connection forces both people to actually show up and invest.',
+  },
+  {
+    icon: Heart,
+    title: 'Authenticity',
+    description: 'Without a safety net of a thousand options, people finally show up as themselves.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Privacy',
+    description:
+      'Your conversations are end-to-end encrypted. They stay between the two of you, not even we can read them.',
+  },
+] as const;
+
+/** The hover emphasis only applies where a real pointer can hover and the four cards sit in one row. */
+const PRINCIPLE_HOVER_QUERY = '(hover: hover) and (pointer: fine) and (min-width: 1024px)';
+/** Column weight of the hovered card; the other three share the rest equally (1fr each). */
+const PRINCIPLE_FOCUS_WEIGHT = 1.45;
+
+/**
+ * The four OneHook principles. Hovering a card gives it more room instead of transforming it:
+ *
+ * - Sideways: the grid's column weights animate, so the hovered column widens and the other three
+ *   narrow proportionally. Nothing is scaled, so the shared dividers simply travel with the column
+ *   edges — always one line, never hidden, never doubled.
+ * - Downward: a transparent "drawer" grows out of the card's bottom edge, continuing its two
+ *   dividers and closing with an accent rule. The top edge never moves, so nothing pokes upward.
+ *
+ * Cards stay transparent so the section artwork shows through. On touch and narrow screens the cards
+ * stack with a single rule between rows and have no hover state.
+ */
+function PrincipleValues() {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [canFocus, setCanFocus] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia(PRINCIPLE_HOVER_QUERY);
+    const sync = () => {
+      setCanFocus(mq.matches);
+      if (!mq.matches) setHovered(null);
+    };
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
+  const focused = canFocus ? hovered : null;
+  const last = PRINCIPLE_VALUES.length - 1;
+  const columns = PRINCIPLE_VALUES.map((_, i) => (i === focused ? `${PRINCIPLE_FOCUS_WEIGHT}fr` : '1fr')).join(' ');
+
+  return (
+    <div
+      className="grid divide-y divide-border lg:grid-cols-4 lg:divide-y-0 lg:transition-[grid-template-columns] lg:duration-500 lg:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+      style={canFocus ? { gridTemplateColumns: columns } : undefined}
+      onMouseLeave={() => setHovered(null)}
+    >
+      {PRINCIPLE_VALUES.map((value, idx) => {
+        const active = focused === idx;
+        return (
+          <div
+            key={value.title}
+            onMouseEnter={() => canFocus && setHovered(idx)}
+            // min-w-0 lets a column narrow below its content's preferred width; the dividers are the
+            // cells' own left edge, so they move with the columns and never overlap.
+            className={`relative min-w-0 p-8 lg:px-10 lg:py-12 ${idx > 0 ? 'lg:border-l lg:border-border' : ''}`}
+          >
+            <div className="mb-6 flex items-center justify-between">
+              <value.icon
+                className={`h-6 w-6 text-accent transition-transform duration-500 ${active ? 'scale-110' : ''}`}
+              />
+              <span
+                className={`font-mono text-xs transition-opacity duration-500 ${active ? 'opacity-70' : 'opacity-30'}`}
+              >
+                0{idx + 1}
+              </span>
+            </div>
+            <h4 className="mb-3 text-lg font-bold uppercase tracking-[0.15em]">{value.title}</h4>
+            <p
+              // Reserve four lines on desktop: narrowed columns may rewrap to one more line, and the
+              // row must not grow (and shove the page down) when that happens.
+              className={`text-sm leading-relaxed transition-opacity duration-500 lg:min-h-[6.5em] ${active ? 'opacity-85' : 'opacity-60'}`}
+            >
+              {value.description}
+            </p>
+
+            {/* Downward extension: continues this card's dividers below the row and closes with an
+                accent rule. Height-only, from the card's bottom edge. */}
+            <span
+              aria-hidden="true"
+              // -left-px: absolute boxes start inside the cell's own border, so shift onto it to keep
+              // the extended divider on the exact same pixel column.
+              className={`pointer-events-none absolute right-0 top-full hidden border-border transition-[height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:block ${
+                idx > 0 ? '-left-px border-l' : 'left-0'
+              } ${idx < last ? 'border-r -mr-px' : ''} ${active ? 'h-10' : 'h-0'}`}
+            >
+              <span
+                className={`absolute inset-x-0 bottom-0 h-0.5 origin-left bg-accent transition-transform duration-500 ${
+                  active ? 'scale-x-100 delay-150' : 'scale-x-0'
+                }`}
+              />
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Mask for the "Under the hood" backdrop, in three stacked layers:
+ * 1. the curved top cap: the same ellipse as the cap's `clip-path: ellipse(100% 100% at 50% 100%)`;
+ * 2. the solid body between cap and strip;
+ * 3. the bottom strip, fading out ahead of the dark gradient strip it sits on.
+ */
+const UNDER_THE_HOOD_MASK = [
+  'radial-gradient(100% 100% at 50% 100%, #000 99.5%, transparent 100%)',
+  'linear-gradient(#000, #000)',
+  // Fades out faster than the strip itself: light orbit lines would otherwise show on the white below.
+  'linear-gradient(#000 0%, rgba(0,0,0,0.45) 30%, transparent 60%)',
+].join(', ');
+const UNDER_THE_HOOD_MASK_SIZE = '100% var(--cap), 100% calc(100% - var(--cap) - var(--fade) + 2px), 100% var(--fade)';
+const UNDER_THE_HOOD_MASK_POSITION = '0 0, 0 calc(var(--cap) - 1px), 0 100%';
+
+/**
+ * Frosted, refracting glass behind a block of content.
+ *
+ * - Everywhere: backdrop blur + saturation + a faint tint and specular rim, so whatever passes behind
+ *   (the pink paint stroke) is diffused into soft colour and the content in front reads clearly.
+ * - Chromium: the backdrop also goes through an SVG displacement filter, which bends the colours
+ *   behind it like an uneven lens. Safari and Firefox ignore `url()` in backdrop-filter (and would
+ *   drop the whole declaration), so that layer is opted into by feature check, not assumed.
+ * - The glass drifts a little against scroll, so the backdrop slides through the lens and the
+ *   refraction visibly shifts. The content itself stays put; reduced-motion users get static glass.
+ */
+function GlassPanel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  const reduceMotion = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const filterId = `oh-glass-${React.useId().replace(/:/g, '')}`;
+  const [refracts, setRefracts] = useState(false);
+
+  useEffect(() => {
+    const brands = (navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } }).userAgentData?.brands;
+    setRefracts(Boolean(brands?.some((b) => b.brand === 'Chromium')));
+  }, []);
+
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
+  const drift = useTransform(scrollYProgress, [0, 1], reduceMotion ? [0, 0] : [36, -36]);
+
+  const frost = 'blur(5px) saturate(190%)';
+  const backdrop = refracts ? `url(#${filterId}) ${frost}` : frost;
+
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      {refracts && (
+        <svg aria-hidden="true" className="absolute h-0 w-0" focusable="false">
+          <filter id={filterId} x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.006 0.011" numOctaves="2" seed="11" result="lens" />
+            <feGaussianBlur in="lens" stdDeviation="6" result="smoothLens" />
+            <feDisplacementMap in="SourceGraphic" in2="smoothLens" scale="64" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </svg>
+      )}
+
+      <motion.div
+        aria-hidden="true"
+        style={{ y: drift, backdropFilter: backdrop, WebkitBackdropFilter: frost }}
+        className="pointer-events-none absolute -inset-x-4 -inset-y-6 rounded-[2.25rem] border border-white/70 bg-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),inset_0_-1px_0_rgba(0,0,0,0.04),0_30px_80px_-40px_rgba(17,17,17,0.25)] sm:-inset-x-8 md:-inset-x-14"
+      >
+        {/* Specular sheen across the top-left, like light catching curved glass. */}
+        <span className="absolute inset-0 rounded-[inherit] bg-[linear-gradient(135deg,rgba(255,255,255,0.55)_0%,rgba(255,255,255,0)_38%,rgba(255,255,255,0)_70%,rgba(255,255,255,0.25)_100%)]" />
+      </motion.div>
+
+      <div className="relative">{children}</div>
+    </div>
+  );
+}
+
 /** Dummy profile shown inside the manifesto phone — editorial, not a real member. */
 const PHONE_PROFILE = {
   name: 'Isha',
@@ -470,7 +658,16 @@ type PhoneTab = 'discover' | 'messages' | 'profile';
  * page (`scrollY`); the other screens are static. The only interactive controls are the three tabs
  * (tracked as a landing demo interaction).
  */
-function ManifestoPhone({ progress, reduce }: { progress: MotionValue<number>; reduce: boolean | null }) {
+function ManifestoPhone({
+  progress,
+  reduce,
+  className,
+}: {
+  progress: MotionValue<number>;
+  reduce: boolean | null;
+  /** Overrides the outer frame sizing. Defaults to the manifesto's large size. */
+  className?: string;
+}) {
   const [tab, setTab] = useState<PhoneTab>('discover');
   // The active screen is a NATIVE scroll container. When the pointer is NOT on the device, the page
   // scroll drives its position; when the pointer IS on it, the visitor scrolls (and taps tabs) freely;
@@ -517,7 +714,7 @@ function ManifestoPhone({ progress, reduce }: { progress: MotionValue<number>; r
   const hideScroll = '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
 
   return (
-    <div className="relative isolate mx-auto w-[256px] sm:w-[284px] lg:w-[min(23vw,400px)]">
+    <div className={className ?? 'relative isolate mx-auto w-[256px] sm:w-[284px] lg:w-[min(23vw,400px)]'}>
       {/* ambient glow so the device reads as "lifted" off the dark panel */}
       <div aria-hidden="true" className="pointer-events-none absolute -inset-6 rounded-[3.2rem] bg-white/[0.07] blur-2xl" />
 
@@ -802,6 +999,10 @@ export function Landing() {
   };
   const videoRef = useRef<HTMLVideoElement>(null);
   const stepsRailRef = useRef<HTMLDivElement>(null);
+  const underTheHoodRef = useRef<HTMLDivElement>(null);
+  const exploreScienceRef = useRef<HTMLButtonElement>(null);
+  // Hovering / focusing "Explore the science" brings the science backdrop into focus.
+  const [scienceRevealed, setScienceRevealed] = useState(false);
 
   // ── Philosophy manifesto: a scroll-linked "zoom to read" ───────────────────────
   // Draws the eye to "…make one of them count." as the block travels through the viewport.
@@ -846,7 +1047,12 @@ export function Landing() {
     tiltXRaw.set(0);
     tiltYRaw.set(0);
   };
-  const popNearY = useSpring(useTransform(manifestoProgress, [0, 1], [70, -80]), { stiffness: 70, damping: 20 });
+  // "It's a match" pop-out: starts lower in the panel and ends lower (never rising above the phone's
+  // upper edge), so it no longer travels too far up as the section scrolls into view.
+  const popNearY = useSpring(useTransform(manifestoProgress, [0, 1], [110, 0]), { stiffness: 70, damping: 20 });
+  // A static progress value for the Get-the-app phone, which reuses the manifesto mock but stays put
+  // (reduce mode): no scroll-linked or floating animation, only user scroll + tab switching.
+  const staticProgress = useMotionValue(0);
   const popFarY = useSpring(useTransform(manifestoProgress, [0, 1], [-60, 90]), { stiffness: 70, damping: 20 });
   const popMidY = useSpring(useTransform(manifestoProgress, [0, 1], [40, -55]), { stiffness: 70, damping: 20 });
 
@@ -1023,7 +1229,6 @@ export function Landing() {
   }, []);
   const [activeStep, setActiveStep] = useState(0);
   const [activeSection, setActiveSection] = useState<string>('');
-  const [hoveredValue, setHoveredValue] = useState<number | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [openerIndex, setOpenerIndex] = useState(0);
   const [showStickyCta, setShowStickyCta] = useState(false);
@@ -1831,7 +2036,7 @@ export function Landing() {
                       {/* "It's a match" — the payoff, nearest the viewer, top-left */}
                       <motion.div
                         style={{ y: popNearY, scale: 1.08 }}
-                        className="pointer-events-none absolute -left-10 top-16 z-10 hidden items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.55)] ring-1 ring-black/5 lg:flex"
+                        className="pointer-events-none absolute -left-10 top-32 z-10 hidden items-center gap-2 rounded-2xl bg-white px-3.5 py-2.5 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.55)] ring-1 ring-black/5 lg:flex"
                       >
                         <span className="flex h-7 w-7 items-center justify-center rounded-full" style={{ background: OH_RED }}>
                           <Heart className="h-3.5 w-3.5 text-white" fill="currentColor" />
@@ -1845,7 +2050,7 @@ export function Landing() {
                       {/* a lifted photo card — right side, gently tilted */}
                       <motion.div
                         style={{ y: popFarY, scale: 1.14 }}
-                        className="pointer-events-none absolute -right-12 top-40 z-10 hidden rotate-[7deg] overflow-hidden rounded-2xl shadow-[0_40px_70px_-20px_rgba(0,0,0,0.6)] ring-1 ring-black/10 lg:block"
+                        className="pointer-events-none absolute -right-12 top-60 z-10 hidden rotate-[7deg] overflow-hidden rounded-2xl shadow-[0_40px_70px_-20px_rgba(0,0,0,0.6)] ring-1 ring-black/10 lg:block"
                       >
                         <img src="/media/profile-demo/profile-3.jpg" alt="" loading="lazy" decoding="async" className="h-28 w-24 object-cover" />
                       </motion.div>
@@ -1931,57 +2136,9 @@ export function Landing() {
           </p>
         </div>
 
-        {/* Core values — numbered, divider-based, full screen width (-mx-6 cancels the section padding) */}
+        {/* Core values — full screen width (-mx-6 cancels the section padding) */}
         <div className="relative z-10 -mx-6">
-            <div className="grid lg:grid-cols-4">
-              {[
-                {
-                  icon: Focus,
-                  title: 'Intention',
-                  description:
-                    'Every action is deliberate. Every match is a statement of purpose. No mindless scrolling.',
-                },
-                {
-                  icon: Lock,
-                  title: 'Constraint',
-                  description:
-                    'Limits breed depth. One connection forces both people to actually show up and invest.',
-                },
-                {
-                  icon: Heart,
-                  title: 'Authenticity',
-                  description:
-                    'Without a safety net of a thousand options, people finally show up as themselves.',
-                },
-                {
-                  icon: ShieldCheck,
-                  title: 'Privacy',
-                  description:
-                    'Your conversations are end-to-end encrypted. They stay between the two of you, not even we can read them.',
-                },
-              ].map((value, idx) => (
-                <motion.div
-                  key={value.title}
-                  initial={false}
-                  animate={{ scale: hoveredValue === null ? 1 : hoveredValue === idx ? 1.1 : 0.93 }}
-                  transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                  onMouseEnter={() => setHoveredValue(idx)}
-                  onMouseLeave={() => setHoveredValue((v) => (v === idx ? null : v))}
-                  style={{ transformOrigin: 'top center', zIndex: hoveredValue === idx ? 20 : 1 }}
-                  className="group relative overflow-hidden border-b border-border p-8 last:border-b-0 lg:-ml-px lg:border-x lg:border-b-0 lg:px-10 lg:py-12 lg:first:ml-0 lg:first:border-l-0 lg:last:border-r-0"
-                >
-                  <span className="absolute top-0 left-0 h-0.5 w-0 bg-accent transition-all duration-500 group-hover:w-full" />
-                  <div className="flex items-center justify-between mb-6">
-                    <value.icon className="w-6 h-6 text-accent" />
-                    <span className="font-mono text-xs opacity-30">0{idx + 1}</span>
-                  </div>
-                  <h4 className="text-lg font-bold uppercase tracking-[0.15em] mb-3">
-                    {value.title}
-                  </h4>
-                  <p className="opacity-60 leading-relaxed text-sm">{value.description}</p>
-                </motion.div>
-              ))}
-            </div>
+          <PrincipleValues />
         </div>
       </section>
 
@@ -2011,268 +2168,274 @@ export function Landing() {
       {/* Features Section */}
       <section id="features" className="pt-24 pb-0 px-6 bg-bg relative">
         <div className="max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="text-center mb-6 relative z-10"
-          >
-            <p className="text-[11px] uppercase tracking-[0.4em] opacity-40 mb-4">How it works</p>
-            <h2 className="mb-6 text-4xl md:text-6xl font-light tracking-tight leading-[1.08]">
-              {relationshipMode === 'single' ? (
-                <>Three steps. <Accent tone="ink">One</Accent> focus.</>
-              ) : (
-                <>Two steps. <Accent tone="ink">One</Accent> person.</>
-              )}
-            </h2>
-            <p className="text-lg opacity-70 leading-relaxed max-w-2xl mx-auto">
-              {relationshipMode === 'single'
-                ? 'OneHook is designed to feel focused and intentional, never rushed. Follow the steps to see how it keeps your attention on one promising connection at a time.'
-                : 'Already seeing someone? Use OneHook as a priority-notification messenger, so the one person who matters always reaches you first, without the noise of another inbox.'}
-            </p>
-
-            {/* Single / not-single toggle */}
-            <div
-              role="tablist"
-              aria-label="Choose your relationship status"
-              className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-white"
+          {/* One sheet of glass behind the intro, stepper and slider, so the whole section reads as a unit. */}
+          <GlassPanel className="z-10 py-10 md:py-12">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8 }}
+              className="text-center mb-6 relative z-10"
             >
-              {(
-                [
-                  { key: 'single', label: 'Single' },
-                  { key: 'taken', label: 'Seeing someone' },
-                ] as const
-              ).map((option) => {
-                const isActive = relationshipMode === option.key;
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => handleRelationshipModeChange(option.key)} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'relationship_mode' })}
-                    className={`px-5 py-2 rounded-full text-[11px] font-black uppercase tracking-[0.2em] transition-all ${
-                      isActive
-                        ? 'bg-accent text-white shadow-sm'
-                        : 'text-text/50 hover:text-text/80'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </motion.div>
+              <p className="text-[11px] uppercase tracking-[0.4em] opacity-40 mb-4">How it works</p>
+              <h2 className="mb-6 text-4xl md:text-6xl font-light tracking-tight leading-[1.08]">
+                {relationshipMode === 'single' ? (
+                  <>Three steps. <Accent tone="ink">One</Accent> focus.</>
+                ) : (
+                  <>Two steps. <Accent tone="ink">One</Accent> person.</>
+                )}
+              </h2>
+              <p className="text-lg opacity-70 leading-relaxed max-w-2xl mx-auto">
+                {relationshipMode === 'single'
+                  ? 'OneHook is designed to feel focused and intentional, never rushed. Follow the steps to see how it keeps your attention on one promising connection at a time.'
+                  : 'Already seeing someone? Use OneHook as a priority-notification messenger, so the one person who matters always reaches you first, without the noise of another inbox.'}
+              </p>
 
-          {/* Stepper: counter + progress timeline + controls */}
-          <div className="mt-12 mb-2 relative z-10">
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <div className="text-xs uppercase tracking-[0.28em] opacity-50">
-                Step{' '}
-                <span className="text-accent font-black">
-                  {String(activeStep + 1).padStart(2, '0')}
-                </span>{' '}
-                / {String(howItWorksSteps.length).padStart(2, '0')}
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  aria-label="Previous step"
-                  onClick={() => scrollToStep(Math.max(activeStep - 1, 0))}
-                  {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'how_it_works_prev' })}
-                  disabled={activeStep === 0}
-                  className="w-11 h-11 rounded-full border border-border flex items-center justify-center transition-all hover:border-accent hover:bg-accent hover:text-white disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current disabled:hover:border-border"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Next step"
-                  onClick={() => scrollToStep(Math.min(activeStep + 1, howItWorksSteps.length - 1))}
-                  {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'how_it_works_next' })}
-                  disabled={activeStep === howItWorksSteps.length - 1}
-                  className="w-11 h-11 rounded-full border border-border flex items-center justify-center transition-all hover:border-accent hover:bg-accent hover:text-white disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current disabled:hover:border-border"
-                >
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Clickable labeled progress timeline */}
-            <div className="relative" role="tablist" aria-label="How OneHook works steps">
-              <div className="absolute left-0 right-0 top-[9px] h-px bg-border" />
+              {/* Single / not-single toggle */}
               <div
-                className="absolute left-0 top-[9px] h-px bg-accent transition-all duration-500 ease-out"
-                style={{
-                  width: `${(activeStep / (howItWorksSteps.length - 1)) * 100}%`,
-                }}
-              />
-              <div className="relative flex justify-between">
-                {howItWorksSteps.map((step, index) => {
-                  const isActive = activeStep === index;
-                  const isDone = index <= activeStep;
+                role="tablist"
+                aria-label="Choose your relationship status"
+                className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-white"
+              >
+                {(
+                  [
+                    { key: 'single', label: 'Single' },
+                    { key: 'taken', label: 'Seeing someone' },
+                  ] as const
+                ).map((option) => {
+                  const isActive = relationshipMode === option.key;
                   return (
                     <button
-                      key={step.id}
+                      key={option.key}
                       type="button"
                       role="tab"
                       aria-selected={isActive}
-                      aria-label={`Step ${index + 1}: ${step.label}`}
-                      onClick={() => scrollToStep(index)} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'how_it_works_step' })}
-                      className="group flex flex-col items-center gap-3 px-2 -mx-2 relative z-10"
+                      onClick={() => handleRelationshipModeChange(option.key)} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'relationship_mode' })}
+                      className={`px-5 py-2 rounded-full text-[11px] font-black uppercase tracking-[0.2em] transition-all ${
+                        isActive
+                          ? 'bg-accent text-white shadow-sm'
+                          : 'text-text/50 hover:text-text/80'
+                      }`}
                     >
-                      <span
-                        className={`w-[18px] h-[18px] rounded-full border-2 transition-all duration-300 ${
-                          isActive
-                            ? 'bg-accent border-accent scale-110 ring-4 ring-accent/10'
-                            : isDone
-                              ? 'bg-accent border-accent'
-                              : 'bg-white border-border group-hover:border-accent/50'
-                        }`}
-                      />
-                      <span
-                        className={`hidden sm:block text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${
-                          isActive ? 'text-accent' : 'text-text/40 group-hover:text-text/70'
-                        }`}
-                      >
-                        {step.label}
-                      </span>
+                      {option.label}
                     </button>
                   );
                 })}
               </div>
-            </div>
-          </div>
+            </motion.div>
 
-          {/* Carousel rail */}
-          <div
-            ref={stepsRailRef}
-            role="group"
-            aria-roledescription="carousel"
-            aria-label="How OneHook works"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                scrollToStep(Math.min(activeStep + 1, howItWorksSteps.length - 1));
-              } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                scrollToStep(Math.max(activeStep - 1, 0));
-              }
-            }}
-            data-track-exempt="gesture: arrow-key paging/scroll of the carousel rail; discrete step changes are tracked via the prev/next and dot controls (how_it_works_prev/next/step)."
-            className="flex gap-6 overflow-x-auto pt-10 pb-14 px-[calc(50%-41vw)] sm:px-[calc(50%-190px)] lg:px-[calc(50%-230px)] snap-x snap-mandatory scrollbar-none rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 relative z-10"
-          >
-            {/* Bookend (not a step, no number) — fills the lead-in gutter; shown in both modes */}
-            <div
-              aria-hidden="true"
-              className="flex shrink-0 self-center min-h-[336px] w-[64vw] flex-col justify-center rounded-3xl border border-dashed border-border bg-bg/50 p-6 text-center sm:w-[240px] lg:w-[280px]"
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-text/40">Before</p>
-              <h3 className="mt-3 text-2xl font-light tracking-tight md:text-3xl">
-                Life <Accent tone="ink">before</Accent> OneHook
-              </h3>
-              <p className="mt-3 text-sm leading-relaxed text-text/55">
-                {relationshipMode === 'single'
-                  ? 'Endless swiping, a hundred half-conversations, and no one you actually remember.'
-                  : 'No priority notifications, no end-to-end encrypted chats, no platform independence, and no AI dedicated to the one person who matters.'}
-              </p>
-            </div>
-            {howItWorksSteps.map((step, index) => {
-              const isActive = activeStep === index;
-              return (
-                <motion.article
-                  key={step.id}
-                  data-step-card
-                  data-step-index={index}
-                  role="group"
-                  aria-roledescription="slide"
-                  aria-label={`${index + 1} of ${howItWorksSteps.length}: ${step.label}`}
-                  initial={{ opacity: 0, y: 40, scale: 0.95 }}
-                  whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                  viewport={{ once: true, margin: '-5% 0px -5% 0px' }}
-                  transition={{
-                    duration: 0.8,
-                    delay: index * 0.05,
-                    ease: [0.21, 0.47, 0.32, 0.98],
+            {/* Stepper: counter + progress timeline + controls */}
+            <div className="mt-12 mb-2 relative z-10">
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <div className="text-xs uppercase tracking-[0.28em] opacity-50">
+                  Step{' '}
+                  <span className="text-accent font-black">
+                    {String(activeStep + 1).padStart(2, '0')}
+                  </span>{' '}
+                  / {String(howItWorksSteps.length).padStart(2, '0')}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    aria-label="Previous step"
+                    onClick={() => scrollToStep(Math.max(activeStep - 1, 0))}
+                    {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'how_it_works_prev' })}
+                    disabled={activeStep === 0}
+                    className="w-11 h-11 rounded-full border border-border flex items-center justify-center transition-all hover:border-accent hover:bg-accent hover:text-white disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current disabled:hover:border-border"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next step"
+                    onClick={() => scrollToStep(Math.min(activeStep + 1, howItWorksSteps.length - 1))}
+                    {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'how_it_works_next' })}
+                    disabled={activeStep === howItWorksSteps.length - 1}
+                    className="w-11 h-11 rounded-full border border-border flex items-center justify-center transition-all hover:border-accent hover:bg-accent hover:text-white disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current disabled:hover:border-border"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Clickable labeled progress timeline */}
+              <div className="relative" role="tablist" aria-label="How OneHook works steps">
+                <div className="absolute left-0 right-0 top-[9px] h-px bg-border" />
+                <div
+                  className="absolute left-0 top-[9px] h-px bg-accent transition-all duration-500 ease-out"
+                  style={{
+                    width: `${(activeStep / (howItWorksSteps.length - 1)) * 100}%`,
                   }}
-                  className={`group relative shrink-0 snap-center w-[82vw] sm:w-[380px] lg:w-[460px] rounded-3xl border overflow-hidden bg-white flex flex-col transition-all duration-700 ease-out ${
-                    isActive
-                      ? 'border-accent shadow-2xl shadow-black/10 -translate-y-2 z-10'
-                      : 'border-border opacity-45 scale-[0.97] grayscale'
-                  }`}
-                >
-                  {/* Image banner */}
-                  <div className="relative aspect-[16/10] overflow-hidden bg-bg">
-                    <img
-                      src={step.image}
-                      alt={step.alt}
-                      loading="lazy"
-                      decoding="async"
-                      className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-[1.2s] ease-out group-hover:scale-105"
-                    />
-                    <div className="absolute inset-0 bg-linear-to-t from-black/55 via-transparent to-transparent" />
-                    <div className="absolute top-4 left-4 inline-flex items-center rounded-full bg-white/90 px-3 py-1.5 backdrop-blur-sm">
-                      <span className="text-[10px] font-black uppercase tracking-[0.24em] text-accent">
-                        Step {index + 1} · {step.eyebrow}
-                      </span>
-                    </div>
-                    <div className="absolute top-4 right-4 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[11px] font-mono tracking-[0.2em] text-white backdrop-blur-sm">
-                      {String(index + 1).padStart(2, '0')}/
-                      {String(howItWorksSteps.length).padStart(2, '0')}
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex flex-1 flex-col p-6 sm:p-7">
-                    <div className="flex items-baseline gap-3">
-                      <span className="text-4xl font-serif italic text-accent/15 leading-none">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                      <h3 className="text-2xl md:text-3xl font-semibold tracking-tight">
-                        {step.label}
-                      </h3>
-                    </div>
-
-                    <p className="mt-4 text-sm leading-relaxed opacity-70">{step.summary}</p>
-
-                    <ul className="mt-6 space-y-2.5 pt-5 border-t border-border/70">
-                      {step.bullets.map((bullet) => (
-                        <li key={bullet} className="flex items-center gap-3 text-sm font-medium">
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent/10 text-accent shrink-0">
-                            <Check className="w-3 h-3" />
-                          </span>
-                          {bullet}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </motion.article>
-              );
-            })}
-            {/* Bookend (not a step, no number) — fills the lead-out gutter; shown in both modes */}
-            <div
-              aria-hidden="true"
-              className="flex shrink-0 self-center min-h-[336px] w-[64vw] flex-col justify-center rounded-3xl border border-dashed border-border bg-bg/50 p-6 text-center sm:w-[240px] lg:w-[280px]"
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-text/40">After</p>
-              <h3 className="mt-3 text-2xl font-light tracking-tight md:text-3xl">
-                Life <Accent tone="ink">after</Accent> OneHook
-              </h3>
-              <p className="mt-3 text-sm leading-relaxed text-text/55">
-                One person, real conversations, and the quiet confidence of undivided attention. And no one peeking at your chats to lure advertisers.
-              </p>
+                />
+                <div className="relative flex justify-between">
+                  {howItWorksSteps.map((step, index) => {
+                    const isActive = activeStep === index;
+                    const isDone = index <= activeStep;
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        aria-label={`Step ${index + 1}: ${step.label}`}
+                        onClick={() => scrollToStep(index)} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'how_it_works_step' })}
+                        className="group flex flex-col items-center gap-3 px-2 -mx-2 relative z-10"
+                      >
+                        <span
+                          className={`w-[18px] h-[18px] rounded-full border-2 transition-all duration-300 ${
+                            isActive
+                              ? 'bg-accent border-accent scale-110 ring-4 ring-accent/10'
+                              : isDone
+                                ? 'bg-accent border-accent'
+                                : 'bg-white border-border group-hover:border-accent/50'
+                          }`}
+                        />
+                        <span
+                          className={`hidden sm:block text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${
+                            isActive ? 'text-accent' : 'text-text/40 group-hover:text-text/70'
+                          }`}
+                        >
+                          {step.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Swipe/keys hint */}
-          <p className="text-center text-[10px] uppercase tracking-[0.28em] opacity-30 mt-2 relative z-10">
-            Swipe, use the arrows, or press ← / →
-          </p>
+            {/* Carousel rail */}
+            <div
+              ref={stepsRailRef}
+              role="group"
+              aria-roledescription="carousel"
+              aria-label="How OneHook works"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight') {
+                  e.preventDefault();
+                  scrollToStep(Math.min(activeStep + 1, howItWorksSteps.length - 1));
+                } else if (e.key === 'ArrowLeft') {
+                  e.preventDefault();
+                  scrollToStep(Math.max(activeStep - 1, 0));
+                }
+              }}
+              data-track-exempt="gesture: arrow-key paging/scroll of the carousel rail; discrete step changes are tracked via the prev/next and dot controls (how_it_works_prev/next/step)."
+              className="flex gap-6 overflow-x-auto pt-10 pb-14 px-[calc(50%-41vw)] sm:px-[calc(50%-190px)] lg:px-[calc(50%-230px)] snap-x snap-mandatory scrollbar-none rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 relative z-10"
+            >
+              {/* Bookend (not a step, no number) — fills the lead-in gutter; shown in both modes */}
+              <div
+                aria-hidden="true"
+                className="flex shrink-0 self-center min-h-[336px] w-[64vw] flex-col justify-center rounded-3xl border border-dashed border-border bg-bg/50 p-6 text-center sm:w-[240px] lg:w-[280px]"
+              >
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-text/40">Before</p>
+                <h3 className="mt-3 text-2xl font-light tracking-tight md:text-3xl">
+                  Life <Accent tone="ink">before</Accent> OneHook
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-text/55">
+                  {relationshipMode === 'single'
+                    ? 'Endless swiping, a hundred half-conversations, and no one you actually remember.'
+                    : 'No priority notifications, no end-to-end encrypted chats, no platform independence, and no AI dedicated to the one person who matters.'}
+                </p>
+              </div>
+              {howItWorksSteps.map((step, index) => {
+                const isActive = activeStep === index;
+                return (
+                  <motion.article
+                    key={step.id}
+                    data-step-card
+                    data-step-index={index}
+                    role="group"
+                    aria-roledescription="slide"
+                    aria-label={`${index + 1} of ${howItWorksSteps.length}: ${step.label}`}
+                    initial={{ opacity: 0, y: 40, scale: 0.95 }}
+                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                    viewport={{ once: true, margin: '-5% 0px -5% 0px' }}
+                    transition={{
+                      duration: 0.8,
+                      delay: index * 0.05,
+                      ease: [0.21, 0.47, 0.32, 0.98],
+                    }}
+                    className={`group relative shrink-0 snap-center w-[82vw] sm:w-[380px] lg:w-[460px] rounded-3xl border overflow-hidden bg-white flex flex-col transition-all duration-700 ease-out ${
+                      isActive
+                        ? 'border-accent shadow-2xl shadow-black/10 -translate-y-2 z-10'
+                        : // Dim via filter, not `opacity`: Motion's entrance animation leaves an inline
+                          // `opacity: 1` on the card, which would silently override an opacity class.
+                          'border-border scale-[0.97] [filter:grayscale(1)_opacity(0.45)]'
+                    }`}
+                  >
+                    {/* Image banner */}
+                    <div className="relative aspect-[16/10] overflow-hidden bg-bg">
+                      <img
+                        src={step.image}
+                        alt={step.alt}
+                        loading="lazy"
+                        decoding="async"
+                        className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-[1.2s] ease-out group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-linear-to-t from-black/55 via-transparent to-transparent" />
+                      <div className="absolute top-4 left-4 inline-flex items-center rounded-full bg-white/90 px-3 py-1.5 backdrop-blur-sm">
+                        <span className="text-[10px] font-black uppercase tracking-[0.24em] text-accent">
+                          Step {index + 1} · {step.eyebrow}
+                        </span>
+                      </div>
+                      <div className="absolute top-4 right-4 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[11px] font-mono tracking-[0.2em] text-white backdrop-blur-sm">
+                        {String(index + 1).padStart(2, '0')}/
+                        {String(howItWorksSteps.length).padStart(2, '0')}
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex flex-1 flex-col p-6 sm:p-7">
+                      <div className="flex items-baseline gap-3">
+                        <span className="text-4xl font-serif italic text-accent/15 leading-none">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <h3 className="text-2xl md:text-3xl font-semibold tracking-tight">
+                          {step.label}
+                        </h3>
+                      </div>
+
+                      <p className="mt-4 text-sm leading-relaxed opacity-70">{step.summary}</p>
+
+                      <ul className="mt-6 space-y-2.5 pt-5 border-t border-border/70">
+                        {step.bullets.map((bullet) => (
+                          <li key={bullet} className="flex items-center gap-3 text-sm font-medium">
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent/10 text-accent shrink-0">
+                              <Check className="w-3 h-3" />
+                            </span>
+                            {bullet}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </motion.article>
+                );
+              })}
+              {/* Bookend (not a step, no number) — fills the lead-out gutter; shown in both modes */}
+              <div
+                aria-hidden="true"
+                className="flex shrink-0 self-center min-h-[336px] w-[64vw] flex-col justify-center rounded-3xl border border-dashed border-border bg-bg/50 p-6 text-center sm:w-[240px] lg:w-[280px]"
+              >
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-text/40">After</p>
+                <h3 className="mt-3 text-2xl font-light tracking-tight md:text-3xl">
+                  Life <Accent tone="ink">after</Accent> OneHook
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-text/55">
+                  One person, real conversations, and the quiet confidence of undivided attention. And no one peeking at your chats to lure advertisers.
+                </p>
+              </div>
+            </div>
+
+            {/* Swipe/keys hint */}
+            <p className="text-center text-[10px] uppercase tracking-[0.28em] opacity-30 mt-2 relative z-10">
+              Swipe, use the arrows, or press ← / →
+            </p>
+          </GlassPanel>
 
           {/* Matching intelligence — the science behind a single good match */}
           <div
+            ref={underTheHoodRef}
             id="under-the-hood"
             className="scroll-mt-24 lg:scroll-mt-28 relative mt-20 lg:mt-28 bg-accent text-white overflow-visible w-screen -ml-[50vw] left-[50%] z-10"
           >
@@ -2281,6 +2444,29 @@ export function Landing() {
               className="absolute top-0 left-0 right-0 h-12 sm:h-16 lg:h-20 bg-accent -translate-y-full z-0"
               style={{
                 clipPath: 'ellipse(100% 100% at 50% 100%)',
+              }}
+            />
+
+            {/* The science page's orbit animation, blurred, centred under the pointer; it sharpens and
+                settles on "Explore the science" while that button is hovered or focused. */}
+            {/* It spans the curved top cap and the bottom fade strip as well: --cap / --fade mirror their
+                heights, and the mask follows the cap's ellipse and the strip's fade-out. */}
+            <ScienceOrbitBackdrop
+              revealed={scienceRevealed}
+              pointerTarget={underTheHoodRef}
+              anchor={exploreScienceRef}
+              className="z-[1] [--cap:3rem] [--fade:100px] sm:[--cap:4rem] sm:[--fade:150px] lg:[--cap:5rem] lg:[--fade:200px]"
+              style={{
+                top: 'calc(-1 * var(--cap))',
+                bottom: 'calc(-1 * var(--fade))',
+                maskImage: UNDER_THE_HOOD_MASK,
+                WebkitMaskImage: UNDER_THE_HOOD_MASK,
+                maskSize: UNDER_THE_HOOD_MASK_SIZE,
+                WebkitMaskSize: UNDER_THE_HOOD_MASK_SIZE,
+                maskPosition: UNDER_THE_HOOD_MASK_POSITION,
+                WebkitMaskPosition: UNDER_THE_HOOD_MASK_POSITION,
+                maskRepeat: 'no-repeat',
+                WebkitMaskRepeat: 'no-repeat',
               }}
             />
 
@@ -2362,7 +2548,7 @@ export function Landing() {
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.5, delay: i * 0.05 }}
-                        className="group bg-accent p-6 hover:bg-white/[0.03] transition-colors"
+                        className="group bg-accent/75 p-6 hover:bg-white/[0.03] transition-colors"
                       >
                         <f.icon className="w-5 h-5 text-white/70 group-hover:text-white transition-colors" />
                         <h4 className="mt-4 text-sm font-black uppercase tracking-[0.18em]">
@@ -2432,7 +2618,12 @@ export function Landing() {
                     </p>
                     <button
                       type="button"
+                      ref={exploreScienceRef}
                       onClick={() => navigate('/science')}
+                      onMouseEnter={() => setScienceRevealed(true)}
+                      onMouseLeave={() => setScienceRevealed(false)}
+                      onFocus={() => setScienceRevealed(true)}
+                      onBlur={() => setScienceRevealed(false)}
                       {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
                       className="inline-flex items-center gap-2 rounded-full border border-white/25 px-7 py-3.5 text-[11px] font-black uppercase tracking-[0.24em] text-white/90 hover:bg-white hover:text-accent transition-colors"
                     >
@@ -2645,67 +2836,24 @@ export function Landing() {
             style={{ x: appRightXSpring }}
             className="relative flex justify-center md:justify-end"
           >
-            <motion.div
-              animate={{ y: [0, -12, 0] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-              className="relative"
-            >
+            <div className="relative">
               {/* soft glow behind phone */}
               <div className="absolute inset-0 -m-6 rounded-[3rem] bg-white/10 blur-2xl" />
 
-              {/* Phone frame */}
-              <div className="relative w-[240px] sm:w-[264px] aspect-[9/19] rounded-[2.6rem] border-[10px] border-black bg-black shadow-2xl">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 bg-black rounded-b-2xl z-20" />
-                {/* Screen */}
-                <div className="absolute inset-0 m-[2px] rounded-[2.1rem] overflow-hidden bg-white flex flex-col">
-                  <div className="flex items-center justify-between px-5 pt-3 pb-2 text-[9px] font-bold text-accent/70">
-                    <span>9:41</span>
-                    <span className="tracking-[0.2em]">ONEHOOK</span>
-                    <span className="w-4 h-2 border border-accent/40 rounded-sm" />
-                  </div>
+              {/* The same faithful OneHook iOS mock used in the manifesto, but static here: reduce mode
+                  disables the scroll-linked and entrance/floating animation. Visitors can still scroll
+                  each screen and switch tabs (Discover / Messages / Profile). Sized close to the
+                  previous mock so it stays proportional to the copy beside it (not the manifesto's
+                  larger 23vw frame). */}
+              <ManifestoPhone
+                progress={staticProgress}
+                reduce
+                className="relative isolate mx-auto w-[240px] sm:w-[264px] lg:w-[300px]"
+              />
 
-                  {/* Match card */}
-                  <div className="px-4">
-                    <div className="relative rounded-2xl overflow-hidden aspect-[3/4]">
-                      <img
-                        src={connectWithPurposeImage}
-                        alt=""
-                        aria-hidden="true"
-                        className="w-full h-full object-cover grayscale"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 to-transparent" />
-                      <div className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-accent">
-                        <span className="w-1.5 h-1.5 rounded-full bg-status-hooked animate-pulse" />{' '}
-                        Hooked
-                      </div>
-                      <div className="absolute bottom-3 left-3 text-white">
-                        <p className="text-lg font-serif italic leading-none">Ava</p>
-                        <p className="text-[9px] uppercase tracking-widest opacity-80">
-                          2.3 km · Verified
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Chat teaser */}
-                  <div className="px-4 mt-3 space-y-2">
-                    <div className="ml-auto max-w-[82%] rounded-2xl rounded-br-sm bg-accent text-white px-3 py-2 text-[10px] leading-snug">
-                      If we skipped small talk, what should I ask you?
-                    </div>
-                    <div className="max-w-[72%] rounded-2xl rounded-bl-sm bg-[#F2F2F2] text-accent px-3 py-2 text-[10px] leading-snug">
-                      Ask about the last thing that made me laugh.
-                    </div>
-                  </div>
-
-                  {/* Focus footer */}
-                  <div className="mt-auto px-4 py-3 border-t border-border flex items-center justify-center gap-2 text-[8px] font-black uppercase tracking-[0.24em] text-accent/60">
-                    <Lock className="w-3 h-3" /> Focus mode · one connection
-                  </div>
-                </div>
-              </div>
-
-              {/* Floating QR card overlapping the phone */}
-              <div className="absolute -left-6 sm:-left-16 bottom-10 w-[150px] rounded-2xl bg-white text-accent p-3 shadow-2xl border border-black/5">
+              {/* Floating QR card — raised to sit ABOVE the phone's bottom tab bar (navbar) so it never
+                  covers the Discover / Messages / Profile controls. */}
+              <div className="absolute -left-6 sm:-left-16 bottom-24 w-[150px] rounded-2xl bg-white text-accent p-3 shadow-2xl border border-black/5">
                 <div className="relative rounded-xl overflow-hidden border border-border p-2 flex items-center justify-center">
                   <QRCodeSVG
                     value={APP_DOWNLOAD_URL}
@@ -2739,7 +2887,7 @@ export function Landing() {
                   <QrCode className="w-3 h-3" /> Scan to install
                 </p>
               </div>
-            </motion.div>
+            </div>
           </motion.div>
         </div>
       </section>

@@ -26,6 +26,7 @@ import { TopBar } from './TopBar';
 import { DesktopSidebar } from './DesktopSidebar';
 import { SearchDrawer } from './SearchDrawer';
 import { CreateModal } from './CreateModal';
+import { LogoutConfirmDialog } from './LogoutConfirmDialog';
 import { useTheme } from '../lib/theme';
 
 export function AppContent() {
@@ -67,6 +68,7 @@ export function AppContent() {
   const [upgrading, setUpgrading] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const { coords: userCoords } = useUserLocation(
     currentUser?.id,
@@ -180,7 +182,12 @@ export function AppContent() {
     return true;
   };
 
-  const handleLogout = async () => {
+  // Opens the confirmation dialog instead of signing out immediately. The dialog encourages staying
+  // signed in and only runs performLogout when the member explicitly confirms.
+  const requestLogout = () => setShowLogoutConfirm(true);
+
+  const performLogout = async () => {
+    setShowLogoutConfirm(false);
     try {
       await getCognitoAuth().logout();
     } catch (e) {
@@ -261,7 +268,7 @@ export function AppContent() {
           activeTab={appState}
           onTabChange={setAppState}
           currentUser={currentUser}
-          onLogout={handleLogout}
+          onLogout={requestLogout}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenCreate={() => setIsCreateOpen(true)}
         />
@@ -363,7 +370,7 @@ export function AppContent() {
                     onUpgrade={handleUpgrade}
                     upgrading={upgrading}
                     onVerified={refetchProfile}
-                    onLogout={handleLogout}
+                    onLogout={requestLogout}
                   />
                 </div>
               </motion.div>
@@ -438,6 +445,13 @@ export function AppContent() {
 
       {/* Background key recovery responder */}
       <KeyRecoveryResponder />
+
+      {/* Logout confirmation — dims the app and encourages staying signed in on a personal device */}
+      <LogoutConfirmDialog
+        open={showLogoutConfirm}
+        onStay={() => setShowLogoutConfirm(false)}
+        onConfirm={performLogout}
+      />
     </div>
   );
 }

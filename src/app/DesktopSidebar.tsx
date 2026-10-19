@@ -1,18 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
-import {
-  Compass,
-  MessageCircle,
-  Heart,
-  Menu,
-  Moon,
-  Sun,
-  Settings,
-  LogOut,
-  Sparkles,
-  Shield,
-} from 'lucide-react';
+import { useState } from 'react';
+import { Compass, MessageCircle, Heart, Settings, LogOut } from 'lucide-react';
 import { MediaImage } from '../components/common/MediaImage';
-import { useTheme } from '../lib/theme';
 import type { AppTab } from './BottomTabBar';
 import type { UserProfile } from '../types';
 import { UiElement, APP_TAB_SCREEN, trackProps } from '../lib/analytics/analytics';
@@ -37,35 +25,10 @@ export function DesktopSidebar({
   unreadCount = 0,
   onLogout,
 }: DesktopSidebarProps) {
-  const { resolvedTheme, toggleTheme, theme, setTheme } = useTheme();
   const [isHovered, setIsHovered] = useState(false);
-  const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const [isAppearanceSubmenu, setIsAppearanceSubmenu] = useState(false);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close popup menu when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
-        setIsMoreOpen(false);
-        setIsAppearanceSubmenu(false);
-        setIsHovered(false);
-      }
-    }
-    if (isMoreOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isMoreOpen]);
 
   const handleMouseEnter = () => setIsHovered(true);
-  const handleMouseLeave = () => {
-    if (!isMoreOpen) {
-      setIsHovered(false);
-    }
-  };
+  const handleMouseLeave = () => setIsHovered(false);
   const handleWheel = () => setIsHovered(true);
 
   const userPhoto = currentUser?.photos?.[0] || (currentUser as any)?.pictures?.[0];
@@ -191,153 +154,24 @@ export function DesktopSidebar({
           {/* Subtle separator */}
           <div className="h-[1px] bg-border/60 my-1 mx-1" />
 
-          {/* Three-Line Menu (Hamburger) & Popover */}
-          <div className="relative" ref={moreMenuRef}>
-            <button
-              type="button"
-              onClick={() => {
-                setIsMoreOpen(!isMoreOpen);
-                setIsAppearanceSubmenu(false);
-              }}
-              {...trackProps(UiElement.NAV_MENU_OPEN)}
-              className={`w-full flex items-center ${
-                isHovered ? 'justify-start gap-4 px-3' : 'justify-center px-0'
-              } py-3 rounded-xl transition-all cursor-pointer ${
-                isMoreOpen ? 'bg-surface-hover font-bold text-text' : 'text-text hover:bg-surface-hover font-normal'
-              }`}
-              title={!isHovered ? 'Menu' : undefined}
-            >
-              <Menu className="w-6 h-6 shrink-0" strokeWidth={isMoreOpen ? 2.5 : 1.75} />
-              {isHovered && <span className="ml-4 text-sm tracking-tight animate-in fade-in duration-150">Menu</span>}
-            </button>
-
-            {/* Popover Menu */}
-            {isMoreOpen && (
-              <div className="absolute bottom-14 left-0 w-64 bg-surface-card border border-border rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
-                {!isAppearanceSubmenu ? (
-                  <div className="flex flex-col text-sm text-text">
-                    <button
-                      type="button"
-                      onClick={() => setIsAppearanceSubmenu(true)}
-                      {...trackProps(UiElement.SETTINGS_THEME_OPEN)}
-                      className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-surface-hover transition-colors text-left cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
-                        {resolvedTheme === 'dark' ? (
-                          <Moon className="w-4 h-4 shrink-0" />
-                        ) : (
-                          <Sun className="w-4 h-4 shrink-0" />
-                        )}
-                        <span>Switch appearance</span>
-                      </div>
-                      <span className="text-xs text-text-secondary capitalize">{resolvedTheme}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onTabChange('DISCOVERY');
-                        setIsMoreOpen(false);
-                      }}
-                      {...trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN.DISCOVERY })}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-hover transition-colors text-left cursor-pointer"
-                    >
-                      <Sparkles className="w-4 h-4 shrink-0" />
-                      <span>Your activity</span>
-                    </button>
-
-                    <div className="h-[1px] bg-border my-1" />
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsMoreOpen(false);
-                        onLogout();
-                      }}
-                      {...trackProps(UiElement.SETTINGS_SIGN_OUT)}
-                      className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-hover text-red-500 transition-colors text-left cursor-pointer"
-                    >
-                      <LogOut className="w-4 h-4 shrink-0" />
-                      <span>Log out</span>
-                    </button>
-                  </div>
-                ) : (
-                  /* Appearance Submenu */
-                  <div className="flex flex-col text-sm text-text">
-                    <div className="flex items-center gap-2 px-3 py-2 border-b border-border mb-1">
-                      <button
-                        type="button"
-                        onClick={() => setIsAppearanceSubmenu(false)}
-                        {...trackProps(UiElement.SETTINGS_THEME_OPEN, { action: 'dismiss' })}
-                        className="text-xs text-text-secondary hover:text-text cursor-pointer"
-                      >
-                        ← Back
-                      </button>
-                      <span className="font-semibold text-xs ml-2">Switch appearance</span>
-                    </div>
-
-                    <div className="flex items-center justify-between px-4 py-3 rounded-xl hover:bg-surface-hover transition-colors">
-                      <span className="text-sm font-medium">Dark mode</span>
-                      <button
-                        type="button"
-                        onClick={toggleTheme}
-                        {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: resolvedTheme === 'dark' ? 'light' : 'dark' })}
-                        className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
-                          resolvedTheme === 'dark' ? 'bg-ig-blue justify-end' : 'bg-border justify-start'
-                        }`}
-                      >
-                        <div className="bg-white w-4 h-4 rounded-full shadow-md transform transition-transform" />
-                      </button>
-                    </div>
-
-                    <div className="flex flex-col gap-1 px-2 pt-1 pb-2">
-                      <button
-                        type="button"
-                        onClick={() => setTheme('light')}
-                        {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: 'light' })}
-                        className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer ${
-                          theme === 'light' ? 'bg-surface-hover font-semibold' : 'hover:bg-surface-hover'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Sun className="w-3.5 h-3.5" /> Light
-                        </span>
-                        {theme === 'light' && <span>✓</span>}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setTheme('dark')}
-                        {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: 'dark' })}
-                        className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer ${
-                          theme === 'dark' ? 'bg-surface-hover font-semibold' : 'hover:bg-surface-hover'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Moon className="w-3.5 h-3.5" /> Dark
-                        </span>
-                        {theme === 'dark' && <span>✓</span>}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setTheme('system')}
-                        {...trackProps(UiElement.SETTINGS_THEME_SELECT, { value: 'system' })}
-                        className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer ${
-                          theme === 'system' ? 'bg-surface-hover font-semibold' : 'hover:bg-surface-hover'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <Shield className="w-3.5 h-3.5" /> Use device settings
-                        </span>
-                        {theme === 'system' && <span>✓</span>}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+          {/* Log out — takes the place of the former three-line menu. This control OPENS the logout
+              confirmation dialog (it does not sign out directly), so it is reported as the nav-rail
+              menu/dialog opener; the dialog's own "Log out" / "Keep me signed in" actions are tracked
+              with settings.sign_out by LogoutConfirmDialog. */}
+          <button
+            type="button"
+            onClick={onLogout}
+            {...trackProps(UiElement.NAV_MENU_OPEN)}
+            className={`w-full flex items-center ${
+              isHovered ? 'justify-start px-3' : 'justify-center px-0'
+            } py-3 rounded-xl transition-all text-red-500 hover:bg-surface-hover font-normal cursor-pointer`}
+            title={!isHovered ? 'Log out' : undefined}
+          >
+            <LogOut className="w-6 h-6 shrink-0" strokeWidth={1.75} />
+            {isHovered && (
+              <span className="ml-4 text-sm tracking-tight animate-in fade-in duration-150">Log out</span>
             )}
-          </div>
+          </button>
         </div>
       </aside>
     </div>

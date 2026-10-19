@@ -32,7 +32,7 @@ import { UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
 const ENGINES: EngineId[] = ['engagement', 'rhythm', 'meaning'];
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-interface Pulse {
+export interface Pulse {
   id: number;
   x: number;
   y: number;
@@ -102,7 +102,7 @@ function useHeroLayout(
 }
 
 /** One travelling signal: a ripple where it was born, then a spark that flies to the centre. */
-function PulseSpark({ pulse, reduce, onArrive }: { pulse: Pulse; reduce: boolean; onArrive: (p: Pulse) => void }) {
+export function PulseSpark({ pulse, reduce, onArrive }: { pulse: Pulse; reduce: boolean; onArrive: (p: Pulse) => void }) {
   const color = ENGINE_META[pulse.engine].color;
   useEffect(() => {
     if (!reduce) return;
@@ -135,7 +135,7 @@ function PulseSpark({ pulse, reduce, onArrive }: { pulse: Pulse; reduce: boolean
 }
 
 /** One orbit with its own parallax depth; rotation runs inside the parallax layer. */
-function Orbit({
+export function Orbit({
   index,
   sx,
   sy,
