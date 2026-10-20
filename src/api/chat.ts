@@ -10,14 +10,85 @@ import type {
 
 export type { ChatMessage, MessageReceipt, DeletedMessage };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Local types for the rich-messaging capabilities added to the chat GraphQL schema
+// (reactions, replies, content types, typing/presence/screenshot). These are declared here rather
+// than imported from `onehook-api-client/graphql` because that SDK is regenerated and republished
+// from the backend schema asynchronously; declaring them locally lets the client use the new
+// operations immediately and stay type-safe. Once the SDK republishes they can be swapped for the
+// generated types.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Mirrors the GraphQL `MessageContentType` enum. */
+export type MessageContentType = 'TEXT' | 'IMAGE' | 'VOICE' | 'STICKER' | 'GIF' | 'FILE';
+
+/** Mirrors the GraphQL `PresenceState` enum. */
+export type PresenceState = 'ONLINE' | 'OFFLINE';
+
+/**
+ * The chat message with the fields added to the schema. `reactions` is the AWSJSON scalar, delivered
+ * as a JSON string the client parses into a map of `reactorUserId -> reaction ciphertext`; each value
+ * is E2E-encrypted exactly like a message body.
+ */
+export interface ChatMessageExtended extends ChatMessage {
+  contentType?: MessageContentType | null;
+  replyToMessageId?: string | null;
+  replyToTimestamp?: number | null;
+  reactions?: string | null;
+}
+
+/** Real-time fan-out shape of `reactToMessage` / `onMessageReaction`. `reaction` is null on a clear. */
+export interface MessageReaction {
+  matchId: string;
+  messageId: string;
+  timestamp: number;
+  userId: string;
+  reaction?: string | null;
+}
+
+/** Ephemeral typing signal (`sendTypingIndicator` / `onTypingIndicator`). */
+export interface TypingIndicator {
+  matchId: string;
+  userId: string;
+  isTyping: boolean;
+  timestamp: number;
+}
+
+/** Ephemeral presence signal (`updatePresence` / `onPresenceUpdate`). `lastActiveAt` is "last seen". */
+export interface PresenceUpdate {
+  matchId: string;
+  userId: string;
+  state: PresenceState;
+  lastActiveAt: number;
+}
+
+/** Ephemeral screenshot signal (`notifyScreenshot` / `onScreenshotTaken`). */
+export interface ScreenshotEvent {
+  matchId: string;
+  userId: string;
+  timestamp: number;
+}
+
+/** Optional fields for {@link ChatMessagingApi.sendMessage}. */
+export interface SendMessageOptions {
+  /** Message kind; defaults to TEXT server-side. Voice/sticker/GIF/image/file ride the media path. */
+  contentType?: MessageContentType;
+  /** messageId of the message being quoted, when this is a reply. */
+  replyToMessageId?: string;
+  /** Sort-key timestamp of the quoted message, so the client can locate it. */
+  replyToTimestamp?: number;
+  /** When > 0, a disappearing message: server TTL becomes now + expireSeconds. */
+  expireSeconds?: number;
+}
+
 /**
  * Chat service client.
  *
  * Design philosophy (see OneHookBackend/packages/chat):
  *  - Real-time messaging is served by AWS AppSync GraphQL over WebSocket (NOT
  *    REST). History is read ONLY via the `getMessages` query. Delivery/read
- *    receipts and message deletion are paid-tier mutations (the server
- *    enforces the tier from the caller's JWT).
+ *    receipts and message deletion are available to ALL tiers (including the free
+ *    MUST tier).
  *  - Messages carry only `ciphertext`; the server never sees plaintext (E2EE).
  *  - REST (via the generated SDK) is used only for multi-device key management and
  *    bulk match-message deletion:
@@ -43,19 +114,43 @@ const GET_MESSAGES = /* GraphQL */ `
       status
       deliveredAt
       readAt
+      contentType
+      replyToMessageId
+      replyToTimestamp
+      reactions
     }
   }
 `;
 
 const SEND_MESSAGE = /* GraphQL */ `
-  mutation SendMessage($matchId: ID!, $senderId: String!, $ciphertext: String!) {
-    sendMessage(matchId: $matchId, senderId: $senderId, ciphertext: $ciphertext) {
+  mutation SendMessage(
+    $matchId: ID!
+    $senderId: String!
+    $ciphertext: String!
+    $contentType: MessageContentType
+    $replyToMessageId: ID
+    $replyToTimestamp: AWSTimestamp
+    $expireSeconds: Int
+  ) {
+    sendMessage(
+      matchId: $matchId
+      senderId: $senderId
+      ciphertext: $ciphertext
+      contentType: $contentType
+      replyToMessageId: $replyToMessageId
+      replyToTimestamp: $replyToTimestamp
+      expireSeconds: $expireSeconds
+    ) {
       messageId
       matchId
       senderId
       ciphertext
       timestamp
       status
+      contentType
+      replyToMessageId
+      replyToTimestamp
+      reactions
     }
   }
 `;
@@ -99,6 +194,112 @@ const ON_NEW_MESSAGE = /* GraphQL */ `
       ciphertext
       timestamp
       status
+      contentType
+      replyToMessageId
+      replyToTimestamp
+      reactions
+    }
+  }
+`;
+
+// Reactions (all tiers), fanned out via onMessageReaction.
+const REACT_TO_MESSAGE = /* GraphQL */ `
+  mutation ReactToMessage(
+    $matchId: ID!
+    $timestamp: AWSTimestamp!
+    $messageId: ID!
+    $userId: String!
+    $reaction: String
+  ) {
+    reactToMessage(
+      matchId: $matchId
+      timestamp: $timestamp
+      messageId: $messageId
+      userId: $userId
+      reaction: $reaction
+    ) {
+      matchId
+      messageId
+      timestamp
+      userId
+      reaction
+    }
+  }
+`;
+
+const ON_MESSAGE_REACTION = /* GraphQL */ `
+  subscription OnMessageReaction($matchId: ID!) {
+    onMessageReaction(matchId: $matchId) {
+      matchId
+      messageId
+      timestamp
+      userId
+      reaction
+    }
+  }
+`;
+
+// Ephemeral conversation signals (nothing is persisted server-side).
+const SEND_TYPING_INDICATOR = /* GraphQL */ `
+  mutation SendTypingIndicator($matchId: ID!, $userId: String!, $isTyping: Boolean!) {
+    sendTypingIndicator(matchId: $matchId, userId: $userId, isTyping: $isTyping) {
+      matchId
+      userId
+      isTyping
+      timestamp
+    }
+  }
+`;
+
+const ON_TYPING_INDICATOR = /* GraphQL */ `
+  subscription OnTypingIndicator($matchId: ID!) {
+    onTypingIndicator(matchId: $matchId) {
+      matchId
+      userId
+      isTyping
+      timestamp
+    }
+  }
+`;
+
+const UPDATE_PRESENCE = /* GraphQL */ `
+  mutation UpdatePresence($matchId: ID!, $userId: String!, $state: PresenceState!) {
+    updatePresence(matchId: $matchId, userId: $userId, state: $state) {
+      matchId
+      userId
+      state
+      lastActiveAt
+    }
+  }
+`;
+
+const ON_PRESENCE_UPDATE = /* GraphQL */ `
+  subscription OnPresenceUpdate($matchId: ID!) {
+    onPresenceUpdate(matchId: $matchId) {
+      matchId
+      userId
+      state
+      lastActiveAt
+    }
+  }
+`;
+
+const NOTIFY_SCREENSHOT = /* GraphQL */ `
+  mutation NotifyScreenshot($matchId: ID!, $userId: String!) {
+    notifyScreenshot(matchId: $matchId, userId: $userId) {
+      matchId
+      userId
+      timestamp
+    }
+  }
+`;
+
+const ON_SCREENSHOT_TAKEN = /* GraphQL */ `
+  subscription OnScreenshotTaken($matchId: ID!) {
+    onScreenshotTaken(matchId: $matchId) {
+      matchId
+      userId
+      timestamp
     }
   }
 `;
@@ -161,28 +362,85 @@ async function graphql<T>(query: string, variables: Record<string, unknown>): Pr
  * (see lib/chat-encryption.ts), so every value crossing this boundary is ciphertext.
  */
 export const ChatMessagingApi = {
-  getMessages: async (matchId: string, after?: number): Promise<ChatMessage[]> => {
-    const data = await graphql<{ getMessages: (ChatMessage | null)[] | null }>(GET_MESSAGES, {
+  getMessages: async (matchId: string, after?: number): Promise<ChatMessageExtended[]> => {
+    const data = await graphql<{ getMessages: (ChatMessageExtended | null)[] | null }>(GET_MESSAGES, {
       matchId,
       after,
     });
-    return (data.getMessages ?? []).filter((m): m is ChatMessage => m != null);
+    return (data.getMessages ?? []).filter((m): m is ChatMessageExtended => m != null);
   },
 
   sendMessage: async (
     matchId: string,
     senderId: string,
-    ciphertext: string
-  ): Promise<ChatMessage> => {
-    const data = await graphql<{ sendMessage: ChatMessage }>(SEND_MESSAGE, {
+    ciphertext: string,
+    options: SendMessageOptions = {}
+  ): Promise<ChatMessageExtended> => {
+    const data = await graphql<{ sendMessage: ChatMessageExtended }>(SEND_MESSAGE, {
       matchId,
       senderId,
       ciphertext,
+      contentType: options.contentType ?? null,
+      replyToMessageId: options.replyToMessageId ?? null,
+      replyToTimestamp: options.replyToTimestamp ?? null,
+      expireSeconds: options.expireSeconds ?? null,
     });
     return data.sendMessage;
   },
 
-  /** Paid tiers only — the server rejects free-tier callers. */
+  /**
+   * React to a message, or clear the caller's reaction by passing `reaction: null`. Available to all
+   * tiers. `reaction` must be the reaction ciphertext (encrypt the emoji exactly like a message body).
+   */
+  reactToMessage: async (
+    matchId: string,
+    timestamp: number,
+    messageId: string,
+    userId: string,
+    reaction: string | null
+  ): Promise<MessageReaction | null> => {
+    const data = await graphql<{ reactToMessage: MessageReaction }>(REACT_TO_MESSAGE, {
+      matchId,
+      timestamp,
+      messageId,
+      userId,
+      reaction,
+    });
+    return data.reactToMessage;
+  },
+
+  /** Announce this user's typing state. Ephemeral — nothing is stored. */
+  sendTypingIndicator: async (
+    matchId: string,
+    userId: string,
+    isTyping: boolean
+  ): Promise<void> => {
+    await graphql<{ sendTypingIndicator: TypingIndicator }>(SEND_TYPING_INDICATOR, {
+      matchId,
+      userId,
+      isTyping,
+    });
+  },
+
+  /**
+   * Announce this user's presence in the conversation. Ephemeral. The caller decides whether to
+   * publish at all based on the user's `lastSeenVisibility` setting — a user hiding last-seen simply
+   * does not call this.
+   */
+  updatePresence: async (
+    matchId: string,
+    userId: string,
+    state: PresenceState
+  ): Promise<void> => {
+    await graphql<{ updatePresence: PresenceUpdate }>(UPDATE_PRESENCE, { matchId, userId, state });
+  },
+
+  /** Tell the peer that this user took a screenshot (detection is an OS-level client capability). */
+  notifyScreenshot: async (matchId: string, userId: string): Promise<void> => {
+    await graphql<{ notifyScreenshot: ScreenshotEvent }>(NOTIFY_SCREENSHOT, { matchId, userId });
+  },
+
+  /** Available to all tiers (including MUST). */
   markAsDelivered: async (
     matchId: string,
     timestamp: number,
@@ -198,7 +456,7 @@ export const ChatMessagingApi = {
     return data.markAsDelivered;
   },
 
-  /** Paid tiers only — the server rejects free-tier callers. */
+  /** Available to all tiers (including MUST). */
   markAsRead: async (
     matchId: string,
     timestamp: number,
@@ -214,7 +472,7 @@ export const ChatMessagingApi = {
     return data.markAsRead;
   },
 
-  /** Paid tiers only — deletes a single message for everyone. */
+  /** All tiers — deletes a single message for everyone. */
   deleteMessage: async (matchId: string, timestamp: number): Promise<DeletedMessage | null> => {
     const data = await graphql<{ deleteMessage: DeletedMessage }>(DELETE_MESSAGE, {
       matchId,
@@ -224,10 +482,10 @@ export const ChatMessagingApi = {
   },
 
   /** Subscribe to new messages for a match. Returns an unsubscribe function. */
-  subscribeToNewMessages: (matchId: string, onMessage: (m: ChatMessage) => void): (() => void) => {
+  subscribeToNewMessages: (matchId: string, onMessage: (m: ChatMessageExtended) => void): (() => void) => {
     const sub = (
       client().graphql({ query: ON_NEW_MESSAGE, variables: { matchId } }) as unknown as {
-        subscribe: (o: { next: (v: { data?: { onNewMessage?: ChatMessage } }) => void; error: (e: unknown) => void }) => { unsubscribe: () => void };
+        subscribe: (o: { next: (v: { data?: { onNewMessage?: ChatMessageExtended } }) => void; error: (e: unknown) => void }) => { unsubscribe: () => void };
       }
     ).subscribe({
       next: ({ data }) => {
@@ -270,6 +528,78 @@ export const ChatMessagingApi = {
         if (data?.onMessageDeleted) onDelete(data.onMessageDeleted);
       },
       error: (err) => console.error('[chat] onMessageDeleted subscription error', err),
+    });
+    return () => sub.unsubscribe();
+  },
+
+  /** Subscribe to message reactions for a match. Returns an unsubscribe function. */
+  subscribeToReactions: (
+    matchId: string,
+    onReaction: (r: MessageReaction) => void
+  ): (() => void) => {
+    const sub = (
+      client().graphql({ query: ON_MESSAGE_REACTION, variables: { matchId } }) as unknown as {
+        subscribe: (o: { next: (v: { data?: { onMessageReaction?: MessageReaction } }) => void; error: (e: unknown) => void }) => { unsubscribe: () => void };
+      }
+    ).subscribe({
+      next: ({ data }) => {
+        if (data?.onMessageReaction) onReaction(data.onMessageReaction);
+      },
+      error: (err) => console.error('[chat] onMessageReaction subscription error', err),
+    });
+    return () => sub.unsubscribe();
+  },
+
+  /** Subscribe to the peer's typing indicator. Returns an unsubscribe function. */
+  subscribeToTyping: (
+    matchId: string,
+    onTyping: (t: TypingIndicator) => void
+  ): (() => void) => {
+    const sub = (
+      client().graphql({ query: ON_TYPING_INDICATOR, variables: { matchId } }) as unknown as {
+        subscribe: (o: { next: (v: { data?: { onTypingIndicator?: TypingIndicator } }) => void; error: (e: unknown) => void }) => { unsubscribe: () => void };
+      }
+    ).subscribe({
+      next: ({ data }) => {
+        if (data?.onTypingIndicator) onTyping(data.onTypingIndicator);
+      },
+      error: (err) => console.error('[chat] onTypingIndicator subscription error', err),
+    });
+    return () => sub.unsubscribe();
+  },
+
+  /** Subscribe to the peer's presence (online/offline + last-seen). Returns an unsubscribe function. */
+  subscribeToPresence: (
+    matchId: string,
+    onPresence: (p: PresenceUpdate) => void
+  ): (() => void) => {
+    const sub = (
+      client().graphql({ query: ON_PRESENCE_UPDATE, variables: { matchId } }) as unknown as {
+        subscribe: (o: { next: (v: { data?: { onPresenceUpdate?: PresenceUpdate } }) => void; error: (e: unknown) => void }) => { unsubscribe: () => void };
+      }
+    ).subscribe({
+      next: ({ data }) => {
+        if (data?.onPresenceUpdate) onPresence(data.onPresenceUpdate);
+      },
+      error: (err) => console.error('[chat] onPresenceUpdate subscription error', err),
+    });
+    return () => sub.unsubscribe();
+  },
+
+  /** Subscribe to screenshot notifications from the peer. Returns an unsubscribe function. */
+  subscribeToScreenshots: (
+    matchId: string,
+    onScreenshot: (s: ScreenshotEvent) => void
+  ): (() => void) => {
+    const sub = (
+      client().graphql({ query: ON_SCREENSHOT_TAKEN, variables: { matchId } }) as unknown as {
+        subscribe: (o: { next: (v: { data?: { onScreenshotTaken?: ScreenshotEvent } }) => void; error: (e: unknown) => void }) => { unsubscribe: () => void };
+      }
+    ).subscribe({
+      next: ({ data }) => {
+        if (data?.onScreenshotTaken) onScreenshot(data.onScreenshotTaken);
+      },
+      error: (err) => console.error('[chat] onScreenshotTaken subscription error', err),
     });
     return () => sub.unsubscribe();
   },

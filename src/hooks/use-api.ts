@@ -445,8 +445,7 @@ interface PendingAttachmentUpload {
 /**
  * Chat messaging hook backed by AppSync GraphQL. Reads history via `getMessages`,
  * sends via `sendMessage`, and live-updates via the `onNewMessage` subscription.
- * Delivery/read receipts are paid-tier-only mutations; failures there are ignored
- * for Must-tier users (the server rejects them).
+ * Delivery/read receipts are available to all tiers (including MUST).
  */
 export function useChatMessages(matchId: string, recipientId?: string) {
   const { currentUser } = useAppStore();

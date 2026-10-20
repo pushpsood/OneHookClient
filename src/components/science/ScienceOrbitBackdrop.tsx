@@ -193,7 +193,7 @@ export function ScienceOrbitBackdrop({
     >
       {!reduce && (
         <motion.div
-          className="absolute left-1/2 top-1/2 h-[120vmin] w-[120vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-50 blur-3xl"
+          className="absolute left-1/2 top-1/2 h-[90vmin] w-[90vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-50 blur-2xl"
           style={{
             background: `conic-gradient(from 0deg, ${ENGINE_META.engagement.soft}, ${ENGINE_META.rhythm.soft}, ${ENGINE_META.meaning.soft}, ${ENGINE_META.engagement.soft})`,
           }}
