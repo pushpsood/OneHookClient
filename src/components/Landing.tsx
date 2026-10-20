@@ -458,7 +458,6 @@ function PrincipleValues() {
   }, []);
 
   const focused = canFocus ? hovered : null;
-  const last = PRINCIPLE_VALUES.length - 1;
   const columns = PRINCIPLE_VALUES.map((_, i) => (i === focused ? `${PRINCIPLE_FOCUS_WEIGHT}fr` : '1fr')).join(' ');
 
   return (
@@ -495,23 +494,6 @@ function PrincipleValues() {
             >
               {value.description}
             </p>
-
-            {/* Downward extension: continues this card's dividers below the row and closes with an
-                accent rule. Height-only, from the card's bottom edge. */}
-            <span
-              aria-hidden="true"
-              // -left-px: absolute boxes start inside the cell's own border, so shift onto it to keep
-              // the extended divider on the exact same pixel column.
-              className={`pointer-events-none absolute right-0 top-full hidden border-border transition-[height] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none lg:block ${
-                idx > 0 ? '-left-px border-l' : 'left-0'
-              } ${idx < last ? 'border-r -mr-px' : ''} ${active ? 'h-10' : 'h-0'}`}
-            >
-              <span
-                className={`absolute inset-x-0 bottom-0 h-0.5 origin-left bg-accent transition-transform duration-500 ${
-                  active ? 'scale-x-100 delay-150' : 'scale-x-0'
-                }`}
-              />
-            </span>
           </div>
         );
       })}
@@ -1003,6 +985,21 @@ export function Landing() {
   const exploreScienceRef = useRef<HTMLButtonElement>(null);
   // Hovering / focusing "Explore the science" brings the science backdrop into focus.
   const [scienceRevealed, setScienceRevealed] = useState(false);
+
+  // The ScienceOrbitBackdrop is a heavy, pointer-driven decoration (a large rotating blurred aurora,
+  // a persistent blur over an animated SVG, a composited mask, and autoplaying signal pulses). On
+  // phones this spikes GPU/memory and makes mobile Safari/Chrome reload or crash when the Mr OneHook
+  // section scrolls into view — and the pointer parallax it exists for cannot even happen on touch.
+  // So mount it only on a large viewport with a real (fine) pointer; it is purely decorative.
+  const [enableOrbitBackdrop, setEnableOrbitBackdrop] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(min-width: 1024px) and (pointer: fine)');
+    const sync = () => setEnableOrbitBackdrop(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
 
   // ── Philosophy manifesto: a scroll-linked "zoom to read" ───────────────────────
   // Draws the eye to "…make one of them count." as the block travels through the viewport.
@@ -1926,7 +1923,7 @@ export function Landing() {
       </section>
 
       {/* Philosophy Section */}
-      <section id="philosophy" className="py-28 px-6 bg-white relative">
+      <section id="philosophy" className="pt-28 pb-0 px-6 bg-white relative">
         <div className="max-w-6xl mx-auto relative z-10">
           {/* Header */}
           <motion.div
@@ -2142,9 +2139,10 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Floating note at the exact intersection of Philosophy and Features */}
-      <div className="hidden lg:block absolute left-1/2 w-0 h-0 pointer-events-none z-30">
-        <svg className="overflow-visible w-96 h-32 -mt-10 -ml-2">
+      {/* Floating note at the exact intersection of Philosophy and Features. Sits just above the
+          background paint-stroke line (z-5); all section content is above it (z-10+). */}
+      <div className="hidden lg:block absolute left-1/2 w-0 h-0 pointer-events-none z-[6]">
+        <svg className="overflow-visible w-96 h-32 -mt-2 -ml-2">
           <text
             x="20"
             y="30"
@@ -2166,7 +2164,7 @@ export function Landing() {
       </div>
 
       {/* Features Section */}
-      <section id="features" className="pt-24 pb-0 px-6 bg-bg relative">
+      <section id="features" className="pt-16 pb-0 px-6 bg-bg relative">
         <div className="max-w-6xl mx-auto">
           {/* One sheet of glass behind the intro, stepper and slider, so the whole section reads as a unit. */}
           <GlassPanel className="z-10 py-10 md:py-12">
@@ -2451,6 +2449,7 @@ export function Landing() {
                 settles on "Explore the science" while that button is hovered or focused. */}
             {/* It spans the curved top cap and the bottom fade strip as well: --cap / --fade mirror their
                 heights, and the mask follows the cap's ellipse and the strip's fade-out. */}
+            {enableOrbitBackdrop && (
             <ScienceOrbitBackdrop
               revealed={scienceRevealed}
               pointerTarget={underTheHoodRef}
@@ -2469,6 +2468,7 @@ export function Landing() {
                 WebkitMaskRepeat: 'no-repeat',
               }}
             />
+            )}
 
             <motion.div
               initial={{ opacity: 0, y: 28 }}
