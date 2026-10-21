@@ -1,4 +1,4 @@
-import { trackConversationOpened, trackProfileRevisit, trackSafetyUiOpen, trackScreenView, Screen, UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
+import { trackConversationOpened, trackProfileRevisit, trackSafetyUiOpen, Screen, UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,13 +27,11 @@ import {
   type BlockReason,
 } from '../../api/rest';
 import { useChatMessages } from '../../hooks/use-api';
-import { useCallController, useCallEligibility } from '../../hooks/use-calls';
+import { useCallEligibility } from '../../hooks/use-calls';
+import { useCall } from '../../app/CallProvider';
 import { CallButtons } from '../../components/call/CallButtons';
-import { IncomingCallModal } from '../../components/call/IncomingCallModal';
-import { InCallScreen } from '../../components/call/InCallScreen';
 import { CallHistoryItem } from '../../components/call/CallHistoryItem';
-import { friendlyEndReason } from '../../lib/call-errors';
-import type { Call } from '../../api/calls';
+import { CallApi, type Call } from '../../api/calls';
 import { ApiError } from '../../lib/api-client';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { useToast } from '../../components/common/Toast';
@@ -1006,12 +1004,30 @@ function MatchConversation({
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
-  // Voice / video calling for this conversation (OneHookBackend/docs/voice-video-calls.md).
-  const call = useCallController({ currentUserId, matchId, peerId, peerName });
+  // Voice / video calling goes through the ONE app-level controller (OneHookBackend/docs/
+  // voice-video-calls.md §10): the ring modal and in-call surface are owned by CallProvider at the
+  // app root, so a call rings on any screen. This conversation only STARTS calls and shows history.
+  const call = useCall();
 
   // Whether calling is unlocked yet ("you've both messaged"). Fetched on open, re-checked (throttled)
   // after a send and when a peer message arrives, and fails open on error — startCall is the backstop.
   const eligibility = useCallEligibility(matchId, Boolean(peerId));
+
+  // Server call rows for this conversation's timeline (§8 D5). Refetched whenever a call ends
+  // anywhere (the controller bumps historyNonce), so a finished call appears without reopening.
+  const [callHistory, setCallHistory] = useState<Call[]>([]);
+  useEffect(() => {
+    if (!matchId) return;
+    let active = true;
+    CallApi.getCallHistory(matchId)
+      .then((rows) => {
+        if (active) setCallHistory(rows);
+      })
+      .catch(() => undefined); // best effort: a missing history must never break the conversation
+    return () => {
+      active = false;
+    };
+  }, [matchId, call.historyNonce]);
 
   // Re-check eligibility when a NEW message from the peer arrives, so the buttons unlock without
   // reopening the chat. Tracks the latest inbound message id; the tracker throttles the actual call.
@@ -1027,31 +1043,6 @@ function MatchConversation({
     }
   }, [messages, eligibility.recheck]);
 
-  // Report a CALL screen_view when the call surface (incoming ring or in-call screen) first appears,
-  // mirroring how other screens emit screen_view on mount (e.g. LOGIN / ONBOARDING).
-  const callUiVisible = call.active || Boolean(call.incoming);
-  const callUiWasVisible = useRef(false);
-  useEffect(() => {
-    if (callUiVisible && !callUiWasVisible.current) trackScreenView(Screen.CALL);
-    callUiWasVisible.current = callUiVisible;
-  }, [callUiVisible]);
-
-  // Surface call errors and non-trivial end reasons (busy, missed, declined…) as toasts.
-  useEffect(() => {
-    if (call.error) {
-      showToast(call.error, 'error');
-      call.clearError();
-    }
-  }, [call, showToast]);
-
-  useEffect(() => {
-    if (call.lastEndReason) {
-      const note = friendlyEndReason(call.lastEndReason);
-      if (note) showToast(note, 'info');
-      call.clearEnded();
-    }
-  }, [call, showToast]);
-
   // Merge server call rows into the message timeline, ordered by time (§8 D5: server rows).
   const timeline = useMemo(() => {
     const items: Array<
@@ -1059,9 +1050,9 @@ function MatchConversation({
       | { kind: 'call'; ts: number; call: Call }
     > = [];
     for (const m of messages) items.push({ kind: 'message', ts: m.timestamp, message: m });
-    for (const c of call.history) items.push({ kind: 'call', ts: c.createdAt, call: c });
+    for (const c of callHistory) items.push({ kind: 'call', ts: c.createdAt, call: c });
     return items.sort((a, b) => a.ts - b.ts);
-  }, [messages, call.history]);
+  }, [messages, callHistory]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1174,8 +1165,12 @@ function MatchConversation({
             disabled={call.active}
             locked={eligibility.locked}
             lockMessage={eligibility.lockMessage}
-            onAudio={() => void call.startCall('AUDIO')}
-            onVideo={() => void call.startCall('VIDEO')}
+            onAudio={() =>
+              peerId && void call.startCall({ matchId, peerId, peerName, media: 'AUDIO' })
+            }
+            onVideo={() =>
+              peerId && void call.startCall({ matchId, peerId, peerName, media: 'VIDEO' })
+            }
           />
         )}
       </div>
@@ -1301,40 +1296,6 @@ function MatchConversation({
         onClose={() => setRecoveryOpen(false)}
         onRecovered={() => void refetch()}
       />
-
-      {/* Incoming-call ring + the in-call surface for this conversation. */}
-      {call.incoming && !call.active && (
-        <IncomingCallModal
-          peerName={peerName}
-          media={call.incoming.media}
-          onAcceptVideo={() => void call.acceptIncoming('VIDEO')}
-          onAcceptAudio={() => void call.acceptIncoming('AUDIO')}
-          onDecline={() => void call.declineIncoming()}
-        />
-      )}
-      {call.active && (
-        <InCallScreen
-          peerName={peerName}
-          media={call.media}
-          state={call.state}
-          localStream={call.localStream}
-          remoteStream={call.remoteStream}
-          screenStream={call.screenStream}
-          sas={call.sas}
-          muted={call.muted}
-          cameraOff={call.cameraOff}
-          canSendScreen={call.canSendScreen}
-          screenShareState={call.screenShareState}
-          screenRequest={call.screenRequest}
-          onToggleMute={call.toggleMute}
-          onToggleCamera={call.toggleCamera}
-          onStartScreenShare={() => void call.startScreenShare()}
-          onStopScreenShare={call.stopScreenShare}
-          onAcceptScreenShare={call.acceptScreenShare}
-          onDeclineScreenShare={call.declineScreenShare}
-          onHangup={() => void call.hangup()}
-        />
-      )}
     </>
   );
 }

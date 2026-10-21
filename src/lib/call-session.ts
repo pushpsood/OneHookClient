@@ -28,6 +28,7 @@ import {
   parseCallSignal,
   type CallIceCandidate,
 } from './call-signal';
+import { isCaptionWireType } from './call-captions';
 import type { Call, CallEndReason, CallEvent, CallMedia, IceServerConfig } from '../api/calls';
 
 export const RING_TIMEOUT_MS = 45_000;
@@ -109,6 +110,17 @@ export interface CallSessionHandlers {
   onScreenShareStateChange?(state: ScreenShareState): void;
   onMuteChange?(muted: boolean): void;
   onCameraChange?(cameraOff: boolean): void;
+  /**
+   * The `control` channel opened — the caption layer (§12) can now start sending/receiving caption
+   * messages through {@link CallSession.sendCaptionControlMessage}.
+   */
+  onControlChannelOpen?(): void;
+  /**
+   * A caption-family `control` message arrived (`caption`, `caption.state`, `translate.request`,
+   * `translate.response`, `capabilities`). The raw JSON object is forwarded verbatim; the caption
+   * layer parses it with `parseCaptionWire`. CallSession never inspects caption TEXT (§12.4 / D9).
+   */
+  onCaptionControlMessage?(message: unknown): void;
   onEnded?(reason: CallEndReason | null): void;
   onError?(error: Error): void;
 }
@@ -591,8 +603,24 @@ export class CallSession {
         canSendScreen: this.canSendScreen(),
         canReceiveScreen: true,
       });
+      // The caption layer (§12) may now start sending/receiving over this same channel.
+      this.handlers.onControlChannelOpen?.();
     };
     channel.onmessage = (event) => this.onControlMessage(event.data);
+  }
+
+  /**
+   * Send a caption-family message (§12.3) to the one peer over the DTLS `control` channel. Used by
+   * the on-device caption layer. The payload is E2EE end to end over the relay like every other
+   * control message, so the backend never sees caption text. A no-op if the channel is not open.
+   */
+  sendCaptionControlMessage(message: object): void {
+    this.sendControl(message as ControlMessage);
+  }
+
+  /** Whether the `control` channel is open (captions can flow). */
+  isControlChannelOpen(): boolean {
+    return this.controlChannel?.readyState === 'open';
   }
 
   private onControlMessage(data: unknown): void {
@@ -601,6 +629,13 @@ export class CallSession {
       message = JSON.parse(typeof data === 'string' ? data : '') as ControlMessage;
     } catch {
       return; // Unknown / non-JSON control payloads are ignored (forward-compatibility).
+    }
+    // §12 captions / translation ride this same `control` channel. Forward caption-family messages
+    // verbatim to the caption layer (which owns the §12.3 wire format); CallSession never reads the
+    // caption TEXT, so the backend still cannot tell captions were used (§9.1 / D9).
+    if (isCaptionWireType(message.type)) {
+      this.handlers.onCaptionControlMessage?.(message);
+      return;
     }
     switch (message.type) {
       case 'capabilities':
@@ -629,10 +664,6 @@ export class CallSession {
       case 'screen.stop-request':
         if (this.screenShareState === 'sending') this.stopScreenShare();
         break;
-      // TODO(captions): §12 live captions / translation ride this same `control` channel
-      // (message types `caption`, `caption.state`, `translate.request`, `translate.response`).
-      // Out of scope for this pass; wire the handlers here when captions land. On-device only —
-      // caption/translation text must NEVER be sent to any cloud service.
       default:
         break;
     }

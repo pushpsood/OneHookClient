@@ -1,5 +1,8 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import {
+  Captions,
+  CaptionsOff,
+  Languages,
   Mic,
   MicOff,
   MonitorUp,
@@ -10,7 +13,38 @@ import {
 } from 'lucide-react';
 import type { CallMedia } from '../../api/calls';
 import type { CallSessionState, ScreenShareState } from '../../lib/call-session';
-import { UiElement, trackProps, type UiElementId } from '../../lib/analytics/analytics';
+import type { CaptionUiState } from '../../lib/call-captions';
+import { UiElement, trackProps, trackUi, type UiElementId } from '../../lib/analytics/analytics';
+
+/**
+ * Target languages offered in the in-call caption menu (§12.5 / D12). The viewer's target defaults to
+ * the device locale; this list lets them change it in-call. The on-device translation engine decides
+ * whether a pair is actually available — an unsupported pick just shows the original with a note, it
+ * never reaches a cloud translator. Codes are BCP-47 base subtags.
+ */
+const CAPTION_LANGUAGES: ReadonlyArray<{ code: string; label: string }> = [
+  { code: 'en', label: 'English' },
+  { code: 'hi', label: 'हिन्दी (Hindi)' },
+  { code: 'bn', label: 'বাংলা (Bengali)' },
+  { code: 'ta', label: 'தமிழ் (Tamil)' },
+  { code: 'te', label: 'తెలుగు (Telugu)' },
+  { code: 'mr', label: 'मराठी (Marathi)' },
+  { code: 'gu', label: 'ગુજરાતી (Gujarati)' },
+  { code: 'kn', label: 'ಕನ್ನಡ (Kannada)' },
+  { code: 'ur', label: 'اردو (Urdu)' },
+  { code: 'es', label: 'Español (Spanish)' },
+  { code: 'fr', label: 'Français (French)' },
+  { code: 'de', label: 'Deutsch (German)' },
+  { code: 'pt', label: 'Português (Portuguese)' },
+  { code: 'ar', label: 'العربية (Arabic)' },
+  { code: 'zh', label: '中文 (Chinese)' },
+  { code: 'ja', label: '日本語 (Japanese)' },
+];
+
+/** The base (ISO 639) subtag, lowercased, so an `en-US` target still matches the `en` menu option. */
+function baseSubtag(code: string): string {
+  return (code ?? '').toLowerCase().split('-')[0];
+}
 
 /** Attaches a MediaStream to a <video>, muting local playback to avoid echo. */
 function VideoTile({
@@ -76,12 +110,17 @@ export function InCallScreen({
   canSendScreen,
   screenShareState,
   screenRequest,
+  captions,
+  captionsSupported,
   onToggleMute,
   onToggleCamera,
   onStartScreenShare,
   onStopScreenShare,
   onAcceptScreenShare,
   onDeclineScreenShare,
+  onEnableCaptions,
+  onDisableCaptions,
+  onSelectCaptionLanguage,
   onHangup,
 }: {
   peerName: string;
@@ -96,17 +135,36 @@ export function InCallScreen({
   canSendScreen: boolean;
   screenShareState: ScreenShareState;
   screenRequest: string | null;
+  /** On-device caption / translation state (§12), or null before the control channel is open. */
+  captions: CaptionUiState | null;
+  /** Whether this browser can do on-device captions at all (drives the disabled toggle). */
+  captionsSupported: boolean;
   onToggleMute: () => void;
   onToggleCamera: () => void;
   onStartScreenShare: () => void;
   onStopScreenShare: () => void;
   onAcceptScreenShare: () => void;
   onDeclineScreenShare: () => void;
+  onEnableCaptions: () => void;
+  onDisableCaptions: () => void;
+  onSelectCaptionLanguage: (lang: string) => void;
   onHangup: () => void;
 }) {
   const isVideo = media === 'VIDEO';
   const sharing = screenShareState === 'sending';
   const viewingShare = screenShareState === 'receiving' && screenStream;
+  const captionsOn = Boolean(captions?.localEnabled);
+  const peerCaptioning = Boolean(captions?.peerCaptioning);
+  // Captions are offered while connected (the control channel is up). The toggle is disabled with a
+  // reason when on-device recognition is not usable here (§12.2) — it NEVER falls back to the cloud.
+  const showCaptionControls = captionsSupported && state === 'connected';
+  const captionDisabledReason = !captions
+    ? 'Preparing captions…'
+    : captions.localAvailable
+      ? undefined
+      : (captions.localNeedsInstall
+          ? captions.localUnavailableReason ?? 'Download the language pack'
+          : captions.localUnavailableReason ?? 'Not supported on this device');
 
   return (
     <div
@@ -200,6 +258,48 @@ export function InCallScreen({
         )}
       </div>
 
+      {/*
+        Live caption overlay (§12). In-memory only, dropped when the call ends (D9). Each line shows
+        the translation as the main line with the original underneath, marked as on-device machine
+        translation; an untranslatable pair shows the original with "Translation unavailable". No
+        caption text is ever logged or sent to the backend — it only rode the E2EE control channel.
+      */}
+      {showCaptionControls && captions && (captionsOn || peerCaptioning || captions.lines.length > 0) && (
+        <div
+          className="shrink-0 max-h-40 overflow-y-auto px-6 py-3 bg-black/50 text-sm space-y-1.5"
+          aria-live="polite"
+          aria-label="Live captions"
+        >
+          {captions.lines.length === 0 ? (
+            <p className="text-white/50 text-xs">Listening…</p>
+          ) : (
+            captions.lines.slice(-6).map((line) => {
+              const translated =
+                line.translationState === 'done' && line.translatedText && line.translatedText !== line.text;
+              return (
+                <div key={`${line.source}:${line.seq}`} className="leading-snug">
+                  <span className="mr-2 text-[10px] uppercase tracking-wide text-white/40">
+                    {line.source === 'local' ? 'You' : peerName}
+                  </span>
+                  <span className={line.final ? 'text-white' : 'text-white/70 italic'}>
+                    {translated ? line.translatedText : line.text}
+                  </span>
+                  {translated && (
+                    <span className="block pl-1 text-[11px] text-white/45">
+                      {line.text}
+                      <span className="ml-1 text-white/30">· Translated on your device · may be inaccurate</span>
+                    </span>
+                  )}
+                  {line.translationState === 'unavailable' && (
+                    <span className="block pl-1 text-[11px] text-white/35">Translation unavailable</span>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
       {/* Controls */}
       <div className="shrink-0 flex items-center justify-center gap-3 p-6 bg-black/40">
         <ControlButton
@@ -248,6 +348,49 @@ export function InCallScreen({
           </ControlButton>
         )}
 
+        {showCaptionControls && (
+          <>
+            <ControlButton
+              onClick={captionsOn ? onDisableCaptions : onEnableCaptions}
+              active={captionsOn}
+              disabled={Boolean(captionDisabledReason)}
+              label={
+                captionDisabledReason
+                  ? `Live captions unavailable: ${captionDisabledReason}`
+                  : captionsOn
+                    ? 'Turn live captions off'
+                    : 'Turn live captions on'
+              }
+              trackId={UiElement.CALL_CAPTIONS}
+              trackValue={captionsOn ? 'off' : 'on'}
+            >
+              {captionsOn ? <Captions className="w-6 h-6" /> : <CaptionsOff className="w-6 h-6" />}
+            </ControlButton>
+
+            {/* Target-language menu (§12.5 / D12). A menu_item: the chosen language code rides as the
+                telemetry targetId — never caption text. The on-device engine decides availability. */}
+            <label className="relative flex items-center" title="Caption language">
+              <span className="sr-only">Caption translation language</span>
+              <Languages className="pointer-events-none absolute left-2 w-5 h-5 text-white/70" aria-hidden="true" />
+              <select
+                value={captions ? baseSubtag(captions.targetLang) : 'en'}
+                onChange={(e) => {
+                  trackUi(UiElement.CALL_CAPTION_LANGUAGE_SELECT, { targetId: e.target.value });
+                  onSelectCaptionLanguage(e.target.value);
+                }}
+                aria-label="Caption translation language"
+                className="h-14 pl-9 pr-3 rounded-full bg-white/15 text-white text-sm outline-none cursor-pointer hover:bg-white/25 transition-colors appearance-none"
+              >
+                {CAPTION_LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code} className="text-neutral-900">
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        )}
+
         <button
           type="button"
           {...trackProps(UiElement.CALL_END)}
@@ -265,6 +408,7 @@ export function InCallScreen({
 function ControlButton({
   onClick,
   active,
+  disabled,
   label,
   trackId,
   trackValue,
@@ -272,6 +416,7 @@ function ControlButton({
 }: {
   onClick: () => void;
   active?: boolean;
+  disabled?: boolean;
   label: string;
   trackId: UiElementId;
   trackValue?: string;
@@ -282,10 +427,11 @@ function ControlButton({
       type="button"
       {...trackProps(trackId, trackValue !== undefined ? { value: trackValue } : {})}
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       aria-pressed={active}
       title={label}
-      className={`w-14 h-14 flex items-center justify-center rounded-full transition-colors cursor-pointer ${
+      className={`w-14 h-14 flex items-center justify-center rounded-full transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
         active ? 'bg-white text-neutral-900' : 'bg-white/15 text-white hover:bg-white/25'
       }`}
     >

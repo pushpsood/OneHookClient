@@ -27,6 +27,7 @@ import { DesktopSidebar } from './DesktopSidebar';
 import { SearchDrawer } from './SearchDrawer';
 import { CreateModal } from './CreateModal';
 import { LogoutConfirmDialog } from './LogoutConfirmDialog';
+import { CallProvider } from './CallProvider';
 import { useTheme } from '../lib/theme';
 
 export function AppContent() {
@@ -249,6 +250,7 @@ export function AppContent() {
   const userPhoto = currentUser.photos?.[0] || (currentUser as any).pictures?.[0];
 
   return (
+    <CallProvider currentUserId={currentUser.id}>
     <div className={`app-container ${resolvedTheme === 'dark' ? 'app-theme-dark' : 'app-theme-light'} h-[100dvh] bg-bg text-text flex flex-col overflow-hidden`}>
       {/* Common Full-Width Header expanding from left to right with OneHook logo in the centre */}
       <TopBar
@@ -453,5 +455,6 @@ export function AppContent() {
         onConfirm={performLogout}
       />
     </div>
+    </CallProvider>
   );
 }

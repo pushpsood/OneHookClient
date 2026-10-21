@@ -178,6 +178,12 @@ export interface ChatSettings {
   lastSeenVisibility: LastSeenVisibility;
   screenshotProtection: boolean;
   defaultDisappearingSeconds: number;
+  /**
+   * "Help translate my captions": this device may translate its OWN call captions for a partner whose
+   * device cannot translate the pair (the §12.5 sender fallback). Default off — it uses this device's
+   * battery and may download translation models. See OneHookBackend/docs/voice-video-calls.md D13.
+   */
+  helpTranslateCaptions: boolean;
 }
 
 export const ChatSettingsApi = {
