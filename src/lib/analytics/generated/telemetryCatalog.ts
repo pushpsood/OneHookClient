@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 146b0917d1004dcf35182aa24addbcd0b625e6e9dabecb3bafc7a8a4b45e5520
+// telemetry-integrity: sha256 f1294f8ce7f457bf0ac4251cd697cd49d08caa9229e480d70045d516d517c8f5
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.3.0, hash 52029d112aadcfd5.
+// Catalog version 1.3.0, hash 9db35444cda2b7ba.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
 export const TELEMETRY_CATALOG_VERSION = "1.3.0";
-export const TELEMETRY_CATALOG_HASH = "52029d112aadcfd5";
+export const TELEMETRY_CATALOG_HASH = "9db35444cda2b7ba";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
