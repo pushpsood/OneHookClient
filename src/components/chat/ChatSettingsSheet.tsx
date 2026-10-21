@@ -164,6 +164,39 @@ export function ChatSettingsSheet({
                     </select>
                   </div>
 
+                  {/*
+                    Calls — "Help translate my captions" (OneHookBackend/docs/voice-video-calls.md
+                    D13). When on, this device may translate its OWN live call captions on-device for a
+                    partner whose device cannot do the language pair (the §12.5 sender fallback). It is
+                    on-device only and never sends caption text anywhere; default off because it uses
+                    this device's battery and may download translation models.
+                  */}
+                  <div className="space-y-2 border-t border-border pt-5">
+                    <label className="text-[10px] uppercase tracking-widest font-bold opacity-60 block">
+                      Calls
+                    </label>
+                    <label
+                      {...trackProps(UiElement.CHAT_SETTINGS_HELP_TRANSLATE_CAPTIONS, {
+                        value: settings.helpTranslateCaptions ? 'off' : 'on',
+                      })}
+                      className="flex items-center justify-between gap-4 cursor-pointer"
+                    >
+                      <span className="flex flex-col">
+                        <span className="text-sm">Help translate my captions</span>
+                        <span className="text-[11px] text-text-muted leading-tight max-w-[18rem]">
+                          Let your device translate your live call captions for a partner whose device
+                          can&rsquo;t. On-device only; uses battery and may download language models.
+                        </span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(settings.helpTranslateCaptions)}
+                        onChange={(e) => void patch({ helpTranslateCaptions: e.target.checked })}
+                        className="w-5 h-5 accent-accent shrink-0"
+                      />
+                    </label>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-widest font-bold opacity-60 block">
                       Default disappearing messages (seconds, 0 = off)

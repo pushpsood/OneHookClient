@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 0df1cf4b23f2ea22d4a010fcb1526136c846b6728147068b6dc96d5bb98b1de8
+// telemetry-integrity: sha256 146b0917d1004dcf35182aa24addbcd0b625e6e9dabecb3bafc7a8a4b45e5520
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.3.0, hash 47d859d40ce38e04.
+// Catalog version 1.3.0, hash 52029d112aadcfd5.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
 export const TELEMETRY_CATALOG_VERSION = "1.3.0";
-export const TELEMETRY_CATALOG_HASH = "47d859d40ce38e04";
+export const TELEMETRY_CATALOG_HASH = "52029d112aadcfd5";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -317,6 +317,9 @@ export const UiElement = {
   CALL_SPEAKER: "call.speaker",
   CALL_SCREEN_SHARE: "call.screen_share",
   CALL_SCREEN_SHARE_RESPOND: "call.screen_share_respond",
+  CALL_CAPTIONS: "call.captions",
+  CALL_CAPTION_LANGUAGE_SELECT: "call.caption_language_select",
+  CHAT_SETTINGS_HELP_TRANSLATE_CAPTIONS: "chat_settings.help_translate_captions",
   CHAT_MEDIA_OPEN: "chat.media_open",
   CHAT_AUDIO_PLAY: "chat.audio_play",
   CHAT_FILE_OPEN: "chat.file_open",
@@ -550,8 +553,11 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "call.camera": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
   "call.camera_switch": { screen: "CALL", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "call.speaker": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["ios", "android"] },
-  "call.screen_share": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "android"] },
-  "call.screen_share_respond": { screen: "CALL", kind: "dialog_button", actions: ["tap", "dismiss"], values: ["accept", "decline"], platforms: ["web", "android"] },
+  "call.screen_share": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
+  "call.screen_share_respond": { screen: "CALL", kind: "dialog_button", actions: ["tap", "dismiss"], values: ["accept", "decline"], platforms: ["web", "ios", "android"] },
+  "call.captions": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
+  "call.caption_language_select": { screen: "CALL", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat_settings.help_translate_captions": { screen: "CHAT_SETTINGS", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
   "chat.media_open": { screen: "CHAT", kind: "gesture", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.audio_play": { screen: "CHAT", kind: "toggle", actions: ["toggle"], values: ["play", "pause"], platforms: ["web", "ios", "android"] },
   "chat.file_open": { screen: "CHAT", kind: "list_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
