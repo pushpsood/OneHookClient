@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 b050401c996a6d153a0b97da80f37523f9bc705cee24630447180bb0a9fd98a4
+// telemetry-integrity: sha256 0df1cf4b23f2ea22d4a010fcb1526136c846b6728147068b6dc96d5bb98b1de8
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.3.0, hash 25955dd2f9856888.
+// Catalog version 1.3.0, hash 47d859d40ce38e04.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
 export const TELEMETRY_CATALOG_VERSION = "1.3.0";
-export const TELEMETRY_CATALOG_HASH = "25955dd2f9856888";
+export const TELEMETRY_CATALOG_HASH = "47d859d40ce38e04";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -54,6 +54,7 @@ export const Screen = {
   LIKES_YOU: "LIKES_YOU",
   CHAT: "CHAT",
   CHAT_SETTINGS: "CHAT_SETTINGS",
+  CALL: "CALL",
   NOTIFICATIONS: "NOTIFICATIONS",
   PROFILE: "PROFILE",
   PROFILE_EDIT: "PROFILE_EDIT",
@@ -80,6 +81,7 @@ export const ViewableScreen = {
   LIKES_YOU: "LIKES_YOU",
   CHAT: "CHAT",
   CHAT_SETTINGS: "CHAT_SETTINGS",
+  CALL: "CALL",
   NOTIFICATIONS: "NOTIFICATIONS",
   PROFILE: "PROFILE",
   PROFILE_EDIT: "PROFILE_EDIT",
@@ -305,6 +307,16 @@ export const UiElement = {
   CHAT_PRIVACY_TOGGLE: "chat.privacy_toggle",
   CHAT_CALL: "chat.call",
   CHAT_VIDEO_CALL: "chat.video_call",
+  CHAT_CALL_HISTORY_OPEN: "chat.call_history_open",
+  CALL_ACCEPT: "call.accept",
+  CALL_DECLINE: "call.decline",
+  CALL_END: "call.end",
+  CALL_MUTE: "call.mute",
+  CALL_CAMERA: "call.camera",
+  CALL_CAMERA_SWITCH: "call.camera_switch",
+  CALL_SPEAKER: "call.speaker",
+  CALL_SCREEN_SHARE: "call.screen_share",
+  CALL_SCREEN_SHARE_RESPOND: "call.screen_share_respond",
   CHAT_MEDIA_OPEN: "chat.media_open",
   CHAT_AUDIO_PLAY: "chat.audio_play",
   CHAT_FILE_OPEN: "chat.file_open",
@@ -528,8 +540,18 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.wallpaper_open": { screen: "CHAT", kind: "menu_item", actions: ["tap", "dismiss"], values: null, platforms: ["web"] },
   "chat.add_hook_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios"] },
   "chat.privacy_toggle": { screen: "CHAT", kind: "toggle", actions: ["toggle"], values: ["hidden", "visible"], platforms: [] },
-  "chat.call": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
-  "chat.video_call": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.call": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.video_call": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.call_history_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "call.accept": { screen: "CALL", kind: "button", actions: ["tap"], values: ["audio", "video"], platforms: ["web", "ios", "android"] },
+  "call.decline": { screen: "CALL", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "call.end": { screen: "CALL", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "call.mute": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
+  "call.camera": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
+  "call.camera_switch": { screen: "CALL", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "call.speaker": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["ios", "android"] },
+  "call.screen_share": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "android"] },
+  "call.screen_share_respond": { screen: "CALL", kind: "dialog_button", actions: ["tap", "dismiss"], values: ["accept", "decline"], platforms: ["web", "android"] },
   "chat.media_open": { screen: "CHAT", kind: "gesture", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.audio_play": { screen: "CHAT", kind: "toggle", actions: ["toggle"], values: ["play", "pause"], platforms: ["web", "ios", "android"] },
   "chat.file_open": { screen: "CHAT", kind: "list_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },

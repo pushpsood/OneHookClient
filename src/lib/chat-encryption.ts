@@ -407,6 +407,93 @@ export class ChatEncryptionManager {
     return decryptV2(ciphertext, matchId, recipients);
   }
 
+  // ── Call signalling (voice/video, see lib/call-signal.ts) ──────────────────────────────────────
+  //
+  // A call's SDP / ICE payloads ride the SAME wire v2 envelope as chat messages, with the same
+  // `matchId` AAD — the only difference is the `0x02` plaintext frame the caller builds (chat text is
+  // unframed, attachments are `0x01`). These three methods are the call feature's ONLY crypto: they
+  // reuse `encryptV2` / `decryptV2` unchanged and invent nothing new.
+  //
+  // Call signals are EPHEMERAL and DEVICE-ONLY. Unlike a chat message they are never wrapped to an
+  // account-history key (there is nothing to recover on a new device — a finished call's SDP is
+  // meaningless), and the caller does NOT seal to its own devices either: a signal is only ever meant
+  // for the single peer it is routed to. This keeps the wrap set minimal and the blast radius tight.
+
+  /** This device's registry id, needed as `fromDeviceId` / to recognise signals addressed to it. */
+  async callDeviceId(): Promise<string> {
+    const identity = await this.loadIdentity();
+    if (!identity.deviceId) {
+      throw new Error('This device is not registered for encrypted chat yet.');
+    }
+    return identity.deviceId;
+  }
+
+  /**
+   * Seals a framed call signal to EVERY usable device of the peer — used for the offer, because any
+   * of the callee's devices may answer. No self devices and no history key are included.
+   *
+   * @throws if the peer has no usable v2 device, the same contract as {@link encryptMessage}.
+   */
+  async sealCallSignalToPeer(peerId: string, matchId: string, plaintext: string): Promise<string> {
+    if (!peerId) throw new Error('A peer id is required to seal a call signal.');
+    if (!matchId) throw new Error('A matchId is required to seal a call signal.');
+    const registry = await this.peerRegistry(peerId, matchId);
+    const targets: WireTarget[] = (registry.devices ?? [])
+      .filter(isUsableV2Device)
+      .map((device) => ({ id: deviceTargetId(device.deviceId), publicKey: device.publicKey }));
+    if (!targets.length) {
+      throw new Error('This person has no device set up for encrypted calling yet.');
+    }
+    return encryptV2(plaintext, matchId, targets);
+  }
+
+  /**
+   * Seals a framed call signal to EXACTLY ONE peer device — used for the answer and every later ICE /
+   * restart signal, which are addressed to the one device that is handling the call (the caller's
+   * `callerDeviceId` or the callee's `answeredByDeviceId`).
+   *
+   * @throws if that device is not present or usable in the peer's current registry.
+   */
+  async sealCallSignalToDevice(
+    peerId: string,
+    matchId: string,
+    deviceId: string,
+    plaintext: string
+  ): Promise<string> {
+    if (!peerId) throw new Error('A peer id is required to seal a call signal.');
+    if (!matchId) throw new Error('A matchId is required to seal a call signal.');
+    if (!deviceId) throw new Error('A device id is required to seal a call signal.');
+    const registry = await this.peerRegistry(peerId, matchId);
+    const device = (registry.devices ?? []).find((entry) => entry.deviceId === deviceId);
+    if (!device || !isUsableV2Device(device)) {
+      throw new Error('That device is no longer available for this call.');
+    }
+    return encryptV2(plaintext, matchId, [
+      { id: deviceTargetId(device.deviceId), publicKey: device.publicKey },
+    ]);
+  }
+
+  /**
+   * Opens a call signal sealed to THIS device. Call signals are only ever wrapped to a device key, so
+   * decryption uses this device's device key alone — the account-history key is deliberately not
+   * tried (a call signal is never wrapped to it).
+   *
+   * @throws if this device is unregistered, or the envelope was not sealed to this device.
+   */
+  async openCallSignal(matchId: string, ciphertext: string): Promise<string> {
+    if (!isV2Envelope(ciphertext)) {
+      throw new Error('This call signal uses an unsupported encryption format.');
+    }
+    parseV2Envelope(ciphertext);
+    const identity = await this.loadIdentity();
+    if (!identity.deviceId || !identity.devicePrivateKey) {
+      throw new Error('This device is not registered for encrypted chat yet.');
+    }
+    return decryptV2(ciphertext, matchId, [
+      { id: deviceTargetId(identity.deviceId), privateKey: identity.devicePrivateKey },
+    ]);
+  }
+
   // ── Device management (for the account settings UI) ────────────────────────────────────────────
 
   /** Returns the caller's registered devices and account-history status. */

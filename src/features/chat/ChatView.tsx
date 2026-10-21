@@ -1,4 +1,4 @@
-import { trackConversationOpened, trackProfileRevisit, trackSafetyUiOpen, Screen, UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
+import { trackConversationOpened, trackProfileRevisit, trackSafetyUiOpen, trackScreenView, Screen, UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,6 +27,13 @@ import {
   type BlockReason,
 } from '../../api/rest';
 import { useChatMessages } from '../../hooks/use-api';
+import { useCallController, useCallEligibility } from '../../hooks/use-calls';
+import { CallButtons } from '../../components/call/CallButtons';
+import { IncomingCallModal } from '../../components/call/IncomingCallModal';
+import { InCallScreen } from '../../components/call/InCallScreen';
+import { CallHistoryItem } from '../../components/call/CallHistoryItem';
+import { friendlyEndReason } from '../../lib/call-errors';
+import type { Call } from '../../api/calls';
 import { ApiError } from '../../lib/api-client';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { useToast } from '../../components/common/Toast';
@@ -999,6 +1006,63 @@ function MatchConversation({
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
+  // Voice / video calling for this conversation (OneHookBackend/docs/voice-video-calls.md).
+  const call = useCallController({ currentUserId, matchId, peerId, peerName });
+
+  // Whether calling is unlocked yet ("you've both messaged"). Fetched on open, re-checked (throttled)
+  // after a send and when a peer message arrives, and fails open on error — startCall is the backstop.
+  const eligibility = useCallEligibility(matchId, Boolean(peerId));
+
+  // Re-check eligibility when a NEW message from the peer arrives, so the buttons unlock without
+  // reopening the chat. Tracks the latest inbound message id; the tracker throttles the actual call.
+  const lastPeerMessageId = useRef<string | null>(null);
+  useEffect(() => {
+    let latest: string | null = null;
+    for (const m of messages) {
+      if (m.senderId !== 'me') latest = m.messageId;
+    }
+    if (latest && latest !== lastPeerMessageId.current) {
+      lastPeerMessageId.current = latest;
+      eligibility.recheck();
+    }
+  }, [messages, eligibility.recheck]);
+
+  // Report a CALL screen_view when the call surface (incoming ring or in-call screen) first appears,
+  // mirroring how other screens emit screen_view on mount (e.g. LOGIN / ONBOARDING).
+  const callUiVisible = call.active || Boolean(call.incoming);
+  const callUiWasVisible = useRef(false);
+  useEffect(() => {
+    if (callUiVisible && !callUiWasVisible.current) trackScreenView(Screen.CALL);
+    callUiWasVisible.current = callUiVisible;
+  }, [callUiVisible]);
+
+  // Surface call errors and non-trivial end reasons (busy, missed, declined…) as toasts.
+  useEffect(() => {
+    if (call.error) {
+      showToast(call.error, 'error');
+      call.clearError();
+    }
+  }, [call, showToast]);
+
+  useEffect(() => {
+    if (call.lastEndReason) {
+      const note = friendlyEndReason(call.lastEndReason);
+      if (note) showToast(note, 'info');
+      call.clearEnded();
+    }
+  }, [call, showToast]);
+
+  // Merge server call rows into the message timeline, ordered by time (§8 D5: server rows).
+  const timeline = useMemo(() => {
+    const items: Array<
+      | { kind: 'message'; ts: number; message: (typeof messages)[number] }
+      | { kind: 'call'; ts: number; call: Call }
+    > = [];
+    for (const m of messages) items.push({ kind: 'message', ts: m.timestamp, message: m });
+    for (const c of call.history) items.push({ kind: 'call', ts: c.createdAt, call: c });
+    return items.sort((a, b) => a.ts - b.ts);
+  }, [messages, call.history]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -1023,6 +1087,8 @@ function MatchConversation({
     try {
       await sendMessage(input);
       setInput('');
+      // The local user just sent — re-check whether that satisfied the "both messaged" gate.
+      eligibility.recheck();
     } catch (err) {
       if (err instanceof ApiError) showToast(err.message, 'error');
     }
@@ -1101,6 +1167,18 @@ function MatchConversation({
 
   return (
     <>
+      <div className="shrink-0 h-10 px-4 flex items-center justify-end border-b border-border/60 bg-surface-card/60">
+        {peerId && (
+          <CallButtons
+            peerName={peerName}
+            disabled={call.active}
+            locked={eligibility.locked}
+            lockMessage={eligibility.lockMessage}
+            onAudio={() => void call.startCall('AUDIO')}
+            onVideo={() => void call.startCall('VIDEO')}
+          />
+        )}
+      </div>
       <div
         className="flex-1 relative min-h-0"
         onDragOver={(e) => {
@@ -1141,49 +1219,59 @@ function MatchConversation({
             <div className="flex items-center justify-center h-full text-center p-8">
               <p className="text-xs text-red-500 italic">{error.message}</p>
             </div>
-          ) : messages.length === 0 ? (
+          ) : timeline.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-2 opacity-50">
               <p className="text-xs italic font-serif">
                 No messages yet. Say hello to {peerName} whenever you&rsquo;re ready.
               </p>
             </div>
           ) : (
-            messages.map((m) => (
-              <div key={m.messageId} className={`max-w-md ${m.senderId === 'me' ? 'ml-auto' : ''}`}>
-                <div
-                  className={`text-[9px] uppercase tracking-widest opacity-40 mb-1 flex items-center gap-2 ${
-                    m.senderId === 'me' ? 'justify-end' : ''
-                  }`}
-                >
-                  <span>{m.senderId === 'me' ? 'You' : peerName}</span>
-                  {statusIcon(m)}
-                </div>
-                <div
-                  className={`p-4 md:p-5 rounded-2xl text-sm leading-relaxed ${
-                    m.senderId === 'me'
-                      ? 'bg-ig-blue text-white shadow-sm rounded-br-sm'
-                      : 'bg-surface text-text border border-border/60 rounded-bl-sm'
-                  }`}
-                >
-                  {/*
-                    MUST branch on `undecryptable`: an unreadable message carries an EMPTY body, so
-                    rendering `ciphertext` unconditionally produced a silent blank bubble. Attachment
-                    decoding, text, and both retry paths are handled inside MatchMessageBody.
-                  */}
-                  <MatchMessageBody
-                    message={m}
-                    mine={m.senderId === 'me'}
-                    cache={attachmentCache}
-                    matchId={matchId}
-                    transfer={attachmentTransfers[m.messageId]}
-                    onRetryAttachment={() => void retryAttachment(m.messageId)}
-                    onRestore={() => setRecoveryOpen(true)}
-                    onReportPeerMedia={onReportPeer}
-                    onRetryText={(text) => void sendMessage(text)}
-                  />
-                </div>
-              </div>
-            ))
+            timeline.map((item) =>
+              item.kind === 'call' ? (
+                <CallHistoryItem
+                  key={`call-${item.call.callId}`}
+                  call={item.call}
+                  currentUserId={currentUserId}
+                />
+              ) : (
+                ((m) => (
+                  <div key={m.messageId} className={`max-w-md ${m.senderId === 'me' ? 'ml-auto' : ''}`}>
+                    <div
+                      className={`text-[9px] uppercase tracking-widest opacity-40 mb-1 flex items-center gap-2 ${
+                        m.senderId === 'me' ? 'justify-end' : ''
+                      }`}
+                    >
+                      <span>{m.senderId === 'me' ? 'You' : peerName}</span>
+                      {statusIcon(m)}
+                    </div>
+                    <div
+                      className={`p-4 md:p-5 rounded-2xl text-sm leading-relaxed ${
+                        m.senderId === 'me'
+                          ? 'bg-ig-blue text-white shadow-sm rounded-br-sm'
+                          : 'bg-surface text-text border border-border/60 rounded-bl-sm'
+                      }`}
+                    >
+                      {/*
+                        MUST branch on `undecryptable`: an unreadable message carries an EMPTY body, so
+                        rendering `ciphertext` unconditionally produced a silent blank bubble. Attachment
+                        decoding, text, and both retry paths are handled inside MatchMessageBody.
+                      */}
+                      <MatchMessageBody
+                        message={m}
+                        mine={m.senderId === 'me'}
+                        cache={attachmentCache}
+                        matchId={matchId}
+                        transfer={attachmentTransfers[m.messageId]}
+                        onRetryAttachment={() => void retryAttachment(m.messageId)}
+                        onRestore={() => setRecoveryOpen(true)}
+                        onReportPeerMedia={onReportPeer}
+                        onRetryText={(text) => void sendMessage(text)}
+                      />
+                    </div>
+                  </div>
+                ))(item.message)
+              )
+            )
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -1213,6 +1301,40 @@ function MatchConversation({
         onClose={() => setRecoveryOpen(false)}
         onRecovered={() => void refetch()}
       />
+
+      {/* Incoming-call ring + the in-call surface for this conversation. */}
+      {call.incoming && !call.active && (
+        <IncomingCallModal
+          peerName={peerName}
+          media={call.incoming.media}
+          onAcceptVideo={() => void call.acceptIncoming('VIDEO')}
+          onAcceptAudio={() => void call.acceptIncoming('AUDIO')}
+          onDecline={() => void call.declineIncoming()}
+        />
+      )}
+      {call.active && (
+        <InCallScreen
+          peerName={peerName}
+          media={call.media}
+          state={call.state}
+          localStream={call.localStream}
+          remoteStream={call.remoteStream}
+          screenStream={call.screenStream}
+          sas={call.sas}
+          muted={call.muted}
+          cameraOff={call.cameraOff}
+          canSendScreen={call.canSendScreen}
+          screenShareState={call.screenShareState}
+          screenRequest={call.screenRequest}
+          onToggleMute={call.toggleMute}
+          onToggleCamera={call.toggleCamera}
+          onStartScreenShare={() => void call.startScreenShare()}
+          onStopScreenShare={call.stopScreenShare}
+          onAcceptScreenShare={call.acceptScreenShare}
+          onDeclineScreenShare={call.declineScreenShare}
+          onHangup={() => void call.hangup()}
+        />
+      )}
     </>
   );
 }
