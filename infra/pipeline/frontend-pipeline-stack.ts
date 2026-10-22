@@ -114,7 +114,12 @@ export class FrontendPipelineStack extends Stack {
     const pipeline = new Pipeline(this, 'Pipeline', {
       pipelineName: 'OneHook-Frontend',
       pipelineType: PipelineType.V2,
-      executionMode: ExecutionMode.QUEUED,
+      // SUPERSEDED: a burst of pushes to main collapses so the newest execution
+      // supersedes any older one still waiting at the ApproveProduction manual
+      // approval. The approver approves the latest commit once, instead of
+      // approving every commit one by one. Intermediate commits are not deployed
+      // individually - only the latest tested assembly reaches production.
+      executionMode: ExecutionMode.SUPERSEDED,
       artifactBucket,
       restartExecutionOnUpdate: false,
     });
