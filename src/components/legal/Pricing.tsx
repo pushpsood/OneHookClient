@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Check, Minus, Sparkles, Smartphone } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { Seo } from '../common/Seo';
 import { hideMrOneHook } from '../Chatbot/ChatbotWidget';
 import {
   ANNUAL_DISCOUNT_LABEL,
@@ -177,6 +178,11 @@ export function Pricing() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Seo
+        title="OneHook Membership & Pricing — Free, Super & Infinity"
+        description="Compare OneHook membership tiers. Start dating free with one meaningful connection at a time, or upgrade to Super and Infinity for more ways to find a real relationship."
+        path="/pricing"
+      />
       <SiteHeader pageTitle="Pricing" />
 
       {/* Hero */}

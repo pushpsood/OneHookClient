@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { BrandWordmark } from './common/BrandWordmark';
+import { Seo } from './common/Seo';
 import { AppleIcon, AndroidIcon } from './common/BrandIcons';
 import { SiteFooter } from './common/SiteFooter';
 import { AlienScanner } from './mascot';
@@ -166,7 +167,7 @@ const MASCOT_VIDEO_EMBED_URL = `https://www.youtube-nocookie.com/embed/${MASCOT_
 /** Repeating text tile used as the conversation-starter background watermark.
  *  A tiled SVG guarantees full (corner-to-corner) coverage at any rotation. */
 const WATERMARK_BG = `url("data:image/svg+xml,${encodeURIComponent(
-  "<svg xmlns='http://www.w3.org/2000/svg' width='640' height='40'><text x='0' y='15' font-family='Inter,ui-sans-serif,sans-serif' font-size='15' font-weight='900' letter-spacing='4' fill='#ffffff'>SUCCESS STORIES COMING SOON</text></svg>"
+  "<svg xmlns='http://www.w3.org/2000/svg' width='640' height='40'><text x='0' y='15' font-family='Inter,ui-sans-serif,sans-serif' font-size='15' font-weight='900' letter-spacing='4' fill='#ffffff'>ONE LINE CHANGED EVERYTHING</text></svg>"
 )}")`;
 
 /**
@@ -226,6 +227,381 @@ function Accent({ children, tone = 'silver' }: { children: React.ReactNode; tone
     >
       {children}
     </span>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * "Every hook starts with a sentence" — couple case studies
+ *
+ * Two categories, shown as two rows: couples who MET on OneHook, and couples who JOINED as a
+ * couple. Within each row, one couple is still on OneHook and one has moved on together — so every
+ * card always shows its current status WITHOUT hovering; hovering/focusing reveals the fuller story.
+ *
+ * Every couple uses an anonymous, privacy-protecting illustration (two faceless silhouettes sharing
+ * a heart, with a small lock badge) rather than a photo — real couples, identities protected while
+ * their story is shared.
+ * ───────────────────────────────────────────────────────────────────────────── */
+/** Row category: how the couple came to OneHook. */
+type CoupleOrigin = 'met' | 'couple';
+/** Current status, shown on every card: still on OneHook, or moved on together. */
+type CouplePresence = 'on' | 'off';
+
+const ORIGIN_META: Record<CoupleOrigin, { label: string; Icon: typeof Heart }> = {
+  met: { label: 'Met on OneHook', Icon: Heart },
+  couple: { label: 'Joined as a couple', Icon: HeartHandshake },
+};
+const PRESENCE_META: Record<CouplePresence, { label: string; Icon: typeof Heart }> = {
+  on: { label: 'Still on OneHook', Icon: MessageCircle },
+  off: { label: 'Moved on, together', Icon: Check },
+};
+
+interface CoupleStory {
+  id: string;
+  /** Row category: how they came to OneHook. */
+  origin: CoupleOrigin;
+  /** Current status, always visible on the card. */
+  presence: CouplePresence;
+  /** The first line that started it. */
+  opener: string;
+  names: string;
+  location: string;
+  /** The fuller story, revealed on hover / focus. */
+  story: string;
+}
+
+const COUPLE_STORIES: readonly CoupleStory[] = [
+  // Row 1 — Met on OneHook
+  {
+    id: 'aisha-rohan',
+    origin: 'met',
+    presence: 'on',
+    opener: 'Chai ya coffee, and what does your order say about you?',
+    names: 'Aisha & Rohan',
+    location: 'New Delhi',
+    story:
+      'One honest question about chai became a three-hour call the same night. Two years on they still argue about the perfect cutting chai — still here, still talking.',
+  },
+  {
+    id: 'noah-priya',
+    origin: 'met',
+    presence: 'off',
+    opener: 'If we skipped the small talk, what should I actually ask you?',
+    names: 'Noah & Priya',
+    location: 'Faridabad',
+    story:
+      'One match was all it took. Three months in, they deleted the app together — the happiest reason to leave.',
+  },
+  // Row 2 — Joined as a couple
+  {
+    id: 'dev-sara',
+    origin: 'couple',
+    presence: 'on',
+    opener: 'Sell me on your perfect Sunday.',
+    names: 'Dev & Sara',
+    location: 'Gurugram',
+    story:
+      'Already together when they joined, they read the openers aloud one lazy Sunday — now it is their weekly date-night game. Loser picks dinner.',
+  },
+  {
+    id: 'meera-kabir',
+    origin: 'couple',
+    presence: 'on',
+    opener: "What's a small thing that made you feel alive this week?",
+    names: 'Meera & Kabir',
+    location: 'Noida',
+    story:
+      'They joined already together, just to send each other the openers at midnight. Two jobs and one move later, they still do — and still answer honestly.',
+  },
+] as const;
+
+/** Accent pairs so each couple's illustration looks distinct ("random" but stable per couple). */
+const ART_PALETTES = [
+  { a: '#ff9ecb', b: '#c9a7ff' },
+  { a: '#ffc2a1', b: '#ff9ecb' },
+  { a: '#a7c7ff', b: '#ff9ecb' },
+  { a: '#ffd0e6', b: '#9a7fd6' },
+] as const;
+
+/**
+ * Anonymous couple illustration — two faceless silhouettes sharing a heart, with a small lock
+ * badge. It depicts a real couple whose privacy is protected while their story is shared, so it
+ * stands in for a photo without exposing anyone. Palette + mirroring vary by id so each couple
+ * looks different.
+ */
+function CoupleIllustration({ id }: { id: string }) {
+  const seed = Array.from(id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  const { a, b } = ART_PALETTES[seed % ART_PALETTES.length];
+  const flip = seed % 2 === 1;
+  const gid = `art-${id}`;
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 200 320"
+      preserveAspectRatio="xMidYMid slice"
+      className="absolute inset-0 h-full w-full"
+    >
+      <defs>
+        <radialGradient id={`${gid}-bg`} cx="30%" cy="16%" r="130%">
+          <stop offset="0%" stopColor="#46324f" />
+          <stop offset="58%" stopColor="#241a2b" />
+          <stop offset="100%" stopColor="#130f18" />
+        </radialGradient>
+        <linearGradient id={`${gid}-p`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={a} />
+          <stop offset="100%" stopColor={b} />
+        </linearGradient>
+      </defs>
+      <rect width="200" height="320" fill={`url(#${gid}-bg)`} />
+      <g transform={flip ? 'translate(200,0) scale(-1,1)' : undefined}>
+        {/* partner behind */}
+        <g fill={b} opacity="0.5">
+          <circle cx="74" cy="122" r="30" />
+          <rect x="30" y="158" width="88" height="170" rx="44" />
+        </g>
+        {/* partner in front */}
+        <g fill={`url(#${gid}-p)`}>
+          <circle cx="124" cy="136" r="34" />
+          <rect x="78" y="174" width="96" height="154" rx="48" />
+        </g>
+      </g>
+      {/* heart above the pair */}
+      <path
+        transform="translate(100,54) scale(1.15)"
+        d="M0 8 C-8 -5 -26 1 -14 15 L0 28 L14 15 C26 1 8 -5 0 8 Z"
+        fill="#ff8fc7"
+      />
+      {/* privacy lock badge */}
+      <g transform="translate(100,250)">
+        <circle r="19" fill="#130f18" opacity="0.72" />
+        <circle r="19" fill="none" stroke={a} strokeOpacity="0.7" strokeWidth="1.5" />
+        <rect x="-7" y="-1" width="14" height="12" rx="2.5" fill={a} />
+        <path d="M-4 -1 V-5 a4 4 0 0 1 8 0 V-1" fill="none" stroke={a} strokeWidth="2" />
+      </g>
+    </svg>
+  );
+}
+
+/** Panel/chip backdrop: an anonymous, privacy-protecting couple illustration. Shape is set by the
+ *  caller via `className` (e.g. `absolute inset-0` for a panel backdrop). */
+function StoryPortrait({ story, className = '' }: { story: CoupleStory; className?: string }) {
+  return (
+    <div className={`overflow-hidden bg-[#130f18] ${className}`}>
+      <CoupleIllustration id={story.id} />
+    </div>
+  );
+}
+
+/** One couple in the auto-advancing accordion. Two pills — how they came to OneHook, and whether
+ *  they're still on it — show WITHOUT hovering. The spotlighted panel expands to reveal the story. */
+function ExpandingCouplePanel({
+  story,
+  active,
+  reduce,
+  onActivate,
+}: {
+  story: CoupleStory;
+  active: boolean;
+  reduce: boolean;
+  onActivate: () => void;
+}) {
+  const origin = ORIGIN_META[story.origin];
+  const presence = PRESENCE_META[story.presence];
+  const OriginIcon = origin.Icon;
+  const PresenceIcon = presence.Icon;
+  const labelVisibility = active ? 'inline' : 'hidden md:inline';
+  return (
+    <motion.button
+      type="button"
+      onMouseEnter={onActivate}
+      onFocus={onActivate}
+      onClick={onActivate}
+      aria-pressed={active}
+      aria-label={`${story.names} — ${origin.label}, ${presence.label}. See their story.`}
+      {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'couple_story' })}
+      initial={false}
+      animate={{ flexGrow: active ? 5 : 1 }}
+      transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 200, damping: 28 }}
+      className="group relative h-full min-w-0 basis-0 overflow-hidden rounded-[1.5rem] border border-white/10 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#ff9ecb]"
+    >
+      <StoryPortrait story={story} className="absolute inset-0 h-full w-full" />
+      <div
+        aria-hidden="true"
+        className="absolute inset-0"
+        style={{ background: 'linear-gradient(to top, rgba(15,10,20,0.95) 4%, rgba(15,10,20,0.45) 46%, rgba(15,10,20,0.08) 100%)' }}
+      />
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-20"
+        style={{ background: 'radial-gradient(90% 100% at 50% 0%, rgba(255,143,199,0.5), transparent 70%)' }}
+        initial={false}
+        animate={{ opacity: active && !reduce ? 1 : 0 }}
+        transition={{ duration: 0.4 }}
+      />
+
+      <div className="relative z-10 flex h-full flex-col justify-between gap-2 p-3 md:p-4">
+        {/* two pills: how they came to OneHook, and their current status */}
+        <div className="flex flex-col items-start gap-1.5">
+          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#ff9ecb]/30 bg-black/45 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#ffd0e6] backdrop-blur-sm">
+            <OriginIcon className="h-2.5 w-2.5 shrink-0" />
+            <span className={`truncate ${labelVisibility}`}>{origin.label}</span>
+          </span>
+          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-white/25 bg-black/45 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-white/85 backdrop-blur-sm">
+            <PresenceIcon className="h-2.5 w-2.5 shrink-0" />
+            <span className={`truncate ${labelVisibility}`}>{presence.label}</span>
+          </span>
+        </div>
+
+        <div className="min-w-0">
+          {active ? (
+            <motion.div
+              initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <span className="mb-1 flex items-center gap-1 text-[8px] font-black uppercase tracking-[0.14em]" style={{ color: '#ff8fc7' }}>
+                <Heart className="h-2.5 w-2.5 shrink-0" fill="currentColor" /> the line that started it
+              </span>
+              <p className="line-clamp-2 font-serif text-sm italic leading-snug text-white md:text-base">
+                &ldquo;{story.opener}&rdquo;
+              </p>
+              <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-white/75 md:line-clamp-3 md:text-xs">
+                {story.story}
+              </p>
+              <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <span className="font-serif text-sm italic text-white md:text-base">{story.names}</span>
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-white/55">
+                  <MapPin className="h-2.5 w-2.5 shrink-0" /> {story.location}
+                </span>
+              </div>
+            </motion.div>
+          ) : (
+            <div className="min-w-0">
+              <span className="block truncate font-serif text-sm italic text-white">{story.names}</span>
+              <span className="mt-0.5 hidden items-center gap-0.5 truncate text-[10px] text-white/50 sm:flex">
+                <MapPin className="h-2.5 w-2.5 shrink-0" /> {story.location}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.button>
+  );
+}
+
+/**
+ * Pine-forest silhouette band above the "OneHook Principles" divider. `preserveAspectRatio="none"`
+ * lets the pointed tips show (the forest ends abruptly at the ground line), with varied heights.
+ * Each pine is split into a lit left face and a shadowed right face across two depth layers (hazier
+ * back, richer front) for a faceted 3D look. It overlaps the pink paint-stroke freely.
+ */
+function ForestBackdrop({ className = '' }: { className?: string }) {
+  const BASE = 540;
+  const pineFaces = (x: number, w: number, h: number, tiers = 3): { left: string; right: string; trunk: string } => {
+    const L: string[] = [];
+    const R: string[] = [];
+    const tierH = h / tiers;
+    for (let i = 0; i < tiers; i++) {
+      const top = BASE - h + i * tierH * 0.8;
+      const halfW = (w / 2) * (1 - i / (tiers + 1));
+      const bottom = top + tierH * 1.4;
+      L.push(`M ${x},${top} L ${x - halfW},${bottom} L ${x},${bottom} Z`);
+      R.push(`M ${x},${top} L ${x + halfW},${bottom} L ${x},${bottom} Z`);
+    }
+    const trunk = `M ${x - w * 0.05},${BASE} L ${x - w * 0.05},${BASE - h * 0.1} L ${x + w * 0.05},${BASE - h * 0.1} L ${x + w * 0.05},${BASE} Z`;
+    return { left: L.join(' '), right: R.join(' '), trunk };
+  };
+  const back: [number, number, number][] = [
+    [80, 66, 74], [210, 56, 52], [330, 78, 88], [470, 60, 58], [600, 72, 82],
+    [740, 56, 50], [880, 80, 92], [1010, 62, 64], [1140, 68, 80],
+  ];
+  const front: [number, number, number][] = [
+    [40, 104, 140], [150, 88, 92], [275, 116, 128], [405, 94, 76], [540, 120, 148],
+    [690, 98, 100], [825, 116, 122], [965, 94, 84], [1095, 118, 136], [1180, 90, 88],
+  ];
+  // Three towering pines that rise high above the tree-line (past the caption). None in the
+  // centre third (x 400-800).
+  const tall: [number, number, number][] = [
+    [150, 150, 440], [330, 166, 500], [1035, 180, 540],
+  ];
+  // Farthest tree-line: many tiny pines, blurred + hazed so they read as a distant ridge.
+  const farthest: [number, number, number][] = [
+    [30, 34, 40], [110, 30, 34], [190, 36, 46], [270, 30, 36], [350, 34, 42], [430, 30, 32],
+    [510, 36, 48], [590, 30, 38], [670, 34, 44], [750, 30, 34], [830, 36, 46], [910, 30, 36],
+    [990, 34, 42], [1070, 30, 34], [1150, 36, 46],
+  ];
+  return (
+    <svg aria-hidden="true" viewBox="0 0 1200 560" preserveAspectRatio="none" className={className}>
+      <defs>
+        {/* Brushed-silver gradient matching the "Every hook starts with a sentence" section's Accent. */}
+        <linearGradient id="forestSilver" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="45%" stopColor="#E6E9EE" />
+          <stop offset="100%" stopColor="#9AA1AB" />
+        </linearGradient>
+        {/* Soft blur for distant layers (depth of field). */}
+        <filter id="forestBlur" x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur stdDeviation="3" />
+        </filter>
+        {/* Atmospheric haze: a pale veil that's strongest near the horizon, fading distance away. */}
+        <linearGradient id="forestHaze" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="35%" stopColor="#eef1f6" stopOpacity="0" />
+          <stop offset="100%" stopColor="#eef1f6" stopOpacity="0.55" />
+        </linearGradient>
+      </defs>
+      {/* farthest ridge — tiny, blurred, very faint */}
+      <g filter="url(#forestBlur)" opacity="0.22">
+        {farthest.map(([x, w, h], i) => {
+          const f = pineFaces(x, w, h, 2);
+          return (
+            <g key={`z-${i}`}>
+              <path d={f.left} fill="url(#forestSilver)" />
+              <path d={f.right} fill="#bcc3cd" />
+            </g>
+          );
+        })}
+      </g>
+      {/* far layer — blurred, hazy, lighter for depth */}
+      <g filter="url(#forestBlur)" opacity="0.34">
+        {back.map(([x, w, h], i) => {
+          const f = pineFaces(x, w, h);
+          return (
+            <g key={`b-${i}`}>
+              <path d={f.left} fill="url(#forestSilver)" />
+              <path d={f.right} fill="#aeb5c0" />
+            </g>
+          );
+        })}
+      </g>
+      {/* atmospheric haze veil — pushes the two distant layers back */}
+      <rect x="0" y="0" width="1200" height="560" fill="url(#forestHaze)" />
+      {/* near layer — richer, stronger light/shadow contrast */}
+      <g opacity="0.8">
+        {front.map(([x, w, h], i) => {
+          const f = pineFaces(x, w, h);
+          return (
+            <g key={`f-${i}`}>
+              <path d={f.trunk} fill="#26303d" />
+              <path d={f.left} fill="url(#forestSilver)" />
+              <path d={f.right} fill="#2b3647" />
+            </g>
+          );
+        })}
+      </g>
+      {/* three towering pines (slender, 5 tiers) */}
+      <g opacity="0.92">
+        {tall.map(([x, w, h], i) => {
+          const f = pineFaces(x, w, h, 5);
+          return (
+            <g key={`t-${i}`}>
+              <path d={f.trunk} fill="#26303d" />
+              <path d={f.left} fill="url(#forestSilver)" />
+              <path d={f.right} fill="#1e2733" />
+            </g>
+          );
+        })}
+      </g>
+      <rect x="0" y="540" width="1200" height="20" fill="#1e2733" opacity="0.65" />
+    </svg>
   );
 }
 
@@ -391,8 +767,14 @@ function HeroHeadline() {
       className="font-light tracking-[-0.03em] leading-[1.03] text-white mb-6 drop-shadow-lg"
       style={{ fontSize: 'clamp(2.75rem, 8vw, 5.5rem)' }}
     >
-      <span className="sr-only">One connection. Zero distractions.</span>
-      <span aria-hidden="true">
+      <span className="sr-only">
+        OneHook — an intentional dating app for one meaningful connection at a time. One
+        connection, zero distractions.
+      </span>
+      {/* whitespace-nowrap keeps each line on ONE line: when the italic accent lands on the wider
+          word (e.g. "distractions") the line may overflow a little horizontally, but it never wraps
+          to an extra line — so the headline height stays fixed and nothing below it shifts. */}
+      <span aria-hidden="true" className="whitespace-nowrap">
         {word(0)} {word(1)}.
         <br />
         {word(2)} {word(3)}.
@@ -574,11 +956,11 @@ function GlassPanel({ children, className = '' }: { children: React.ReactNode; c
 const PHONE_PROFILE = {
   name: 'Isha',
   age: 27,
-  location: 'Bandra West, Mumbai',
+  location: 'Hauz Khas, New Delhi',
   distanceKm: 4,
   bio: 'Chai over coffee, long walks, and books I keep promising to finish. Here for one real conversation, not a hundred maybes.',
   photos: ['/media/profile-demo/profile-1.jpg', '/media/profile-demo/profile-2.jpg'],
-  vitals: ['📍 4 km away', '172 cm', 'Serious', 'Non-smoker', 'Mumbai'],
+  vitals: ['📍 4 km away', '172 cm', 'Serious', 'Non-smoker', 'New Delhi'],
   prompts: [
     { q: 'A boundary of mine is', a: 'Phones face-down at dinner.' },
     { q: 'We’ll get along if', a: 'you can defend chai vs coffee for an hour.' },
@@ -587,7 +969,7 @@ const PHONE_PROFILE = {
 } as const;
 
 /** The next card peeking under the active one, to hint at the single-focus Discover stack. */
-const PHONE_NEXT = { name: 'Aarav', age: 29, img: '/media/profile-demo/profile-4.jpg', meta: '6 km away · Mumbai' } as const;
+const PHONE_NEXT = { name: 'Aarav', age: 29, img: '/media/profile-demo/profile-4.jpg', meta: '6 km away · Gurugram' } as const;
 
 const OH_INK = '#1A1A1A';
 const OH_BORDER = '#EBEBEB';
@@ -615,7 +997,7 @@ const PHONE_THREAD = [
   { me: false, t: 'Your prompt about chai vs coffee... I need the full argument 😄' },
   { me: true, t: 'Chai. Not even close. I’ll die on this hill.' },
   { me: false, t: 'Respect. First date = chai tapri then?' },
-  { me: true, t: 'Bandra, Sunday, 5pm. I’ll bring the debate.' },
+  { me: true, t: 'Hauz Khas, Sunday, 5pm. I’ll bring the debate.' },
   { me: false, t: 'It’s a date 🙂' },
 ] as const;
 
@@ -1227,7 +1609,9 @@ export function Landing() {
   const [activeStep, setActiveStep] = useState(0);
   const [activeSection, setActiveSection] = useState<string>('');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
-  const [openerIndex, setOpenerIndex] = useState(0);
+  // Auto-advancing "spotlight" couple in the stories accordion; pauses while the visitor interacts.
+  const [spotlight, setSpotlight] = useState(0);
+  const [storyPaused, setStoryPaused] = useState(false);
   const [showStickyCta, setShowStickyCta] = useState(false);
 
   // Mascot explainer video shown inside the "Under the hood" section.
@@ -1358,13 +1742,14 @@ export function Landing() {
     }
   }, []);
 
-  // Auto-rotate the conversation-starter openers.
+  // Auto-advance the spotlight couple one by one; pause while the visitor is interacting.
   useEffect(() => {
+    if (storyPaused) return;
     const id = window.setInterval(() => {
-      setOpenerIndex((prev) => (prev + 1) % OPENERS.length);
-    }, 4200);
+      setSpotlight((prev) => (prev + 1) % COUPLE_STORIES.length);
+    }, 4500);
     return () => window.clearInterval(id);
-  }, []);
+  }, [storyPaused]);
 
   // Show the persistent CTA only while scrolling DOWN (past the hero), and hide
   // it once the footer scrolls into view so it never sits over the footer.
@@ -1493,13 +1878,6 @@ export function Landing() {
         : 'opacity-70 hover:opacity-100'
     }`;
 
-  const shuffleOpener = () =>
-    setOpenerIndex((prev) => {
-      let next = prev;
-      while (next === prev) next = Math.floor(Math.random() * OPENERS.length);
-      return next;
-    });
-
   const goRedeemInvite = () => navigate('/redeem');
 
   return (
@@ -1507,6 +1885,11 @@ export function Landing() {
       className="min-h-screen bg-white text-text overflow-hidden relative"
       ref={pageContainerRef}
     >
+      <Seo
+        title="OneHook — Intentional Dating App for One Real Connection"
+        description="OneHook is a private, intentional dating app for one meaningful connection at a time — no endless swiping or ghosting, just real, end-to-end encrypted conversations."
+        path="/"
+      />
       {/* Background Paint Stroke spanning sections */}
       {strokeCoords && (
         <svg
@@ -1594,13 +1977,54 @@ export function Landing() {
 
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-border">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+        <div className="relative w-full px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <BrandWordmark
             className="font-bold tracking-tighter uppercase shrink-0"
             imageClassName="h-10 w-auto sm:h-10"
             textClassName="hidden sm:inline text-2xl"
           />
-          <div className="flex items-center gap-3 sm:gap-6">
+          {/* Primary nav — centred between the logo and the actions (in-flow, so it can never
+              overlap the side buttons) */}
+          <div className="hidden xl:flex min-w-0 flex-1 items-center justify-center gap-4 2xl:gap-7">
+            <button
+              onClick={() => scrollToSection('philosophy')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'philosophy' })}
+              className={deskNav('philosophy')}
+            >
+              Philosophy
+            </button>
+            <button
+              onClick={() => scrollToSection('features')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'features' })}
+              className={deskNav('features')}
+            >
+              How it works
+            </button>
+            <button
+              onClick={() => scrollToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })}
+              className={deskNav('under-the-hood')}
+            >
+              Mr.OneHook
+            </button>
+            <button
+              onClick={() => scrollToSection('get-app')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'get_app' })}
+              className={deskNav('get-app')}
+            >
+              Get the app
+            </button>
+            <span aria-hidden="true" className="h-4 w-px bg-border" />
+            <button
+              onClick={() => navigate('/pricing')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
+              className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
+            >
+              Pricing
+            </button>
+            <button
+              onClick={() => navigate('/science')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
+              className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
+            >
+              Science
+            </button>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
             <div className="relative xl:hidden">
               <button
                 onClick={() => setIsMobileNavOpen((prev) => !prev)}
@@ -1657,47 +2081,12 @@ export function Landing() {
               )}
             </div>
 
-            <div className="hidden xl:flex items-center gap-6 2xl:gap-8">
-              <button
-                onClick={() => scrollToSection('philosophy')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'philosophy' })}
-                className={deskNav('philosophy')}
-              >
-                Philosophy
-              </button>
-              <button
-                onClick={() => scrollToSection('features')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'features' })}
-                className={deskNav('features')}
-              >
-                How it works
-              </button>
-              <button
-                onClick={() => scrollToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })}
-                className={deskNav('under-the-hood')}
-              >
-                Mr.OneHook
-              </button>
-              <button
-                onClick={() => scrollToSection('get-app')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'get_app' })}
-                className={deskNav('get-app')}
-              >
-                Get the app
-              </button>
-              <button
-                onClick={() => navigate('/pricing')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
-                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
-              >
-                Pricing
-              </button>
-              <button
-                onClick={() => navigate('/science')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
-                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
-              >
-                Science
-              </button>
+            {/* Account button next to the actions — same accent style as Logout/Redeem */}
+            <div className="hidden xl:flex items-center gap-3">
               <button
                 onClick={() => navigate(isAuthenticated ? '/app' : '/login')}
                 {...trackProps(UiElement.LANDING_LOGIN)}
-                className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
+                className="px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
               >
                 {isAuthenticated ? 'Dashboard' : 'Sign in'}
               </button>
@@ -1706,7 +2095,7 @@ export function Landing() {
             <button
               onClick={() => navigate(isAuthenticated ? '/app' : '/login')}
               {...trackProps(UiElement.LANDING_LOGIN)}
-              className="xl:hidden px-3 sm:px-4 py-2 border border-border text-[10px] font-bold uppercase tracking-[0.22em] hover:bg-bg transition-colors whitespace-nowrap"
+              className="xl:hidden px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
             >
               {isAuthenticated ? 'Dashboard' : 'Sign in'}
             </button>
@@ -1732,7 +2121,9 @@ export function Landing() {
       </nav>
 
       {/* Hero Section */}
-      <section {...hideMrOneHook} className="min-h-screen flex flex-col items-center justify-center px-6 pt-20 relative bg-black overflow-hidden z-40">
+      <section {...hideMrOneHook} className="min-h-screen flex flex-col items-center justify-start md:justify-center px-6 mt-[72px] pt-0 relative bg-black overflow-hidden z-40">
+        {/* Mobile: a full-width video rectangle pinned to the top (sides preserved) that fades
+            into black. Desktop (md+): full-cover background as before. */}
         <video
           ref={videoRef}
           autoPlay
@@ -1742,19 +2133,24 @@ export function Landing() {
           preload="metadata"
           poster={heroVideoPoster}
           crossOrigin="anonymous"
-          className="absolute inset-0 w-full h-full object-cover z-0"
+          className="absolute inset-x-0 top-0 z-0 h-[44vh] w-full object-cover object-top md:inset-0 md:h-full md:translate-x-[7%]"
         >
           <source src={heroVideoSource} type="video/mp4" />
         </video>
 
-        {/* Legibility gradient — darker at edges, keeps center airy */}
-        <div className="absolute inset-0 z-[1] bg-gradient-to-b from-black/70 via-black/40 to-black/80" />
+        {/* Mobile: fade the bottom of the video rectangle into solid black so the text below sits
+            on pure black for maximum legibility. */}
+        <div className="absolute inset-x-0 top-0 z-[1] h-[44vh] bg-gradient-to-b from-black/25 via-black/5 to-black md:hidden" />
+
+        {/* Desktop/landscape: the video is nudged right (right edge cropped); fade from black on the
+            LEFT into the video so the left-sitting hero text stays legible. */}
+        <div className="absolute inset-0 z-[1] hidden bg-gradient-to-r from-black via-black/60 to-transparent md:block" />
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="text-center max-w-4xl relative w-full z-10"
+          className="text-center max-w-4xl relative w-full z-10 mt-[40vh] md:mt-0 md:max-w-2xl md:self-start md:ml-[6%] lg:ml-[9%]"
         >
           <div className="mb-8 text-white/75">
             <Kicker className="text-white/75">
@@ -1769,10 +2165,11 @@ export function Landing() {
             {/* Invisible sizer reserves the final space so buttons below don't
                 shift while the line types out. */}
             <span className="invisible" aria-hidden="true">
-              The swipe era is over. Meet one person at a time, and actually talk.
+              Talk to someone ready to prioritise you. Locked end-to-end, so only the two of you can
+              read it.
             </span>
             <span className="absolute inset-0">
-              <Typewriter text="The swipe era is over. Meet one person at a time, and actually talk." />
+              <Typewriter text="Talk to someone ready to prioritise you. Locked end-to-end, so only the two of you can read it." />
             </span>
           </p>
 
@@ -1874,51 +2271,59 @@ export function Landing() {
           }}
         />
 
-        <div className="max-w-4xl mx-auto text-center relative">
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
-            className="text-[11px] uppercase tracking-[1px] text-white/50 mb-3"
-          >
-            Every hook starts with a sentence
-          </motion.p>
+        <div className="relative mx-auto max-w-6xl">
+          <div className="relative z-10 text-center">
+            <motion.p
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7 }}
+              className="mb-5 text-[11px] uppercase tracking-[1px] text-white/50"
+            >
+              Every hook starts with a sentence
+            </motion.p>
 
-          <div className="min-h-[80px] md:min-h-[90px] flex items-center justify-center">
-            <AnimatePresence mode="wait">
-              <motion.blockquote
-                key={openerIndex}
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -18 }}
-                transition={{ duration: 0.5, ease: [0.21, 0.47, 0.32, 0.98] }}
-                style={{ willChange: 'transform, opacity' }}
-                className="text-3xl md:text-5xl font-serif italic leading-tight max-w-3xl transform-gpu"
+            {/* Auto-advancing accordion: all four couples stay visible; the spotlight expands,
+                the rest contract. Hover / focus pauses the loop and spotlights a couple. */}
+            <div
+              onMouseEnter={() => setStoryPaused(true)}
+              onMouseLeave={() => setStoryPaused(false)}
+              className="flex h-[300px] gap-2 sm:h-[340px] md:h-[380px] md:gap-3"
+            >
+              {COUPLE_STORIES.map((s, i) => (
+                <React.Fragment key={s.id}>
+                  <ExpandingCouplePanel
+                    story={s}
+                    active={spotlight === i}
+                    reduce={Boolean(prefersReducedMotion)}
+                    onActivate={() => setSpotlight(i)}
+                  />
+                </React.Fragment>
+              ))}
+            </div>
+
+            {/* progress dots + a single CTA */}
+            <div className="mt-5 flex flex-col items-center gap-4">
+              <div className="flex items-center gap-1.5" aria-hidden="true">
+                {COUPLE_STORIES.map((s, i) => (
+                  <span
+                    key={s.id}
+                    className="h-1.5 rounded-full transition-all duration-300"
+                    style={{
+                      width: spotlight === i ? 18 : 6,
+                      background: spotlight === i ? '#ff8fc7' : 'rgba(255,255,255,0.25)',
+                    }}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={goRedeemInvite} {...trackProps(UiElement.LANDING_GET_STARTED)}
+                className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.24em] text-white/80 hover:text-white transition-colors"
               >
-                &ldquo;{OPENERS[openerIndex]}&rdquo;
-              </motion.blockquote>
-            </AnimatePresence>
+                Start the conversation <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-
-          <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              onClick={shuffleOpener} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'opener_shuffle' })}
-              className="inline-flex items-center gap-2 px-6 py-3 border border-white/30 text-[11px] font-black uppercase tracking-[0.24em] hover:bg-white hover:text-accent transition-colors rounded-full"
-            >
-              <Shuffle className="w-3.5 h-3.5" /> Shuffle the opener
-            </button>
-            <button
-              onClick={goRedeemInvite} {...trackProps(UiElement.LANDING_GET_STARTED)}
-              className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.24em] text-white/80 hover:text-white transition-colors"
-            >
-              Start the conversation <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          <p className="mt-4 text-xs text-white/50 italic max-w-md mx-auto">
-            On OneHook you get one conversation at a time. Make the first line count.
-          </p>
         </div>
       </section>
 
@@ -2067,45 +2472,70 @@ export function Landing() {
             </div>
           </motion.div>
 
-          {/* Old way vs OneHook way */}
+          {/* Old way vs OneHook way — played for a laugh, not a lawsuit. Every "old way" line is a
+              generic, self-aware dating-app gripe (no brand names, no borrowed taglines); the
+              disclaimer frames the whole thing as our own cheeky opinion. */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
-            className="mt-20 lg:mt-28 grid md:grid-cols-2 rounded-3xl overflow-hidden border border-border"
+            className="mt-20 lg:mt-28 text-center"
+          >
+            <p className="font-serif text-xl md:text-2xl italic text-text/70">
+              Guess which side your <span className="text-accent">thumb</span> prefers&nbsp;👀
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="mt-8 grid md:grid-cols-2 rounded-3xl overflow-hidden border border-border"
           >
             <div className="p-8 sm:p-10 lg:p-12 bg-white md:text-right">
-              <p className="text-[11px] uppercase tracking-[0.3em] opacity-40 mb-8">The old way</p>
+              <div className="mb-8 flex items-center gap-3 md:flex-row-reverse">
+                <p className="text-[11px] uppercase tracking-[0.3em] opacity-40">The old way</p>
+                <span className="inline-block rotate-[-6deg] rounded-full border border-dashed border-text/25 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-text/40">
+                  certified exhausting
+                </span>
+              </div>
               <ul className="space-y-4">
                 {[
-                  'Swipe till your thumb goes numb',
-                  '\u201CBuilt to be deleted\u201D\u2026 never is',
-                  'A countdown timer just to say hi',
-                  'Pay to unblur who already likes you',
+                  { text: 'Swipe till your thumb files for overtime', emoji: '🫠' },
+                  { text: 'Nine chats open, zero plans made', emoji: '🥱' },
+                  { text: '\u201Chey\u201D \u2192 \u201Cheyy\u201D \u2192 \u201Cheyyy\u201D \u2192 crickets', emoji: '🦗' },
+                  { text: 'Pay extra to see who already likes you', emoji: '💸' },
                 ].map((item) => (
                   <li
-                    key={item}
-                    className="flex items-center md:flex-row-reverse gap-3 text-lg opacity-50"
+                    key={item.text}
+                    className="flex items-center md:flex-row-reverse gap-3 text-lg opacity-60"
                   >
                     <span className="inline-flex w-6 h-6 rounded-full border border-border items-center justify-center shrink-0">
                       <X className="w-3 h-3" />
                     </span>
-                    <span className="line-through decoration-1 decoration-text/30">{item}</span>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="line-through decoration-1 decoration-text/30">{item.text}</span>
+                      <span aria-hidden="true" className="shrink-0">{item.emoji}</span>
+                    </span>
                   </li>
                 ))}
               </ul>
             </div>
             <div className="p-8 sm:p-10 lg:p-12 bg-accent text-white">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-white/50 mb-8">
-                The OneHook way
-              </p>
+              <div className="mb-8 flex items-center gap-3">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">The OneHook way</p>
+                <span className="inline-block rotate-[5deg] rounded-full border border-dashed border-white/40 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-white/70">
+                  your new ritual
+                </span>
+              </div>
               <ul className="space-y-4">
                 {[
-                  'One connection at a time',
-                  'Full, undivided focus',
-                  'Real conversation',
-                  'Private by default (E2EE)',
+                  'One person. Your thumb finally rests. 😌',
+                  'Full, undivided attention 🎯',
+                  'Conversations that actually go somewhere 💬',
+                  'Locked end-to-end \u2014 only you two can read it 🔒',
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-3 text-lg">
                     <span className="inline-flex w-6 h-6 rounded-full bg-white/15 items-center justify-center shrink-0">
@@ -2118,28 +2548,41 @@ export function Landing() {
             </div>
           </motion.div>
 
-          <p className="mt-4 text-[10px] uppercase tracking-[0.2em] opacity-30 text-center">
-            Not affiliated with any other dating app. Comparisons are our own cheeky opinion.
+          <p className="mt-4 text-center text-[10px] uppercase tracking-[0.2em] text-white [text-shadow:0_0_4px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.5)]">
+            No apps were named in the making of this comparison. Any resemblance to your last three
+            is purely your own memory.
           </p>
         </div>
 
-        {/* Principles — a single static line (no slider) */}
-        <div
-          aria-hidden="true"
-          className="relative z-10 -mx-6 mt-12 lg:mt-16 border-y border-border py-5 text-center select-none"
-        >
-          <p className="text-xs font-black uppercase tracking-[0.42em] text-text/60">
-            OneHook Principles
-          </p>
-        </div>
+        {/* Principles block, with a subtle pine forest rising just above the divider (behind the
+            comparison). z-[1] keeps the forest behind the content (z-10) and the pink paint-stroke
+            (z-5), so it never overlaps that line. */}
+        <div className="relative mt-12 lg:mt-16">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-full left-1/2 z-[1] h-[22rem] w-screen -translate-x-1/2 overflow-hidden md:h-[36rem]"
+          >
+            <ForestBackdrop className="h-full w-full" />
+          </div>
 
-        {/* Core values — full screen width (-mx-6 cancels the section padding) */}
-        <div className="relative z-10 -mx-6">
-          <PrincipleValues />
-        </div>
+          {/* Principles — a single static line (no slider) */}
+          <div
+            aria-hidden="true"
+            className="relative z-10 -mx-6 border-y border-border py-5 text-center select-none"
+          >
+            <p className="text-xs font-black uppercase tracking-[0.42em] text-text/60">
+              OneHook Principles
+            </p>
+          </div>
 
-        {/* Bottom line closing the principles section */}
-        <div aria-hidden="true" className="relative z-10 -mx-6 border-b border-border" />
+          {/* Core values — full screen width (-mx-6 cancels the section padding) */}
+          <div className="relative z-10 -mx-6">
+            <PrincipleValues />
+          </div>
+
+          {/* Bottom line closing the principles section */}
+          <div aria-hidden="true" className="relative z-10 -mx-6 border-b border-border" />
+        </div>
       </section>
 
       {/* Features Section */}

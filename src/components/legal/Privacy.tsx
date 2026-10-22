@@ -2,10 +2,16 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { Seo } from '../common/Seo';
 
 export function Privacy() {
   return (
     <div className="min-h-screen bg-white">
+      <Seo
+        title="Privacy Policy — OneHook"
+        description="How OneHook protects your data. Your matches and messages are end-to-end encrypted and private — read how we handle your information on our intentional dating app."
+        path="/privacy"
+      />
       {/* Navigation */}
       <SiteHeader pageTitle="Privacy" />
 

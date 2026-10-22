@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 f1294f8ce7f457bf0ac4251cd697cd49d08caa9229e480d70045d516d517c8f5
+// telemetry-integrity: sha256 44b3607e29cab34f3f914c6478b9cb296a3d21e55399c3fccd9c3ecac420806e
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.3.0, hash 9db35444cda2b7ba.
+// Catalog version 1.4.0, hash 5cf9f7740c92eebe.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.3.0";
-export const TELEMETRY_CATALOG_HASH = "9db35444cda2b7ba";
+export const TELEMETRY_CATALOG_VERSION = "1.4.0";
+export const TELEMETRY_CATALOG_HASH = "5cf9f7740c92eebe";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -48,6 +48,8 @@ export const Screen = {
   LANDING: "LANDING",
   LOGIN: "LOGIN",
   REDEEM_INVITE: "REDEEM_INVITE",
+  ADMISSIONS: "ADMISSIONS",
+  ADMISSIONS_STATUS: "ADMISSIONS_STATUS",
   ONBOARDING: "ONBOARDING",
   DISCOVER: "DISCOVER",
   LIKE_COMPOSER: "LIKE_COMPOSER",
@@ -75,6 +77,8 @@ export const ViewableScreen = {
   LANDING: "LANDING",
   LOGIN: "LOGIN",
   REDEEM_INVITE: "REDEEM_INVITE",
+  ADMISSIONS: "ADMISSIONS",
+  ADMISSIONS_STATUS: "ADMISSIONS_STATUS",
   ONBOARDING: "ONBOARDING",
   DISCOVER: "DISCOVER",
   LIKE_COMPOSER: "LIKE_COMPOSER",
@@ -248,6 +252,21 @@ export const UiElement = {
   REDEEM_INVITE_LOGIN: "redeem_invite.login",
   REDEEM_INVITE_CLOSE: "redeem_invite.close",
   REDEEM_INVITE_RESEND_CODE: "redeem_invite.resend_code",
+  REDEEM_INVITE_GET_INVITE_VIDEO: "redeem_invite.get_invite_video",
+  ADMISSIONS_SUBMIT: "admissions.submit",
+  ADMISSIONS_RESEND_CODE: "admissions.resend_code",
+  ADMISSIONS_CONSENT_TOGGLE: "admissions.consent_toggle",
+  ADMISSIONS_PRIVACY_POLICY: "admissions.privacy_policy",
+  ADMISSIONS_RECORD_START: "admissions.record_start",
+  ADMISSIONS_RECORD_STOP: "admissions.record_stop",
+  ADMISSIONS_RETAKE: "admissions.retake",
+  ADMISSIONS_PREVIEW_PLAY: "admissions.preview_play",
+  ADMISSIONS_UPLOAD_RETRY: "admissions.upload_retry",
+  ADMISSIONS_CLOSE: "admissions.close",
+  ADMISSIONS_OPEN_SETTINGS: "admissions.open_settings",
+  ADMISSIONS_STATUS_REFRESH: "admissions_status.refresh",
+  ADMISSIONS_STATUS_CONTINUE_INVITE: "admissions_status.continue_invite",
+  ADMISSIONS_STATUS_WITHDRAW: "admissions_status.withdraw",
   ONBOARDING_NEXT: "onboarding.next",
   ONBOARDING_BACK: "onboarding.back",
   ONBOARDING_FINISH: "onboarding.finish",
@@ -486,6 +505,21 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "redeem_invite.login": { screen: "REDEEM_INVITE", kind: "link", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "redeem_invite.close": { screen: "REDEEM_INVITE", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "redeem_invite.resend_code": { screen: "REDEEM_INVITE", kind: "link", actions: ["tap"], values: null, platforms: ["web", "ios"] },
+  "redeem_invite.get_invite_video": { screen: "REDEEM_INVITE", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions.submit": { screen: "ADMISSIONS", kind: "button", actions: ["submit"], values: ["send_code", "verify_code", "submit_application"], platforms: ["ios", "android"] },
+  "admissions.resend_code": { screen: "ADMISSIONS", kind: "link", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions.consent_toggle": { screen: "ADMISSIONS", kind: "toggle", actions: ["toggle"], values: ["checked", "unchecked"], platforms: ["ios", "android"] },
+  "admissions.privacy_policy": { screen: "ADMISSIONS", kind: "link", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions.record_start": { screen: "ADMISSIONS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions.record_stop": { screen: "ADMISSIONS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions.retake": { screen: "ADMISSIONS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions.preview_play": { screen: "ADMISSIONS", kind: "toggle", actions: ["toggle"], values: ["play", "pause"], platforms: ["ios", "android"] },
+  "admissions.upload_retry": { screen: "ADMISSIONS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions.close": { screen: "ADMISSIONS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions.open_settings": { screen: "ADMISSIONS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions_status.refresh": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions_status.continue_invite": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions_status.withdraw": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "onboarding.next": { screen: "ONBOARDING", kind: "button", actions: ["submit"], values: ["basics", "photos", "media", "prompts", "details"], platforms: ["web", "ios"] },
   "onboarding.back": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "onboarding.finish": { screen: "ONBOARDING", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },

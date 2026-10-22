@@ -1,2 +1,10 @@
 User-agent: *
 Allow: /
+
+# Private, signed-in and invite-only areas carry no public SEO value.
+Disallow: /app
+Disallow: /onboarding
+Disallow: /auth/
+Disallow: /redeem
+
+Sitemap: https://onehook.club/sitemap.xml

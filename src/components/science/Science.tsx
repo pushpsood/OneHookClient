@@ -4,6 +4,7 @@ import { motion, useInView, useReducedMotion, useScroll, useSpring, useTransform
 import { ArrowRight, Send, Smartphone } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { Seo } from '../common/Seo';
 import { Accent, BRAND, Chapter, ENGINE_META, Kicker, Panel, labelClass, pillClass, type ChapterDef } from './ScienceUi';
 import { Constellation, ErasureDemo, PipelineDiagram, SIGNALS } from './ScienceDiagrams';
 import { ScienceHero } from './ScienceHero';
@@ -451,16 +452,13 @@ function Finale() {
 
 export function Science() {
 
-  useEffect(() => {
-    const previous = document.title;
-    document.title = 'The science of one · OneHook';
-    return () => {
-      document.title = previous;
-    };
-  }, []);
-
   return (
     <div className="min-h-screen" style={{ background: BRAND.paper }}>
+      <Seo
+        title="The Science of One — How OneHook Matching Works"
+        description="The science behind OneHook: how reading intent, rhythm and meaning in real conversations helps two people build one genuine connection instead of swiping endlessly."
+        path="/science"
+      />
       <ProgressBar />
       <SiteHeader pageTitle="Science" />
       <OrbitNav chapters={CHAPTERS} onSelect={scrollToId} />

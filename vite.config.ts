@@ -99,16 +99,36 @@ export default defineConfig(({ mode }) => {
       leanMediaPrunePlugin(),
       Sitemap({
         hostname: 'https://onehook.club',
+        // Public marketing routes only. '/' is auto-derived from index.html, so it is NOT
+        // listed here (listing it would duplicate the home entry). Its priority is set below.
         dynamicRoutes: [
-          '/',
+          '/science',
+          '/pricing',
+          '/careers',
+          '/contact',
           '/privacy',
           '/terms',
-          '/contact',
-          '/careers',
-          '/science',
-          '/login',
-          '/redeem',
         ],
+        exclude: ['/app', '/onboarding', '/auth/setup', '/login', '/redeem'],
+        // Generated robots.txt must mirror public/robots.txt (the plugin overwrites dist/robots.txt).
+        robots: [
+          {
+            userAgent: '*',
+            allow: '/',
+            disallow: ['/app', '/onboarding', '/auth/', '/redeem'],
+          },
+        ],
+        readable: true,
+        changefreq: 'weekly',
+        priority: {
+          '/': 1.0,
+          '/science': 0.8,
+          '/pricing': 0.8,
+          '/careers': 0.6,
+          '/contact': 0.6,
+          '/privacy': 0.4,
+          '/terms': 0.4,
+        },
         outDir: 'dist',
       }),
     ],
