@@ -36,14 +36,16 @@ function resourcesOf(
 }
 
 describe('AWS-native frontend deployment pipeline', () => {
-  it('uses a queued V2 pipeline with direct production build and AWS production approval', () => {
+  it('uses a superseded V2 pipeline with direct production build and AWS production approval', () => {
     const template = synthPipeline();
     const [, pipeline] = resourcesOf(template, 'AWS::CodePipeline::Pipeline')[0];
     const properties = pipeline.Properties as Record<string, unknown>;
     const stages = properties.Stages as Array<Record<string, unknown>>;
 
     expect(properties.PipelineType).toBe('V2');
-    expect(properties.ExecutionMode).toBe('QUEUED');
+    // SUPERSEDED so a burst of pushes collapses into one approval of the latest
+    // commit, instead of forcing the approver to approve every commit one by one.
+    expect(properties.ExecutionMode).toBe('SUPERSEDED');
     expect(stages.map((stage) => stage.Name)).toEqual([
       'Source',
       'Verify',
