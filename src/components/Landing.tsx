@@ -2137,31 +2137,10 @@ export function Landing() {
         <div className="relative z-10 -mx-6">
           <PrincipleValues />
         </div>
-      </section>
 
-      {/* Floating note at the exact intersection of Philosophy and Features. Sits just above the
-          background paint-stroke line (z-5); all section content is above it (z-10+). */}
-      <div className="hidden lg:block absolute left-1/2 w-0 h-0 pointer-events-none z-[6]">
-        <svg className="overflow-visible w-96 h-32 -mt-2 -ml-2">
-          <text
-            x="20"
-            y="30"
-            fill="#ff69b4"
-            fontSize="32"
-            fontWeight="bold"
-            fontFamily='"Caveat", "Reenie Beanie", "Comic Sans MS", "Marker Felt", "Bradley Hand", cursive'
-            transform="rotate(-5, 20, 30)"
-            opacity="0.85"
-          >
-            <tspan x="20" dy="0">
-              Find someone who adds
-            </tspan>
-            <tspan x="20" dy="36">
-              color in your life...... !!
-            </tspan>
-          </text>
-        </svg>
-      </div>
+        {/* Bottom line closing the principles section */}
+        <div aria-hidden="true" className="relative z-10 -mx-6 border-b border-border" />
+      </section>
 
       {/* Features Section */}
       <section id="features" className="pt-16 pb-0 px-6 bg-bg relative">
