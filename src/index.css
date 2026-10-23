@@ -229,3 +229,27 @@ body {
   }
   .oh-heart-ripple { opacity: 0; }
 }
+
+/* Polished-chrome capsule around the header's Dating Science / Private Messenger links. */
+.oh-chrome-pill {
+  border-color: rgba(154, 161, 171, 0.65);
+  background: linear-gradient(180deg, #FFFFFF 0%, #EEF0F3 38%, #D4D8DE 52%, #E9ECEF 70%, #FFFFFF 100%);
+  box-shadow:
+    inset 0 1px 0 #FFFFFF,
+    inset 0 -1px 0 rgba(10, 11, 16, 0.08),
+    0 1px 2px rgba(10, 11, 16, 0.08),
+    0 6px 16px -8px rgba(31, 58, 107, 0.35);
+}
+.oh-chrome-shine {
+  background: linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.95) 50%, transparent 100%);
+  transform: skewX(-20deg);
+  animation: oh-chrome-sweep 4.8s ease-in-out infinite;
+}
+.oh-chrome-pill:hover .oh-chrome-shine { animation-duration: 1.6s; }
+@keyframes oh-chrome-sweep {
+  0%, 62% { left: -50%; }
+  100% { left: 130%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .oh-chrome-shine { animation: none; display: none; }
+}
