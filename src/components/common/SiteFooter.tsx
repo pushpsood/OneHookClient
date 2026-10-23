@@ -100,6 +100,9 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
             <button onClick={() => goToSection('features')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'how_it_works' })} className="hover:opacity-100 transition-opacity">
               How it works
             </button>
+            <button onClick={() => goToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })} className="hover:opacity-100 transition-opacity">
+              Mr.OneHook
+            </button>
             <span aria-hidden="true" className="h-4 w-px bg-current opacity-30" />
             <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className="hover:opacity-100 transition-opacity">
               Pricing
