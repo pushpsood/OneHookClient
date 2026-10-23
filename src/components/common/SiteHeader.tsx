@@ -82,13 +82,13 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
             {pageTitle}
           </div>
         )}
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3 pr-3">
           <button
             type="button"
             onClick={() => navigate('/')}
             aria-label="OneHook home"
             {...trackProps(UiElement.LANDING_HOME_LINK)}
-            className="shrink-0 hover:opacity-80 transition-opacity"
+            className="flex shrink-0 items-center leading-none hover:opacity-80 transition-opacity"
           >
             <BrandWordmark
               className="text-xl sm:text-2xl font-bold tracking-tighter uppercase whitespace-nowrap"
@@ -97,7 +97,7 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
           </button>
           {/* compact: the title sits left-aligned beside the logo */}
           {pageTitle && compact && (
-            <div className="min-w-0 truncate text-xs sm:text-sm font-black uppercase tracking-[0.2em] opacity-70">{pageTitle}</div>
+            <div className="min-w-0 truncate text-xs sm:text-sm font-black uppercase leading-none tracking-[0.2em] opacity-70">{pageTitle}</div>
           )}
         </div>
 
@@ -118,8 +118,20 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
               {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-full hover:opacity-90 transition-opacity"
             >
-              <Smartphone className="w-3.5 h-3.5" /> Open in app
+              <Smartphone className="w-3.5 h-3.5" /> <span className="max-[359px]:hidden">Open in app</span><span className="hidden max-[359px]:inline">App</span>
             </a>
+            {/* once the name has collapsed to the logo, also offer a plain way back home */}
+            {compact && (
+              <button
+                type="button"
+                onClick={() => navigate('/')}
+                aria-label="Close and return home"
+                {...trackProps(UiElement.LANDING_HOME_LINK)}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border opacity-60 transition-all hover:bg-black/5 hover:opacity-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            )}
           </div>
         ) : (
           <div ref={actionsRef} className="flex shrink-0 items-center gap-4">
