@@ -343,6 +343,22 @@ function DeviceLabel({ icon, title, sub }: { icon: ReactNode; title: string; sub
   );
 }
 
+/** Pink "New" tag that pops onto a device the moment a new message lands on it. */
+function NewTag({ on }: { on: boolean }) {
+  return (
+    <motion.span
+      aria-hidden="true"
+      className="absolute -right-2 -top-2 z-10 rounded-full px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider text-white"
+      style={{ background: PINK }}
+      initial={false}
+      animate={{ opacity: on ? 1 : 0, scale: on ? [0.6, 1.2, 1] : 0.6 }}
+      transition={{ duration: 0.4 }}
+    >
+      New
+    </motion.span>
+  );
+}
+
 /** Small "synced" tick that pops onto a device. */
 function SyncedTick({ on, delay }: { on: boolean; delay: number }) {
   return (
@@ -605,7 +621,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
       <FailLine {...cloudToLaptop} start={SYNC.cloudFail} k={k} label="Cloud not reachable" labelSide="right" />
       <FailLine {...cloudToCamp} start={SYNC.cloudFail} k={k} label="Cloud not reachable" labelSide="left" />
       <FailLine {...phoneToCamp} start={SYNC.phoneTry} k={k} label="Out of reach" labelSide={land ? 'above' : 'right'} />
-      <FailLine {...androidToCamp} start={SYNC.androidTry} k={k} label="Out of reach" labelSide={land ? 'left' : 'right'} />
+      <FailLine {...androidToCamp} start={SYNC.androidTry} k={k} label="Out of reach" labelSide="left" />
 
       {/* a key on each line leaving the cloud — it pulses as that device's key arrives */}
       {[
@@ -635,6 +651,20 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
         <QrCode className="h-6 w-6 text-text" />
       </motion.span>
 
+      {/* the moment the new message lands everywhere at once: no sync needed for new messages */}
+      <motion.div
+        aria-hidden="true"
+        // phones: in the gap above the main phone · wide screens: just under it (clear of the cloud's caption)
+        className={`absolute z-30 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[9px] font-semibold text-text shadow-[0_10px_26px_-12px_rgba(255,105,180,0.7)] ring-1 ${land ? '' : '-translate-y-full'}`}
+        style={{ left: phone.cx, top: land ? phone.cy + ph + 16 : phone.cy - ph - 14, ['--tw-ring-color' as string]: 'rgba(255,143,199,0.55)' }}
+        initial={false}
+        animate={{ opacity: newOn ? 1 : 0, y: newOn ? 0 : 8, scale: newOn ? 1 : 0.92 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <span className="h-1.5 w-1.5 rounded-full" style={{ background: PINK }} />
+        New messages reach every device — no sync needed
+      </motion.div>
+
       {/* top-left · iPad — synced from the cloud */}
       <Stand into={{ x: phone.cx, y: phone.cy }} x={xL} base={rowTop} delay={(SYNC.appear + 0 * 0.12) * k} label={<DeviceLabel icon={<AppleIcon className="h-3 w-3" />} title="iPad" sub="Synced from your cloud, automatically" />}>
         <div className="relative rounded-[18px] bg-[#0A0B10] p-[7px] shadow-[0_24px_50px_-26px_rgba(10,11,16,0.6)]" style={{ width: DEV.ipad.w, height: DEV.ipad.h }}>
@@ -642,6 +672,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
             <MiniThread on={synced.ipad} newOn={newOn} />
           </div>
           <SyncedTick on={synced.ipad} delay={0} />
+          <NewTag on={newOn} />
         </div>
       </Stand>
 
@@ -678,6 +709,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
               </div>
             </div>
             <SyncedTick on={synced.laptop} delay={0} />
+            <NewTag on={newOn} />
           </div>
           <div className="mx-auto h-[9px] w-[118%] -translate-x-[8%] rounded-b-[8px] bg-gradient-to-b from-[#c9cbd1] to-[#9fa3ab]" />
         </div>
@@ -690,6 +722,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
           <div className="h-full w-full overflow-hidden rounded-[14px] bg-[#F6F6F4]">
             <MiniThread on={synced.android} newOn={newOn} />
           </div>
+          <NewTag on={newOn} />
           <SyncedTick on={synced.android} delay={0} />
         </div>
       </Stand>
@@ -2355,7 +2388,7 @@ const SCENES: Scene[] = [
   {
     title: <>Every screen. <Accent>One us.</Accent> No matter where.</>,
     plain: 'Every screen. One us. No matter where.',
-    line: 'iPad, Android, laptop — synced from your cloud, or one QR away.',
+    line: 'New messages land on every device instantly — no sync, any platform, cloud or not.',
     art: () => null, // drawn by the persistent PhonesStage
   },
   {
