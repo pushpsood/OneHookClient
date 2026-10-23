@@ -1696,6 +1696,23 @@ export function Landing() {
   // Desktop nav: keep the four in-page section links inline while they fit; once the nav would
   // overflow, fold them into an "Explore" dropdown. Measured, so it reacts to the real available width.
   const [exploreOpen, setExploreOpen] = useState(false);
+  const exploreRef = useRef<HTMLDivElement>(null);
+  // Explore opens and closes on click only; a click anywhere outside it, or Escape, closes it.
+  useEffect(() => {
+    if (!exploreOpen) return;
+    const onPointer = (e: PointerEvent) => {
+      if (exploreRef.current && !exploreRef.current.contains(e.target as Node)) setExploreOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExploreOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [exploreOpen]);
   // 0: everything inline · 1: the four section links folded into Explore · 2: everything in Explore
   const [navLevel, setNavLevel] = useState<0 | 1 | 2>(0);
   const navRowRef = useRef<HTMLDivElement>(null);
@@ -2186,7 +2203,7 @@ export function Landing() {
                 </button>
               </>
             ) : (
-              <div className="relative" onMouseEnter={() => setExploreOpen(true)} onMouseLeave={() => setExploreOpen(false)}>
+              <div ref={exploreRef} className="relative">
                 <button
                   onClick={() => setExploreOpen((v) => !v)}
                   {...trackProps(UiElement.LANDING_MOBILE_MENU_TOGGLE, { value: exploreOpen ? 'closed' : 'open' })}
