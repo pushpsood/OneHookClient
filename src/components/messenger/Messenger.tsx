@@ -32,7 +32,7 @@ import { ROUTE_SEO } from '../../config/seo-routes';
 import { AlienScanner } from '../mascot';
 import { QRCodeSVG } from 'qrcode.react';
 import { ManifestoPhone } from '../Landing';
-import { Finale, ProgressBar, useFullScreenEnding, useViewportHeight } from '../science/Science';
+import { Finale, ProgressBar, useFullScreenEnding } from '../science/Science';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { APP_DOWNLOAD_URL } from '../../config/membership.config';
@@ -2529,8 +2529,6 @@ export function Messenger() {
   }, [n, reduce]);
   const scene = SCENES[index];
   const headerH = useHeaderHeight();
-  // the screen the visitor actually sees (not CSS svh), so the stage reaches the bottom on every phone
-  const viewH = useViewportHeight();
   const ending = useFullScreenEnding();
   // Last screen ("Free forever"): the heart blurs and fades into the background, and the words take
   // over the whole stage — large and centred — with the buttons staying in their usual place.
@@ -2589,8 +2587,12 @@ export function Messenger() {
         {/* One tall scroll track; the stage inside stays pinned while the story plays. */}
         <div ref={storyRef} className="relative" style={{ height: `${n * 95}vh` }}>
           <div
-            className="sticky flex flex-col items-center overflow-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+28px)] pt-1 sm:px-6 sm:pb-8 sm:pt-6"
-            style={{ top: headerH, height: `${viewH - headerH}px` }}
+            // Stable on phones: the stage's background covers the whole screen even with the browser's
+            // toolbar collapsed (100lvh), but everything in it is laid out for the screen WITH the
+            // toolbar (100svh), so nothing re-sizes or moves when the toolbar shows or hides while
+            // scrolling. The extra strip the collapsed toolbar uncovers holds "Start with an invite".
+            className="sticky flex flex-col items-center overflow-hidden px-4 pb-[calc(100lvh-100svh+12px)] pt-1 sm:px-6 sm:pb-8 sm:pt-6"
+            style={{ top: headerH, height: `calc(100lvh - ${headerH}px)` }}
           >
             {/* screen 6: Mr OneHook peeking in from the edges */}
             <AnimatePresence>
@@ -2770,6 +2772,19 @@ export function Messenger() {
                 <HandHeart className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: PINK }} /> Support
               </a>
             </motion.div>
+
+            {/* phones: the strip a collapsed browser toolbar uncovers (100lvh − 100svh) — it shows only
+                then, and nothing else moves */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center sm:hidden" style={{ height: 'calc(100lvh - 100svh)' }}>
+              <button
+                type="button"
+                onClick={() => navigate('/redeem')}
+                {...trackProps(UiElement.LANDING_GET_STARTED)}
+                className="pointer-events-auto inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-black/15 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-text/80 transition-colors hover:bg-black/[0.04]"
+              >
+                Start with an invite <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
 
             {/* the continuous thread: one pink line that fills as the story unfolds */}
             <div aria-hidden="true" className="absolute right-6 top-1/2 hidden h-64 -translate-y-1/2 flex-col items-center sm:flex">

@@ -369,47 +369,12 @@ function PromisesChapter() {
  * page, which passes its own supporting line and secondary action (the Science page keeps its own).
  */
 /**
- * The height of the screen the visitor can actually see, in px. CSS `100svh` is the height with the
- * browser's toolbars fully expanded, so once a phone browser shrinks them (iOS Safari's floating
- * address pill, Chrome hiding its bar) a `100svh` block leaves an empty band at the bottom — a
- * different size on every device. This follows the real height, but only applies a change once
- * scrolling / resizing has paused, so the toolbar animating in and out never makes the page jitter.
- */
-export function useViewportHeight() {
-  const read = () => (typeof window === 'undefined' ? 800 : Math.round(window.visualViewport?.height ?? window.innerHeight));
-  const [h, setH] = useState(read);
-  useEffect(() => {
-    let t = 0;
-    const settle = () => {
-      window.clearTimeout(t);
-      t = window.setTimeout(() => {
-        const next = read();
-        setH((prev) => (Math.abs(prev - next) > 1 ? next : prev));
-      }, 180);
-    };
-    window.addEventListener('resize', settle);
-    window.visualViewport?.addEventListener('resize', settle);
-    window.addEventListener('scroll', settle, { passive: true });
-    window.addEventListener('orientationchange', settle);
-    return () => {
-      window.clearTimeout(t);
-      window.removeEventListener('resize', settle);
-      window.visualViewport?.removeEventListener('resize', settle);
-      window.removeEventListener('scroll', settle);
-      window.removeEventListener('orientationchange', settle);
-    };
-  }, []);
-  return h;
-}
-
-/**
  * Sizes a page's closing section so that it and the footer below it fill exactly one screen under the
  * sticky header — the last scroll lands on a clean, full-screen ending. Attach `footerRef` to a
  * wrapper around the footer and give the closer's wrapper `style={{ minHeight }}`.
  */
 export function useFullScreenEnding() {
   const footerRef = useRef<HTMLDivElement>(null);
-  const viewH = useViewportHeight();
   const [headerH, setHeaderH] = useState(0);
   const [footerH, setFooterH] = useState(0);
   useEffect(() => {
@@ -425,7 +390,9 @@ export function useFullScreenEnding() {
     if (footer) ro.observe(footer);
     return () => ro.disconnect();
   }, []);
-  return { footerRef, minHeight: `${Math.max(0, viewH - headerH - footerH)}px` };
+  // 100lvh = the full screen with the browser's toolbars collapsed. Unlike the live height it never
+  // changes while scrolling, so nothing jumps when a phone browser shows or hides its toolbar.
+  return { footerRef, minHeight: `calc(100lvh - ${headerH + footerH}px)` };
 }
 
 export function Finale({
