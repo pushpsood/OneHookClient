@@ -839,12 +839,12 @@ function ScreenPreviews({ layout, k }: { layout: 'land' | 'port'; k: number }) {
       ]
     : [
         // portrait: three above the phone, three below — mirrored top / bottom
-        { x: 72, y: 220 },
-        { x: 210, y: 220 },
-        { x: 348, y: 220 },
-        { x: 72, y: 1080 },
-        { x: 210, y: 1080 },
-        { x: 348, y: 1080 },
+        { x: 71, y: 345 },
+        { x: 210, y: 345 },
+        { x: 349, y: 345 },
+        { x: 71, y: 955 },
+        { x: 210, y: 955 },
+        { x: 349, y: 955 },
       ];
   // where each card's line meets the phone
   const meet = (i: number) =>
@@ -899,7 +899,7 @@ function ScreenPreviews({ layout, k }: { layout: 'land' | 'port'; k: number }) {
           <motion.div
             key={p.kind}
             className="absolute -translate-x-1/2 -translate-y-1/2"
-            style={{ left: at.x, top: at.y, scale: land ? 1 : 0.6 }}
+            style={{ left: at.x, top: at.y, scale: land ? 1 : 0.64 }}
             initial={{ opacity: 0, x: fromSide, y: land ? 0 : 16 }}
             animate={{ opacity: 1, x: 0, y: 0 }}
             transition={{ delay: (start + (i % 3) * 0.12 + (i >= 3 ? 0.06 : 0)) * k, type: 'spring', stiffness: 160, damping: 18 }}
@@ -955,12 +955,13 @@ const LAYOUTS = {
   port: {
     w: 420,
     h: 1300,
-    solo: { cx: 210, cy: 650, s: 1.3 },
-    left: { cx: 95, cy: 171, s: 0.72 },
-    right: { cx: 325, cy: 1129, s: 0.72 },
-    broken: { cx: 130, cy: 1040, s: 0.8 },
-    fresh: { cx: 280, cy: 340, s: 0.86 },
-    cloud: { x: 210, y: 700 },
+    // phones: compositions packed into the band each screen shows, so it can use the full width
+    solo: { cx: 210, cy: 650, s: 1.0 },
+    left: { cx: 112, cy: 230, s: 0.82 },
+    right: { cx: 308, cy: 820, s: 0.82 },
+    broken: { cx: 106, cy: 700, s: 0.8 },
+    fresh: { cx: 314, cy: 700, s: 0.8 },
+    cloud: { x: 210, y: 345 },
     center: { cx: 210, cy: 660, s: 0.64 },
     aside: { cx: -900, cy: 1040, s: 0.8 },
     cloud4: { x: 210, y: 130 },
@@ -969,11 +970,11 @@ const LAYOUTS = {
 const at = (p: Pose) => ({ left: p.cx - PW / 2, top: p.cy - PH / 2, scale: p.s });
 /** Portrait (phone) camera per screen 1–5: the vertical band of the 420×1300 canvas each scene uses. */
 const PORT_VIEWS: { y: number; h: number }[] = [
-  { y: 175, h: 950 }, // 1 · phone + preview cards
-  { y: 0, h: 1300 }, // 2 · two phones and the message's journey
-  { y: 70, h: 1220 }, // 3 · break, key to the cloud, new phone
+  { y: 285, h: 730 }, // 1 · phone + preview cards
+  { y: 28, h: 1000 }, // 2 · two phones and the message's diagonal journey
+  { y: 280, h: 660 }, // 3 · the two phones side by side under the cloud
   { y: 100, h: 1090 }, // 4 · devices around the cloud
-  { y: 330, h: 640 }, // 5 · captions — close on the caption window
+  { y: 0, h: 1300 }, // 5 · captions (unchanged)
 ];
 
 // Screen-2 timeline (ms after arriving on it): Rohan drops at 0.5s, Isha sends at 1.8s, then the
@@ -1099,7 +1100,8 @@ function PhonesStage({ index }: { index: number }) {
         const isha = at(ishaPose);
         const rohan = at(L.right);
         const fresh = at(syncing ? L.center : L.fresh);
-        const ishaRotate = broken ? TILT : journey ? 0 : -6;
+        const tilt = layout === 'port' ? 0 : TILT; // phones: the two phones sit upright, side by side
+        const ishaRotate = broken ? tilt : journey ? 0 : -6;
         // key path: broken phone → cloud → new phone
         const keyPath = {
           left: [L.broken.cx, L.cloud.x, L.cloud.x, L.fresh.cx],
@@ -1167,40 +1169,72 @@ function PhonesStage({ index }: { index: number }) {
                       </motion.div>
                     </>
                   ) : (
-                    <>
-                      <div className="absolute left-1/2 top-[360px] h-[580px] w-[2px] -translate-x-1/2 rounded-full bg-black/10">
-                        <motion.div
-                          className="absolute left-0 top-0 w-full rounded-full"
-                          style={{ background: `linear-gradient(180deg, ${INK}, ${PINK})` }}
-                          animate={{ height: `${(stage / 4) * 100}%` }}
-                          transition={travel}
-                        />
-                      </div>
-                      {stops.map((s, i) => {
-                        const y = 360 + ((i + 1) / 4) * 580;
-                        const leftSide = i !== 1;
-                        return (
-                          <div key={s} className="absolute" style={{ left: L.w / 2, top: y }}>
-                            <span
-                              className="absolute left-0 top-0 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-white"
-                              style={{ borderColor: stage >= i + 1 ? PINK : 'rgba(10,11,16,0.2)' }}
+                    (() => {
+                      // phones: a slanted route from Isha (top-left) down to Rohan (bottom-right); the
+                      // three checkpoints sit in the free corners and on the route itself
+                      const A = { x: L.left.cx, y: L.left.cy + (PH / 2) * L.left.s + 6 };
+                      const B = { x: L.right.cx, y: L.right.cy - (PH / 2) * L.right.s - 6 };
+                      const along = (t: number) => ({ x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t });
+                      const cards = [
+                        { x: 322, y: 250 }, // attackers — top-right corner
+                        { x: 170, y: 500 }, // database — on the route, clear of Rohan's phone
+                        { x: 102, y: 812 }, // friends & family — bottom-left corner
+                      ];
+                      const p = (stage / 4) as number;
+                      const head = along(Math.min(1, p));
+                      return (
+                        <>
+                          <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
+                            <defs>
+                              <linearGradient id="journey-port" x1={A.x} y1={A.y} x2={B.x} y2={B.y} gradientUnits="userSpaceOnUse">
+                                <stop offset="0" stopColor={INK} />
+                                <stop offset="1" stopColor={PINK} />
+                              </linearGradient>
+                            </defs>
+                            <line x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke="rgba(10,11,16,0.12)" strokeWidth={3} strokeLinecap="round" />
+                            <motion.line
+                              x1={A.x}
+                              y1={A.y}
+                              stroke="url(#journey-port)"
+                              strokeWidth={3}
+                              strokeLinecap="round"
+                              initial={{ x2: A.x, y2: A.y }}
+                              animate={{ x2: head.x, y2: head.y }}
+                              transition={travel}
                             />
-                            {/* alternating sides of the path, enlarged so they read on a phone */}
-                            <div className="absolute top-0 -translate-y-1/2" style={leftSide ? { right: 12, zoom: 1.22 } : { left: 12, zoom: 1.22 }}>
+                            {stops.map((s, i) => {
+                              const d = along((i + 1) / 4);
+                              return i === 1 ? null : (
+                                <line key={s} x1={d.x} y1={d.y} x2={cards[i].x} y2={cards[i].y} stroke="rgba(10,11,16,0.2)" strokeWidth={1.5} strokeDasharray="4 6" />
+                              );
+                            })}
+                          </svg>
+                          {stops.map((s, i) => {
+                            const d = along((i + 1) / 4);
+                            return (
+                              <span
+                                key={`dot-${s}`}
+                                className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-white"
+                                style={{ left: d.x, top: d.y, borderColor: stage >= i + 1 ? PINK : 'rgba(10,11,16,0.2)' }}
+                              />
+                            );
+                          })}
+                          {stops.map((s, i) => (
+                            <div key={s} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: cards[i].x, top: cards[i].y, zoom: 1.1 }}>
                               <Checkpoint kind={s} state={stateOf(i)} width={176} />
                             </div>
-                          </div>
-                        );
-                      })}
-                      <motion.div
-                        className="absolute left-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
-                        initial={{ top: 360, opacity: 0 }}
-                        animate={{ top: 360 + (stage / 4) * 580, opacity: stage >= 1 && stage < 4 ? 1 : 0 }}
-                        transition={travel}
-                      >
-                        <Packet />
-                      </motion.div>
-                    </>
+                          ))}
+                          <motion.div
+                            className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
+                            initial={{ left: A.x, top: A.y, opacity: 0 }}
+                            animate={{ left: head.x, top: head.y, opacity: stage >= 1 && stage < 4 ? 1 : 0 }}
+                            transition={travel}
+                          >
+                            <Packet />
+                          </motion.div>
+                        </>
+                      );
+                    })()
                   )}
                 </motion.div>
               )}
@@ -1445,14 +1479,14 @@ function PhonesStage({ index }: { index: number }) {
                     freshDirect
                       ? { ...fresh, rotate: 0, x: 0, opacity: lang ? 0 : 1 }
                       : reduce
-                        ? { ...fresh, rotate: TILT, opacity: 0 }
-                        : { ...fresh, rotate: TILT, x: 1100, opacity: 1 }
+                        ? { ...fresh, rotate: tilt, opacity: 0 }
+                        : { ...fresh, rotate: tilt, x: 1100, opacity: 1 }
                   }
                   animate={
                     lang
                       ? // screen 5: with every device gathered inside it, the phone drops and shrinks into the caption window
                         { left: L.w / 2 - PW / 2, top: L.h / 2 - PH / 2 + 70, scale: fresh.scale * 0.42, rotate: 10, x: 0, opacity: 0 }
-                      : { ...fresh, rotate: syncing ? 0 : TILT, x: 0, opacity: 1 }
+                      : { ...fresh, rotate: syncing ? 0 : tilt, x: 0, opacity: 1 }
                   }
                   exit={reduce ? { opacity: 0 } : { x: 1100, transition: { duration: 0.55, ease: [0.5, 0, 0.75, 0] } }}
                   transition={
@@ -1755,79 +1789,41 @@ function LanguageRail() {
   const reduce = useReducedMotion() ?? false;
   const list = [...CAPTION_LANGS, ...CAPTION_LANGS]; // doubled for a seamless loop
   return (
-    <>
-      {/* phones: a slim strip across the top, rolling sideways, so the caption window stays in view */}
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 z-[5] border-b border-black/[0.06] bg-[#FAFAF8]/95 sm:hidden"
-        initial={{ opacity: 0, y: -16 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -16, transition: { duration: 0.3 } }}
-        transition={{ delay: 0.9, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <p className="px-4 pt-2 text-[9px] font-black uppercase tracking-[0.22em] text-black/45">
-          Supported languages ✱ <span className="font-medium normal-case tracking-normal">· varies by device</span>
-        </p>
-        <div
-          className="overflow-hidden"
-          style={{
-            WebkitMaskImage: 'linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%)',
-            maskImage: 'linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%)',
-          }}
-        >
-          <motion.ul
-            className="flex w-max gap-5 px-4 pb-2 pt-1"
-            animate={reduce ? undefined : { x: ['0%', '-50%'] }}
-            transition={reduce ? undefined : { duration: 30, repeat: Infinity, ease: 'linear' }}
-          >
-            {list.map((l, i) => (
-              <li key={i} className="flex shrink-0 items-baseline gap-1.5">
-                <span dir={l.rtl ? 'rtl' : undefined} className="font-serif text-lg italic text-text">
-                  {l.native}
-                </span>
-                <span className="text-[8px] font-semibold uppercase tracking-[0.16em] text-black/40">{l.english}</span>
-              </li>
-            ))}
-          </motion.ul>
-        </div>
-      </motion.div>
-
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 right-0 z-[5] hidden w-[30%] max-w-[320px] flex-col border-l border-black/[0.06] bg-[#FAFAF8]/85 backdrop-blur-md sm:flex"
+    <motion.div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-y-0 right-0 z-[5] flex w-[42%] max-w-[320px] flex-col border-l border-black/[0.06] bg-[#FAFAF8]/85 backdrop-blur-md sm:w-[30%]"
+      style={{
+        WebkitMaskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
+        maskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
+      }}
+      initial={{ opacity: 0, x: 40 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 40, transition: { duration: 0.3 } }}
+      transition={{ delay: 0.9, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <div className="px-5 pb-2 pt-5">
+        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-black/45">Supported languages ✱</p>
+        <p className="mt-1.5 text-[10px] leading-relaxed text-black/45">✱ Based on your device’s capability — translation runs on your device, so available pairs vary by phone and browser.</p>
+      </div>
+      <div
+        className="relative flex-1 overflow-hidden"
         style={{
-          WebkitMaskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
-          maskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%)',
+          maskImage: 'linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%)',
         }}
-        initial={{ opacity: 0, x: 40 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: 40, transition: { duration: 0.3 } }}
-        transition={{ delay: 0.9, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="px-5 pb-2 pt-5">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-black/45">Supported languages ✱</p>
-          <p className="mt-1.5 text-[10px] leading-relaxed text-black/45">✱ Based on your device’s capability — translation runs on your device, so available pairs vary by phone and browser.</p>
-        </div>
-        <div
-          className="relative flex-1 overflow-hidden"
-          style={{
-            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%)',
-            maskImage: 'linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%)',
-          }}
-        >
-          <motion.ul className="px-5" animate={reduce ? undefined : { y: ['0%', '-50%'] }} transition={reduce ? undefined : { duration: 30, repeat: Infinity, ease: 'linear' }}>
-            {list.map((l, i) => (
-              <li key={i} className="flex items-baseline justify-between gap-3 border-b border-black/[0.05] py-3.5">
-                <span dir={l.rtl ? 'rtl' : undefined} className="font-serif text-2xl italic text-text sm:text-3xl">
-                  {l.native}
-                </span>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/40">{l.english}</span>
-              </li>
-            ))}
-          </motion.ul>
-        </div>
-      </motion.div>
-    </>
+        <motion.ul className="px-5" animate={reduce ? undefined : { y: ['0%', '-50%'] }} transition={reduce ? undefined : { duration: 30, repeat: Infinity, ease: 'linear' }}>
+          {list.map((l, i) => (
+            <li key={i} className="flex items-baseline justify-between gap-3 border-b border-black/[0.05] py-3.5">
+              <span dir={l.rtl ? 'rtl' : undefined} className="font-serif text-2xl italic text-text sm:text-3xl">
+                {l.native}
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/40">{l.english}</span>
+            </li>
+          ))}
+        </motion.ul>
+      </div>
+    </motion.div>
   );
 }
 
@@ -2004,6 +2000,10 @@ const PEEKS: PeekDef[] = [
   { kind: 'edge', edge: 'bottom', at: '13%', size: 280, delay: 0.95, tilt: 3 },
   { kind: 'float', x: '86%', y: '18%', size: 96, delay: 1.25, tilt: 8 },
   { kind: 'float', x: '11%', y: '70%', size: 116, delay: 1.5, tilt: -8 },
+  { kind: 'edge', edge: 'right', at: '22%', size: 160, delay: 1.1, tilt: -6 },
+  { kind: 'edge', edge: 'left', at: '84%', size: 170, delay: 1.35, tilt: 6 },
+  { kind: 'float', x: '54%', y: '7%', size: 82, delay: 1.7, tilt: -6 },
+  { kind: 'float', x: '90%', y: '62%', size: 88, delay: 1.9, tilt: 10 },
 ];
 
 function MascotPeeks() {
@@ -2025,7 +2025,7 @@ function MascotPeeks() {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.3 } }}
     >
-      {(lite ? PEEKS.filter((_, i) => i === 1 || i === 3 || i === 4) : PEEKS).map((p, i) => {
+      {(lite ? PEEKS.filter((_, i) => [1, 3, 4, 5, 6, 8].includes(i)) : PEEKS).map((p, i) => {
         const size = Math.round(Math.max(70, p.size * (0.6 + 0.4 * scale)));
 
         if (p.kind === 'float') {
