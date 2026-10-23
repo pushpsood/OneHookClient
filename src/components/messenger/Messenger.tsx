@@ -2492,22 +2492,20 @@ export function Messenger() {
     };
     const hold = (y: number) => window.scrollTo({ top: y, behavior: 'instant' });
 
-    // Freezing page scroll outright (html + body overflow hidden) is the only thing that stops a scroll
-    // that can't be cancelled: Chrome's latched trackpad swipes, and the momentum glide after a touch
-    // swipe on phones (iOS Safari ignores scrollTo while it glides, which made screens get skipped).
-    // It lifts as soon as the scene's hold is over.
+    // Freezing page scroll outright (overflow hidden on <html> only) is the only thing that stops a
+    // scroll that can't be cancelled: Chrome's latched trackpad swipes, and the momentum glide after a
+    // touch swipe on phones (iOS Safari ignores scrollTo while it glides, which made screens get
+    // skipped). Never on <body>: that would make <body> the scroll container, the pinned stage would
+    // stop sticking and the screen would go blank. It lifts as soon as the scene's hold is over.
     const root = document.documentElement;
-    const body = document.body;
     let frozenUntil = 0;
     let unfreeze = 0;
     const freeze = () => {
       if (frozenUntil) return;
       frozenUntil = doneAtRef.current;
       root.style.overflow = 'hidden';
-      body.style.overflow = 'hidden';
       unfreeze = window.setTimeout(() => {
         root.style.overflow = '';
-        body.style.overflow = '';
         frozenUntil = 0;
       }, Math.max(0, doneAtRef.current - performance.now()));
     };
@@ -2591,7 +2589,6 @@ export function Messenger() {
       window.removeEventListener('keydown', onKey);
       window.clearTimeout(unfreeze);
       root.style.overflow = '';
-      body.style.overflow = '';
     };
   }, [n, reduce]);
   const scene = SCENES[index];
