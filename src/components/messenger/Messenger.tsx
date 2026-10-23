@@ -2434,19 +2434,29 @@ export function Messenger() {
             </div>
 
             {/* 2 — a few words below it */}
-            <motion.div
+            <div
               aria-hidden="true"
               className="relative z-10 mt-3 flex min-h-[92px] w-full max-w-3xl shrink-0 items-start justify-center text-center sm:mt-5 sm:min-h-[120px]"
-              initial={false}
-              animate={{ opacity: finale ? 0 : 1 }}
-              transition={{ delay: finale ? 0.5 : 0, duration: 0.4 }}
             >
-              <AnimatePresence mode="wait">
+              {/* `custom` = "is the next screen the finale?" — when it is, the outgoing words rise and
+                  grow toward the centre of the stage and dissolve there, right where the finale's big
+                  headline is rising into focus, so 7 → 8 reads as one upward move. */}
+              <AnimatePresence mode="wait" custom={finale}>
+                {!finale && (
                 <motion.div
                   key={index}
+                  custom={finale}
+                  variants={{
+                    exit: (toFinale: boolean) =>
+                      reduce
+                        ? { opacity: 0 }
+                        : toFinale
+                          ? { opacity: 0, y: '-24vh', scale: 1.35, filter: 'blur(6px)', transition: { duration: 0.75, ease: [0.4, 0, 0.2, 1] } }
+                          : { opacity: 0, y: -14 },
+                  }}
                   initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={reduce ? { opacity: 0 } : { opacity: 0, y: -14 }}
+                  animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                  exit="exit"
                   transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                 >
                   <p className="font-mono text-[11px] text-black/30">
@@ -2456,8 +2466,9 @@ export function Messenger() {
                   <p className="mt-1.5 text-2xl font-light leading-[1.08] tracking-[-0.02em] sm:mt-2 sm:text-5xl">{scene.title}</p>
                   <p className="mt-2 text-sm font-light text-black/55 sm:mt-3 sm:text-lg">{scene.line}</p>
                 </motion.div>
+                )}
               </AnimatePresence>
-            </motion.div>
+            </div>
 
             {/* finale: the words take the whole stage, centred (behind the buttons, above the faded heart) */}
             <AnimatePresence>
@@ -2467,10 +2478,12 @@ export function Messenger() {
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-center justify-center px-6 text-center"
                   style={{ bottom: 'clamp(84px, 14vh, 130px)' }}
-                  initial={{ opacity: 0, scale: 0.92, filter: 'blur(8px)' }}
-                  animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                  // rises from where the caption sat (below) into the centre, growing into focus — it
+                  // starts while screen 7's words are still dissolving upward, so the two blend
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: '24vh', scale: 0.55, filter: 'blur(6px)' }}
+                  animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
                   exit={{ opacity: 0, transition: { duration: 0.3 } }}
-                  transition={{ delay: reduce ? 0 : 0.7, duration: reduce ? 0.2 : 0.9, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ delay: reduce ? 0 : 0.3, duration: reduce ? 0.2 : 1, ease: [0.22, 1, 0.36, 1] }}
                 >
                   <p className="font-mono text-xs text-black/30 sm:text-sm">
                     {String(n).padStart(2, '0')} / {String(n).padStart(2, '0')}
