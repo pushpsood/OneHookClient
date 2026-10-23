@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import { Instagram, Facebook, Youtube, Linkedin } from 'lucide-react';
-import { XIcon, WhatsAppIcon, SnapchatIcon, ThreadsIcon } from './BrandIcons';
+import { XIcon, ThreadsIcon } from './BrandIcons';
 
 export type SocialIcon = ComponentType<{ className?: string }>;
 
@@ -19,6 +19,4 @@ export const SOCIALS: Social[] = [
   { label: 'Threads', href: 'https://threads.net/@onehook.club', Icon: ThreadsIcon },
   { label: 'YouTube', href: 'https://www.youtube.com/@onehookclub', Icon: Youtube },
   { label: 'LinkedIn', href: 'https://www.linkedin.com/company/onehook/', Icon: Linkedin },
-  { label: 'WhatsApp', href: 'https://wa.me/onehook.club', Icon: WhatsAppIcon },
-  { label: 'Snapchat', href: 'https://snapchat.com/add/onehook.club', Icon: SnapchatIcon },
 ];
