@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useMotionValue, useMotionValueEvent, useReducedMotion, useScroll } from 'motion/react';
 import {
@@ -54,6 +54,28 @@ const DONATE_HREF = 'mailto:hello@onehook.club?subject=I%27d%20like%20to%20suppo
 
 const INK = '#0A0B10';
 const PINK = '#ff8fc7';
+
+/**
+ * Lighter rendering for phones, tablets and low-memory devices: the same story, screens and motion,
+ * but without the effects that cost the most memory on a phone GPU — animated/static blur filters,
+ * frosted-glass panels, never-ending decorative loops and most of the peeking mascots. (Heavy pages
+ * were getting their tab killed and reloaded by the browser on some phones.) `?lite=1` / `?lite=0`
+ * forces it either way for testing.
+ */
+function detectLite(): boolean {
+  if (typeof window === 'undefined') return false;
+  const forced = new URLSearchParams(window.location.search).get('lite');
+  if (forced === '1') return true;
+  if (forced === '0') return false;
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  const smallScreen = Math.min(window.screen.width, window.screen.height) < 820;
+  const lowMemory = typeof nav.deviceMemory === 'number' && nav.deviceMemory <= 4;
+  const fewCores = typeof nav.hardwareConcurrency === 'number' && nav.hardwareConcurrency <= 4;
+  return touch || smallScreen || lowMemory || fewCores;
+}
+const LiteContext = createContext(false);
+const useLite = () => useContext(LiteContext);
 
 /* ── Shared bits ───────────────────────────────────────────────────────────── */
 
@@ -784,6 +806,7 @@ function PreviewCard({ p, reduce }: { p: (typeof PREVIEWS)[number]; reduce: bool
  * joined to it by faint lines, and the "free forever" heart glowing softly behind it.
  */
 function ScreenPreviews({ layout, k }: { layout: 'land' | 'port'; k: number }) {
+  const lite = useLite();
   const reduce = useReducedMotion() ?? false;
   const land = layout === 'land';
   const L = LAYOUTS[layout];
@@ -821,13 +844,13 @@ function ScreenPreviews({ layout, k }: { layout: 'land' | 'port'; k: number }) {
         className="absolute -translate-x-1/2 -translate-y-1/2"
         style={{ left: cx, top: cy, width: land ? 760 : 400 }}
         initial={{ opacity: 0, scale: 0.8 }}
-        animate={reduce ? { opacity: 0.16, scale: 1 } : { opacity: [0, 0.18, 0.12, 0.18], scale: [0.8, 1, 1.03, 1] }}
-        transition={reduce ? { duration: 0.3 } : { delay: 0.4, duration: 4, times: [0, 0.3, 0.65, 1], repeat: Infinity, repeatType: 'reverse' }}
+        animate={reduce ? { opacity: 0.16, scale: 1 } : lite ? { opacity: 0.16, scale: 1 } : { opacity: [0, 0.18, 0.12, 0.18], scale: [0.8, 1, 1.03, 1] }}
+        transition={reduce ? { duration: 0.3 } : lite ? { delay: 0.4, duration: 1.2 } : { delay: 0.4, duration: 4, times: [0, 0.3, 0.65, 1], repeat: Infinity, repeatType: 'reverse' }}
       >
         <path
           d="M50 88 C 18 66, 2 46, 2 27 C 2 12, 14 2, 28 2 C 38 2, 46 8, 50 16 C 54 8, 62 2, 72 2 C 86 2, 98 12, 98 27 C 98 46, 82 66, 50 88 Z"
           fill={PINK}
-          style={{ filter: 'blur(2px)' }}
+          style={lite ? undefined : { filter: 'blur(2px)' }}
         />
       </motion.svg>
 
@@ -866,8 +889,8 @@ function ScreenPreviews({ layout, k }: { layout: 'land' | 'port'; k: number }) {
             transition={{ delay: (start + (i % 3) * 0.12 + (i >= 3 ? 0.06 : 0)) * k, type: 'spring', stiffness: 160, damping: 18 }}
           >
             <motion.div
-              animate={reduce ? undefined : { y: [0, -4, 0] }}
-              transition={reduce ? undefined : { duration: 4 + (i % 3) * 0.6, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
+              animate={reduce || lite ? undefined : { y: [0, -4, 0] }}
+              transition={reduce || lite ? undefined : { duration: 4 + (i % 3) * 0.6, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
             >
               <PreviewCard p={p} reduce={reduce} />
             </motion.div>
@@ -992,6 +1015,7 @@ function Cracks({ delay }: { delay: number }) {
  *      key flies into it and her whole history comes back.
  */
 function PhonesStage({ index }: { index: number }) {
+  const lite = useLite();
   const reduce = useReducedMotion() ?? false;
   const still = useMotionValue(0);
   const journey = index === 1;
@@ -1252,8 +1276,8 @@ function PhonesStage({ index }: { index: number }) {
                 className="relative"
               >
                 <motion.div
-                  animate={reduce || index > 0 ? { y: 0 } : { y: [0, -6, 0] }}
-                  transition={reduce || index > 0 ? { duration: 0.4 } : { duration: 3.2, repeat: Infinity, ease: 'easeInOut', delay: 1.4 }}
+                  animate={reduce || lite || index > 0 ? { y: 0 } : { y: [0, -6, 0] }}
+                  transition={reduce || lite || index > 0 ? { duration: 0.4 } : { duration: 3.2, repeat: Infinity, ease: 'easeInOut', delay: 1.4 }}
                   className="relative"
                 >
                   <motion.div
@@ -1616,6 +1640,7 @@ function CaptionMain() {
  * it on widening rings and cover the whole space — big near the centre, smaller further out.
  */
 function TranslationBurst({ layout, k }: { layout: 'land' | 'port'; k: number }) {
+  const lite = useLite();
   const reduce = useReducedMotion() ?? false;
   const land = layout === 'land';
   const W = land ? LAYOUTS.land.w : LAYOUTS.port.w;
@@ -1670,7 +1695,7 @@ function TranslationBurst({ layout, k }: { layout: 'land' | 'port'; k: number })
         <motion.div
           key={b.i}
           className="absolute w-[230px] -translate-x-1/2 -translate-y-1/2"
-          style={b.blurred ? { filter: 'blur(6px)' } : undefined}
+          style={b.blurred && !lite ? { filter: 'blur(6px)' } : undefined}
           initial={{ left: cx, top: cy, scale: 0.2, opacity: 0 }}
           animate={{ left: b.x, top: b.y, scale: b.s, opacity: b.blurred ? 0.35 : 1 }}
           transition={
@@ -1919,6 +1944,7 @@ const PEEKS: PeekDef[] = [
 ];
 
 function MascotPeeks() {
+  const lite = useLite();
   const reduce = useReducedMotion() ?? false;
   const [scale, setScale] = useState(() => (typeof window === 'undefined' ? 1 : Math.min(1, window.innerWidth / 1280)));
   useEffect(() => {
@@ -1936,7 +1962,7 @@ function MascotPeeks() {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.3 } }}
     >
-      {PEEKS.map((p, i) => {
+      {(lite ? PEEKS.filter((_, i) => i === 1 || i === 3 || i === 4) : PEEKS).map((p, i) => {
         const size = Math.round(Math.max(70, p.size * (0.6 + 0.4 * scale)));
 
         if (p.kind === 'float') {
@@ -1949,8 +1975,8 @@ function MascotPeeks() {
                 transition={{ delay: p.delay, type: 'spring', stiffness: 260, damping: 14 }}
               >
                 <motion.div
-                  animate={reduce ? undefined : { y: [0, -9, 0], rotate: [p.tilt - 3, p.tilt + 3, p.tilt - 3] }}
-                  transition={reduce ? undefined : { duration: 4.5 + (i % 2), repeat: Infinity, ease: 'easeInOut' }}
+                  animate={reduce || lite ? { rotate: p.tilt } : { y: [0, -9, 0], rotate: [p.tilt - 3, p.tilt + 3, p.tilt - 3] }}
+                  transition={reduce || lite ? { duration: 0 } : { duration: 4.5 + (i % 2), repeat: Infinity, ease: 'easeInOut' }}
                 >
                   <AlienScanner size={size} hideTooltips bare />
                 </motion.div>
@@ -1984,8 +2010,8 @@ function MascotPeeks() {
               >
                 <motion.div
                   style={{ transformOrigin: '50% 100%' }}
-                  animate={reduce ? { rotate: p.tilt } : { rotate: [p.tilt - 3, p.tilt + 3, p.tilt - 3] }}
-                  transition={reduce ? { duration: 0 } : { duration: 5 + (i % 3), repeat: Infinity, ease: 'easeInOut', delay: p.delay + 0.6 }}
+                  animate={reduce || lite ? { rotate: p.tilt } : { rotate: [p.tilt - 3, p.tilt + 3, p.tilt - 3] }}
+                  transition={reduce || lite ? { duration: 0 } : { duration: 5 + (i % 3), repeat: Infinity, ease: 'easeInOut', delay: p.delay + 0.6 }}
                 >
                   <AlienScanner size={size} hideTooltips bare />
                 </motion.div>
@@ -2265,6 +2291,7 @@ function SceneProgress({ index, reduce }: { index: number; reduce: boolean }) {
 }
 
 export function Messenger() {
+  const [lite] = useState(detectLite);
   const navigate = useNavigate();
   const reduce = useReducedMotion();
   const storyRef = useRef<HTMLDivElement>(null);
@@ -2416,7 +2443,8 @@ export function Messenger() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#FAFAF8] text-text">
+    <LiteContext.Provider value={lite}>
+    <div className={`min-h-screen bg-[#FAFAF8] text-text ${lite ? 'oh-lite' : ''}`}>
       <Seo {...ROUTE_SEO['/messenger']} path="/messenger" />
       <ProgressBar background={`linear-gradient(90deg, ${PINK}, #1F3A6B 50%, ${PINK})`} />
       <SiteHeader pageTitle="Messenger" />
@@ -2463,7 +2491,7 @@ export function Messenger() {
             {/* soft backdrop glow that drifts with the story */}
             <motion.div
               aria-hidden="true"
-              className="pointer-events-none absolute h-[36rem] w-[36rem] rounded-full blur-3xl"
+              className="pointer-events-none absolute h-[36rem] w-[36rem] rounded-full"
               style={{ background: 'radial-gradient(circle, rgba(255,143,199,0.16), transparent 65%)' }}
               animate={{ left: `${10 + (index % 2) * 40}%`, top: `${10 + (index % 3) * 12}%` }}
               transition={{ duration: 1.2, ease: 'easeInOut' }}
@@ -2500,8 +2528,12 @@ export function Messenger() {
                     initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 18 }}
                     animate={
                       finale && !reduce
-                        ? { opacity: [1, 1, 0], scale: [1, 1, 1.18], filter: ['blur(0px)', 'blur(0px)', 'blur(18px)'] }
-                        : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
+                        ? lite
+                          ? { opacity: [1, 1, 0], scale: [1, 1, 1.18] }
+                          : { opacity: [1, 1, 0], scale: [1, 1, 1.18], filter: ['blur(0px)', 'blur(0px)', 'blur(18px)'] }
+                        : lite
+                          ? { opacity: 1, scale: 1, y: 0 }
+                          : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
                     }
                     exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 1.04, y: -18 }}
                     transition={
@@ -2537,11 +2569,11 @@ export function Messenger() {
                       reduce
                         ? { opacity: 0 }
                         : toFinale
-                          ? { opacity: 0, y: '-24vh', scale: 1.35, filter: 'blur(6px)', transition: { duration: 0.75, ease: [0.4, 0, 0.2, 1] } }
+                          ? { opacity: 0, y: '-24vh', scale: 1.35, ...(lite ? {} : { filter: 'blur(6px)' }), transition: { duration: 0.75, ease: [0.4, 0, 0.2, 1] } }
                           : { opacity: 0, y: -14 },
                   }}
                   initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                  animate={lite ? { opacity: 1, y: 0, scale: 1 } : { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
                   exit="exit"
                   transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                 >
@@ -2566,8 +2598,8 @@ export function Messenger() {
                   style={{ bottom: 'clamp(84px, 14vh, 130px)' }}
                   // rises from where the caption sat (below) into the centre, growing into focus — it
                   // starts while screen 7's words are still dissolving upward, so the two blend
-                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: '24vh', scale: 0.55, filter: 'blur(6px)' }}
-                  animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                  initial={reduce ? { opacity: 0 } : lite ? { opacity: 0, y: '24vh', scale: 0.55 } : { opacity: 0, y: '24vh', scale: 0.55, filter: 'blur(6px)' }}
+                  animate={lite ? { opacity: 1, y: 0, scale: 1 } : { opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
                   exit={{ opacity: 0, transition: { duration: 0.3 } }}
                   transition={{ delay: reduce ? 0 : 0.3, duration: reduce ? 0.2 : 1, ease: [0.22, 1, 0.36, 1] }}
                 >
@@ -2639,6 +2671,7 @@ export function Messenger() {
             body="Every message locked end to end, every memory kept safe, on every screen you own — free, forever. All so the two of you can just talk."
             secondary="invite"
             fill
+            lite={lite}
           />
         </div>
       </main>
@@ -2647,5 +2680,6 @@ export function Messenger() {
         <SiteFooter />
       </div>
     </div>
+    </LiteContext.Provider>
   );
 }

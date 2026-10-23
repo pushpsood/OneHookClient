@@ -397,12 +397,16 @@ export function Finale({
   body = 'All of this exists so you can spend less time in a dating app, and more time with the one person worth leaving it for.',
   secondary = 'philosophy',
   fill = false,
+  lite = false,
 }: {
   body?: string;
   /** 'philosophy' → Our philosophy (Science page); 'invite' → Start with an invite (messenger). */
   secondary?: 'philosophy' | 'invite';
   /** Grow to fill a flex-column parent, with the content centred vertically (messenger closer). */
   fill?: boolean;
+  /** Phones / low-memory devices: keep the photo and heartbeat logo, skip the endless ripples and the
+   *  pulsing photo layer. */
+  lite?: boolean;
 } = {}) {
   const navigate = useNavigate();
   const reduce = useReducedMotion() ?? false;
@@ -444,12 +448,12 @@ export function Finale({
         alt=""
         aria-hidden="true"
         loading="lazy"
-        className="oh-photo-pulse absolute inset-0 h-full w-full object-cover opacity-55"
+        className={`${lite ? '' : 'oh-photo-pulse '}absolute inset-0 h-full w-full object-cover opacity-55`}
         style={{ filter: 'grayscale(40%)' }}
       />
 
       {/* A ripple is born on every "lub" and spreads through the photo over four beats. */}
-      {!reduce && (
+      {!reduce && !lite && (
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden mix-blend-screen">
           {[0, 1, 2, 3].map((i) => (
             <span

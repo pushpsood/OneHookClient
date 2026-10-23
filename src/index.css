@@ -274,3 +274,34 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .oh-chrome-shine { animation: none; display: none; }
 }
+
+/* Messenger lighter mode (phones / low-memory devices): frosted glass and blur halos are the costliest
+   things a phone GPU draws, so swap them for solid, slightly more opaque surfaces. */
+.oh-lite .backdrop-blur,
+.oh-lite .backdrop-blur-sm,
+.oh-lite .backdrop-blur-md {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.oh-lite .backdrop-blur-md {
+  background-color: rgba(250, 250, 248, 0.97);
+}
+/* soft contact shadows under the phones: a radial fade instead of a blurred layer */
+.oh-lite .blur-xl {
+  filter: none;
+  background: radial-gradient(closest-side, rgba(10, 11, 16, 0.22), transparent);
+}
+.oh-lite .blur-3xl,
+.oh-lite [class*="blur-[1.5px]"] {
+  filter: none;
+}
+/* the faint white halo around the mock phones is invisible on the light page anyway */
+.oh-lite .blur-2xl {
+  display: none;
+}
+/* heartbeat logo: keep the beat itself, drop the blurred, endlessly pulsing glow behind it */
+.oh-lite .oh-heartglow {
+  animation: none;
+  filter: none !important; /* beats the element's inline blur */
+  opacity: 0.25;
+}
