@@ -32,7 +32,7 @@ import { ROUTE_SEO } from '../../config/seo-routes';
 import { AlienScanner } from '../mascot';
 import { QRCodeSVG } from 'qrcode.react';
 import { ManifestoPhone } from '../Landing';
-import { Finale, ProgressBar } from '../science/Science';
+import { Finale, ProgressBar, useFullScreenEnding } from '../science/Science';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { APP_DOWNLOAD_URL } from '../../config/membership.config';
@@ -2325,16 +2325,7 @@ export function Messenger() {
   }, [n, reduce]);
   const scene = SCENES[index];
   const headerH = useHeaderHeight();
-  // footer height, so closer + footer together are exactly one screen tall
-  const footerRef = useRef<HTMLDivElement>(null);
-  const [footerH, setFooterH] = useState(0);
-  useEffect(() => {
-    const el = footerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setFooterH(Math.round(el.getBoundingClientRect().height)));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const ending = useFullScreenEnding();
   // Last screen ("Free forever"): the heart blurs and fades into the background, and the words take
   // over the whole stage — large and centred — with the buttons staying in their usual place.
   const finale = index === n - 1;
@@ -2558,7 +2549,7 @@ export function Messenger() {
         </div>
         {/* the heartbeat closer (shared with the Science page) + the footer below it fill exactly one
             screen under the header, so the last scroll lands on a clean, full-screen ending */}
-        <div className="flex flex-col" style={{ minHeight: `calc(100svh - ${headerH + footerH}px)` }}>
+        <div className="flex flex-col" style={{ minHeight: ending.minHeight }}>
           <Finale
             body="Every message locked end to end, every memory kept safe, on every screen you own — free, forever. All so the two of you can just talk."
             secondary="invite"
@@ -2567,7 +2558,7 @@ export function Messenger() {
         </div>
       </main>
 
-      <div ref={footerRef}>
+      <div ref={ending.footerRef}>
         <SiteFooter />
       </div>
     </div>

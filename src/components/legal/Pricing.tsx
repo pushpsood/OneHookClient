@@ -208,13 +208,16 @@ export function Pricing() {
             Memberships
           </h1>
           <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-accent/25 bg-accent/5 px-5 py-3 text-sm text-accent">
-            <p className="font-semibold">Every feature of the OneHook Messenger is free, forever, on every plan.</p>
+            <p className="font-semibold">
+              Every feature of the{' '}
+              <span className="underline decoration-2 underline-offset-4">OneHook Messenger is free, forever</span>, on every plan.
+            </p>
             <Link
               to="/messenger"
               {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
-              className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.2em] underline-offset-4 hover:underline"
+              className="mt-1.5 inline-block text-[11px] font-bold uppercase tracking-[0.14em] underline-offset-4 hover:underline sm:text-xs sm:tracking-[0.2em]"
             >
-              Know more <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              Know more about OneHook Messenger&nbsp;<ArrowRight className="inline h-3.5 w-3.5 align-[-2px]" aria-hidden="true" />
             </Link>
           </div>
           <p className="mt-2 text-[11px] opacity-50">Mr OneHook, the AI helper, gives 10 messages a day on the free plan.</p>

@@ -368,6 +368,31 @@ function PromisesChapter() {
  * "Thousands of quiet signals. One connection." — the heartbeat closer. Shared with the messenger
  * page, which passes its own supporting line and secondary action (the Science page keeps its own).
  */
+/**
+ * Sizes a page's closing section so that it and the footer below it fill exactly one screen under the
+ * sticky header — the last scroll lands on a clean, full-screen ending. Attach `footerRef` to a
+ * wrapper around the footer and give the closer's wrapper `style={{ minHeight }}`.
+ */
+export function useFullScreenEnding() {
+  const footerRef = useRef<HTMLDivElement>(null);
+  const [headerH, setHeaderH] = useState(0);
+  const [footerH, setFooterH] = useState(0);
+  useEffect(() => {
+    const header = document.querySelector('header');
+    const footer = footerRef.current;
+    const measure = () => {
+      setHeaderH(header ? Math.round(header.getBoundingClientRect().height) : 0);
+      setFooterH(footer ? Math.round(footer.getBoundingClientRect().height) : 0);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (header) ro.observe(header);
+    if (footer) ro.observe(footer);
+    return () => ro.disconnect();
+  }, []);
+  return { footerRef, minHeight: `calc(100svh - ${headerH + footerH}px)` };
+}
+
 export function Finale({
   body = 'All of this exists so you can spend less time in a dating app, and more time with the one person worth leaving it for.',
   secondary = 'philosophy',
@@ -480,6 +505,7 @@ export function Finale({
 /* ── Page ──────────────────────────────────────────────────────────────────── */
 
 export function Science() {
+  const ending = useFullScreenEnding();
 
   return (
     <div className="min-h-screen" style={{ background: BRAND.paper }}>
@@ -571,11 +597,16 @@ export function Science() {
         </Chapter>
 
         <PromisesChapter />
-        {/* The finale carries the couple photo, so it reads as its own section after Promises. */}
-        <Finale />
+        {/* The finale carries the couple photo, so it reads as its own section after Promises. With
+            the footer it fills exactly one screen, so the last scroll lands on a clean ending. */}
+        <div className="flex flex-col" style={{ minHeight: ending.minHeight }}>
+          <Finale fill />
+        </div>
       </main>
 
-      <SiteFooter />
+      <div ref={ending.footerRef}>
+        <SiteFooter />
+      </div>
 
     </div>
   );
