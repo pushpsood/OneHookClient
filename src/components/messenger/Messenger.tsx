@@ -2083,7 +2083,8 @@ function MascotPeeks() {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.3 } }}
     >
-      {(lite ? PEEKS.filter((_, i) => i === 1 || i === 3 || i === 4) : PEEKS).map((p, i) => {
+      {/* lighter mode (phones): four of the seven — incl. the one peeking in from the left, just above centre */}
+      {(lite ? PEEKS.filter((_, i) => i === 1 || i === 2 || i === 3 || i === 4) : PEEKS).map((p, i) => {
         const size = Math.round(Math.max(70, p.size * (0.6 + 0.4 * scale)));
 
         if (p.kind === 'float') {
@@ -2775,7 +2776,7 @@ export function Messenger() {
 
             {/* phones: the strip a collapsed browser toolbar uncovers (100lvh − 100svh) — it shows only
                 then, and nothing else moves */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center sm:hidden" style={{ height: 'calc(100lvh - 100svh)' }}>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center overflow-hidden sm:hidden" style={{ height: 'calc(100lvh - 100svh)' }}>
               <button
                 type="button"
                 onClick={() => navigate('/redeem')}
