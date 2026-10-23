@@ -19,7 +19,7 @@ import type { EngineId, SignalKind } from './science-model';
  *
  * Narrative spine (each chapter hands off to the next):
  *   hero (three orbits around the logo) → 01 a single moment → 02 its journey → 03 the three minds
- *   → 04 time turns moments into intent → 05 Mr OneHook, help without reading over your shoulder
+ *   → 04 time turns moments into intent → 05 Mr OneHook, someone to talk your matches through with
  *   → 06 the promises, including erasure → finale (every orbit collapses into the logo).
  *
  * Composition is deliberately symmetric: centred headings, mirrored hairlines, equal columns,
@@ -548,14 +548,13 @@ export function Science() {
           kicker="Mr OneHook"
           title={
             <>
-              An assistant that <Accent>asks</Accent> before it looks
+              Someone to <Accent>talk</Accent> it through with
             </>
           }
           lede={
             <p>
-              Mr OneHook can help you reply, break the ice or plan a first date. Your chats are end-to-end encrypted, so it cannot simply read
-              them, and it is not allowed to. Your phone does the searching, you choose the lines, and they are forgotten once the suggestion
-              arrives. Tick a message to see exactly what would leave your phone.
+              Tell Mr OneHook the kind of person you want, and about the profiles you liked most. Ask who to reply to, what to say or where
+              to meet. He helps you think, and you decide.
             </p>
           }
           handoff="Every one of these choices comes from a short list of promises."

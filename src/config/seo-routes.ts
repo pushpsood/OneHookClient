@@ -74,7 +74,7 @@ const MESSENGER_JSON_LD = {
 
 export const ROUTE_SEO: Record<string, RouteSeo> = {
   '/': {
-    title: 'OneHook — Intentional Dating App for One Real Connection',
+    title: 'OneHook — Intentional Messaging App for One Real Connection',
     description:
       'OneHook is a private, intentional dating app for one meaningful connection at a time — no endless swiping or ghosting, just real, end-to-end encrypted conversations.',
   },

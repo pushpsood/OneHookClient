@@ -1582,17 +1582,17 @@ export function Landing() {
     const el = getAppRef.current;
     if (!el) return;
 
-    // Disable animation on mobile devices
-    const isMobile = window.innerWidth < 768; // md breakpoint
-    if (isMobile) {
-      appLeftX.set(0);
-      appRightX.set(0);
-      return;
-    }
-
     let maxConverge = 0;
     let raf = 0;
     const update = () => {
+      // Below md the two columns stack into rows: no sideways drift, both stay dead centre.
+      // Checked on every frame (not once at mount) so resizing into the stacked layout re-centres.
+      if (window.innerWidth < 768) {
+        maxConverge = 0;
+        appLeftX.set(0);
+        appRightX.set(0);
+        return;
+      }
       const rect = el.getBoundingClientRect();
       const viewportH = window.innerHeight || 1;
       const sectionCenter = rect.top + rect.height / 2;
@@ -1681,6 +1681,15 @@ export function Landing() {
   const [activeStep, setActiveStep] = useState(0);
   const [activeSection, setActiveSection] = useState<string>('');
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  // Desktop nav: keep the four in-page section links inline while they fit; once the nav would
+  // overflow, fold them into an "Explore" dropdown. Measured, so it reacts to the real available width.
+  const [exploreOpen, setExploreOpen] = useState(false);
+  // 0: everything inline · 1: the four section links folded into Explore · 2: everything in Explore
+  const [navLevel, setNavLevel] = useState<0 | 1 | 2>(0);
+  const navRowRef = useRef<HTMLDivElement>(null);
+  const navLinksRef = useRef<HTMLDivElement>(null);
+  const measureFullRef = useRef<HTMLDivElement>(null);
+  const measureSectionsRef = useRef<HTMLDivElement>(null);
   // Auto-advancing "spotlight" couple in the stories accordion; pauses while the visitor interacts.
   const [spotlight, setSpotlight] = useState(0);
   const [storyPaused, setStoryPaused] = useState(false);
@@ -1928,10 +1937,35 @@ export function Landing() {
     stepsRailRef.current?.scrollTo({ left: 0, behavior: 'auto' });
   };
 
+  // Fold the nav into Explore only when it would overlap: first the four section links, then — if it
+  // still doesn't fit — everything else too. Decided from the natural widths of two hidden measuring
+  // copies against the space actually available, so it reacts to the real layout (and late font loads).
+  useLayoutEffect(() => {
+    const box = navLinksRef.current;
+    const full = measureFullRef.current;
+    const sections = measureSectionsRef.current;
+    if (!box || !full || !sections) return;
+    const check = () => {
+      const avail = box.clientWidth - 8;
+      const next: 0 | 1 | 2 = full.scrollWidth <= avail ? 0 : sections.scrollWidth <= avail ? 1 : 2;
+      setNavLevel((prev) => (prev === next ? prev : next));
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(box);
+    ro.observe(full);
+    window.addEventListener('resize', check);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', check);
+    };
+  }, []);
+
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
     element?.scrollIntoView({ behavior: 'smooth' });
     setIsMobileNavOpen(false);
+    setExploreOpen(false);
   };
 
   // Nav link styling with an active-section underline (scroll-spy driven).
@@ -2045,7 +2079,7 @@ export function Landing() {
 
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-border">
-        <div className="relative w-full px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
+        <div ref={navRowRef} className="relative w-full px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <BrandWordmark
             className="font-bold tracking-tighter uppercase shrink-0"
             imageClassName="h-10 w-auto sm:h-10"
@@ -2053,60 +2087,138 @@ export function Landing() {
           />
           {/* Primary nav — centred between the logo and the actions (in-flow, so it can never
               overlap the side buttons) */}
-          <div className="hidden xl:flex min-w-0 flex-1 items-center justify-center gap-4 2xl:gap-7">
-            <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
-              className={deskNav('science')}
-            >
-              <span className="flex flex-col items-center leading-none"><span className="text-[8px] font-semibold uppercase tracking-[0.2em] opacity-60">Dating</span>Science</span>
-            </Link>
-            <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
-              className={deskNav('messenger')}
-            >
-              <span className="flex flex-col items-center leading-none"><span className="text-[8px] font-semibold uppercase tracking-[0.2em] opacity-60">Private</span>Messenger</span>
-            </Link>
-            <span aria-hidden="true" className="h-4 w-px bg-border" />
-            <button
-              onClick={() => scrollToSection('philosophy')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'philosophy' })}
-              className={deskNav('philosophy')}
-            >
-              Philosophy
-            </button>
-            <button
-              onClick={() => scrollToSection('features')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'features' })}
-              className={deskNav('features')}
-            >
-              How it works
-            </button>
-            <button
-              onClick={() => scrollToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })}
-              className={deskNav('under-the-hood')}
-            >
-              Mr.OneHook
-            </button>
-            <button
-              onClick={() => scrollToSection('get-app')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'get_app' })}
-              className={deskNav('get-app')}
-            >
-              Get the app
-            </button>
-            <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
-              className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
-            >
-              Pricing
-            </Link>
-            <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
-              className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
-            >
-              Science
-            </Link>
-            <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
-              className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
-            >
-              Messenger
-            </Link>
+          <div ref={navLinksRef} className="relative hidden md:flex min-w-0 flex-1 items-center justify-center gap-4 2xl:gap-7">
+            {/* Invisible measuring copies (no handlers): their natural widths decide how much of the nav
+                fits — level 0 everything inline, level 1 sections in Explore, level 2 all in Explore. */}
+            <div aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 flex flex-col">
+              <div ref={measureFullRef} className="flex w-max items-center gap-4 whitespace-nowrap 2xl:gap-7">
+                <span className={deskNav('')}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Dating</span>Science</span></span>
+                <span className={deskNav('')}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Private</span>Messenger</span></span>
+                <span className="h-4 w-px" />
+                <span className={deskNav('')}>Philosophy</span>
+                <span className={deskNav('')}>How it works</span>
+                <span className={deskNav('')}>Mr.OneHook</span>
+                <span className={deskNav('')}>Get the app</span>
+                <span className="h-4 w-px" />
+                <span className={deskNav('')}>Pricing</span>
+              </div>
+              <div ref={measureSectionsRef} className="flex w-max items-center gap-4 whitespace-nowrap 2xl:gap-7">
+                <span className={deskNav('')}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Dating</span>Science</span></span>
+                <span className={deskNav('')}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Private</span>Messenger</span></span>
+                <span className="h-4 w-px" />
+                <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.2em]">Explore<ChevronDown className="h-3.5 w-3.5" /></span>
+                <span className="h-4 w-px" />
+                <span className={deskNav('')}>Pricing</span>
+              </div>
+            </div>
+
+            {navLevel < 2 && (
+              <>
+                <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
+                  className={deskNav('science')}
+                >
+                  <span className="flex flex-col items-center leading-none"><span className="text-[8px] font-semibold uppercase tracking-[0.2em] opacity-60">Dating</span>Science</span>
+                </Link>
+                <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
+                  className={deskNav('messenger')}
+                >
+                  <span className="flex flex-col items-center leading-none"><span className="text-[8px] font-semibold uppercase tracking-[0.2em] opacity-60">Private</span>Messenger</span>
+                </Link>
+                <span aria-hidden="true" className="h-4 w-px bg-border" />
+              </>
+            )}
+
+            {navLevel === 0 ? (
+              <>
+                <button
+                  onClick={() => scrollToSection('philosophy')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'philosophy' })}
+                  className={deskNav('philosophy')}
+                >
+                  Philosophy
+                </button>
+                <button
+                  onClick={() => scrollToSection('features')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'features' })}
+                  className={deskNav('features')}
+                >
+                  How it works
+                </button>
+                <button
+                  onClick={() => scrollToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })}
+                  className={deskNav('under-the-hood')}
+                >
+                  Mr.OneHook
+                </button>
+                <button
+                  onClick={() => scrollToSection('get-app')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'get_app' })}
+                  className={deskNav('get-app')}
+                >
+                  Get the app
+                </button>
+              </>
+            ) : (
+              <div className="relative" onMouseEnter={() => setExploreOpen(true)} onMouseLeave={() => setExploreOpen(false)}>
+                <button
+                  onClick={() => setExploreOpen((v) => !v)}
+                  {...trackProps(UiElement.LANDING_MOBILE_MENU_TOGGLE, { value: exploreOpen ? 'closed' : 'open' })}
+                  aria-expanded={exploreOpen}
+                  className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
+                >
+                  Explore
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${exploreOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {exploreOpen && (
+                  <div className="absolute left-1/2 top-full z-50 w-52 -translate-x-1/2 pt-3">
+                    <div className="border border-border bg-white shadow-lg">
+                      {navLevel === 2 && (
+                        <>
+                          <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })} className={mobNav('science', false)}>
+                            Dating Science
+                          </Link>
+                          <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className={mobNav('messenger')}>
+                            Private Messenger
+                          </Link>
+                          <span aria-hidden="true" className="block h-[2px] bg-black/80" />
+                        </>
+                      )}
+                      <button onClick={() => scrollToSection('philosophy')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'philosophy' })} className={mobNav('philosophy', false)}>
+                        Philosophy
+                      </button>
+                      <button onClick={() => scrollToSection('features')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'features' })} className={mobNav('features')}>
+                        How it works
+                      </button>
+                      <button onClick={() => scrollToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })} className={mobNav('under-the-hood')}>
+                        Mr.OneHook
+                      </button>
+                      <button onClick={() => scrollToSection('get-app')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'get_app' })} className={mobNav('get-app')}>
+                        Get the app
+                      </button>
+                      {navLevel === 2 && (
+                        <>
+                          <span aria-hidden="true" className="block h-[2px] bg-black/80" />
+                          <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className={mobNav('pricing', false)}>
+                            Pricing
+                          </Link>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {navLevel < 2 && (
+              <>
+                <span aria-hidden="true" className="h-4 w-px bg-border" />
+                <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
+                  className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
+                >
+                  Pricing
+                </Link>
+              </>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
-            <div className="relative xl:hidden">
+            <div className="relative md:hidden">
               <button
                 onClick={() => setIsMobileNavOpen((prev) => !prev)}
                 {...trackProps(UiElement.LANDING_MOBILE_MENU_TOGGLE, { value: isMobileNavOpen ? 'closed' : 'open' })}
@@ -2122,6 +2234,14 @@ export function Landing() {
 
               {isMobileNavOpen && (
                 <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-48 border border-border bg-white shadow-lg">
+                  {/* same order as the full desktop header */}
+                  <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })} className={mobNav('science', false)}>
+                    Dating Science
+                  </Link>
+                  <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className={mobNav('messenger')}>
+                    Private Messenger
+                  </Link>
+                  <span aria-hidden="true" className="block h-[2px] bg-black/80" />
                   <button
                     onClick={() => scrollToSection('philosophy')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'philosophy' })}
                     className={mobNav('philosophy', false)}
@@ -2146,27 +2266,16 @@ export function Landing() {
                   >
                     Get the app
                   </button>
-                  <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
-                    className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
-                  >
+                  <span aria-hidden="true" className="block h-[2px] bg-black/80" />
+                  <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className={mobNav('pricing', false)}>
                     Pricing
-                  </Link>
-                  <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
-                    className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
-                  >
-                    Dating Science
-                  </Link>
-                  <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
-                    className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
-                  >
-                    Private Messenger
                   </Link>
                 </div>
               )}
             </div>
 
             {/* Account button next to the actions — same accent style as Logout/Redeem */}
-            <div className="hidden xl:flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-3">
               <button
                 onClick={() => navigate(isAuthenticated ? '/app' : '/login')}
                 {...trackProps(UiElement.LANDING_LOGIN)}
@@ -2179,7 +2288,7 @@ export function Landing() {
             <button
               onClick={() => navigate(isAuthenticated ? '/app' : '/login')}
               {...trackProps(UiElement.LANDING_LOGIN)}
-              className="xl:hidden px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
+              className="md:hidden px-4 sm:px-6 py-2 bg-accent text-white text-[10px] sm:text-xs font-bold uppercase tracking-[0.22em] sm:tracking-[0.3em] hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
             >
               {isAuthenticated ? 'Dashboard' : 'Sign in'}
             </button>

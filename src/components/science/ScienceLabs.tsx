@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { Check, Clock, Lock, MessageSquareQuote, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
+import { Check, Clock } from 'lucide-react';
 import { AlienScanner } from '../mascot';
 import { BRAND, ENGINE_META, Meter, Panel, Range, Toggle, labelClass } from './ScienceUi';
 import { CURVE_MAX_MIN, CURVE_MIN_MIN, ReplyCurve } from './ScienceDiagrams';
@@ -517,99 +517,97 @@ export function IntentLab() {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────────
- * Chapter 5 — Mr OneHook. Symmetric: your phone · Mr OneHook · what leaves.
+ * Chapter 5 — Mr OneHook. Symmetric: what you can talk about · Mr OneHook · his reply.
+ * A visitor picks a topic; the chat card plays that short exchange.
  * ────────────────────────────────────────────────────────────────────────────── */
 
-const SAMPLE_MESSAGES = [
-  { id: 'm1', from: 'Them', text: 'Okay, controversial: is filter coffee better than espresso?' },
-  { id: 'm2', from: 'You', text: 'Filter, obviously. My grandmother would disown me otherwise.' },
-  { id: 'm3', from: 'Them', text: 'Ha! Then you owe me a cup at that place near Bandstand.' },
-];
-
-const FLOW = [
-  { Icon: Lock, title: 'Encrypted end to end', body: 'Chats are locked between two phones. OneHook’s servers cannot read them.' },
-  { Icon: Smartphone, title: 'Unlocked on your phone', body: 'When you ask for help, your phone searches your messages locally.' },
-  { Icon: MessageSquareQuote, title: 'You choose the lines', body: 'Only the few lines you confirm are sent. Nothing else.' },
-  { Icon: ShieldCheck, title: 'Used, then forgotten', body: 'Those lines live in memory for one request. Never stored, never logged.' },
-  { Icon: Sparkles, title: 'A thoughtful nudge', body: 'A reply or a date idea. You decide what to send.' },
-];
+const MR_TOPICS = [
+  {
+    id: 'want',
+    label: 'What I’m looking for',
+    ask: 'I want someone calm, who reads and actually plans weekends.',
+    reply: 'Calm, a reader, a planner. Then look past “chill vibes” and for prompts about books and real plans.',
+  },
+  {
+    id: 'liked',
+    label: 'Who I liked',
+    ask: 'I really liked the guy who loves filter coffee and old Delhi walks.',
+    reply: 'Nice pick. Slow mornings and curiosity seem to matter to you. Look for that in the next profiles too.',
+  },
+  {
+    id: 'suggest',
+    label: 'Ask for a suggestion',
+    ask: 'Between the two I liked, who should I reply to first?',
+    reply: 'The one who asked you a question back. Replies that ask tend to keep going.',
+  },
+  {
+    id: 'date',
+    label: 'Plan a first date',
+    ask: 'He likes coffee. Where should we meet?',
+    reply: 'A quiet café in Khan Market on a weekend morning. Easy to talk, easy to leave.',
+  },
+] as const;
 
 export function MrOneHookLab() {
-  const [shared, setShared] = useState<Set<string>>(() => new Set(['m3']));
-  const toggle = (id: string) =>
-    setShared((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const payload = SAMPLE_MESSAGES.filter((m) => shared.has(m.id));
+  const reduce = useReducedMotion();
+  const [topicId, setTopicId] = useState<(typeof MR_TOPICS)[number]['id']>('want');
+  const topic = MR_TOPICS.find((t) => t.id === topicId) ?? MR_TOPICS[0];
 
   return (
-    <div className="space-y-8">
-      <ol className="relative grid gap-6 sm:grid-cols-5">
-        <span aria-hidden="true" className="absolute left-[10%] right-[10%] top-5 hidden h-px bg-black/10 sm:block" />
-        {FLOW.map(({ Icon, title, body }) => (
-          <li key={title} className="relative flex flex-col items-center text-center">
-            <span className="grid h-10 w-10 place-items-center rounded-full border bg-white" style={{ borderColor: BRAND.hairlineLight, color: BRAND.navy }}>
-              <Icon className="h-4 w-4" aria-hidden="true" />
-            </span>
-            <p className="mt-4 text-sm font-semibold">{title}</p>
-            <p className="mt-1.5 max-w-[180px] text-xs font-light leading-relaxed text-black/50">{body}</p>
-          </li>
-        ))}
-      </ol>
+    <div className="grid items-center gap-8 lg:grid-cols-[1fr_auto_1fr]">
+      <Panel className="h-full">
+        <p className={`${labelClass} text-center text-black/40`}>Talk to him about</p>
+        <ul className="mt-5 space-y-2.5">
+          {MR_TOPICS.map((t) => {
+            const on = t.id === topicId;
+            return (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => setTopicId(t.id)}
+                  {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_tab' })}
+                  aria-pressed={on}
+                  className={`w-full rounded-2xl px-4 py-3 text-left text-sm transition-colors ${on ? 'font-semibold text-white' : 'bg-black/[0.04] font-light hover:bg-black/[0.07]'}`}
+                  style={on ? { background: BRAND.navy } : undefined}
+                >
+                  {t.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </Panel>
 
-      <div className="grid items-center gap-8 lg:grid-cols-[1fr_auto_1fr]">
-        <Panel className="h-full">
-          <p className={`${labelClass} text-center text-black/40`}>On your phone · decrypted</p>
-          <ul className="mt-5 space-y-3">
-            {SAMPLE_MESSAGES.map((m) => {
-              const on = shared.has(m.id);
-              return (
-                <li key={m.id}>
-                  <label className={`flex cursor-pointer items-start gap-3 ${m.from === 'You' ? 'flex-row-reverse text-right' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() => toggle(m.id)}
-                      className="mt-3 h-3.5 w-3.5 shrink-0"
-                      style={{ accentColor: BRAND.navy }}
-                      aria-label={`Share “${m.text}” with Mr OneHook`}
-                    />
-                    <span
-                      className={`rounded-2xl px-4 py-2.5 text-sm font-light ${m.from === 'You' ? 'text-white' : 'bg-black/[0.04]'}`}
-                      style={{
-                        ...(m.from === 'You' ? { background: BRAND.navy } : {}),
-                        ...(on ? { boxShadow: `0 0 0 2px #FFFFFF, 0 0 0 3.5px ${E.deep}` } : {}),
-                      }}
-                    >
-                      {m.text}
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
-
-        <div className="flex flex-col items-center gap-3 px-4">
-          <div className="w-28 lg:w-36" aria-hidden="true">
-            <AlienScanner />
-          </div>
-          <p className={`${labelClass} text-black/40`}>Mr OneHook</p>
+      <div className="flex flex-col items-center gap-3 px-4">
+        <div className="w-28 lg:w-36" aria-hidden="true">
+          <AlienScanner />
         </div>
+        <p className={`${labelClass} text-black/40`}>Mr OneHook</p>
+      </div>
 
-        <div className="h-full rounded-[28px] p-6 font-mono text-xs text-white/80 sm:p-9" style={{ background: BRAND.ink }} aria-live="polite">
-          <p className={`${labelClass} mb-4 text-center font-sans text-white/45`}>What leaves your phone</p>
-          {payload.length === 0 ? (
-            <p className="text-center font-sans font-light text-white/55">Nothing. Mr OneHook can still help from your profiles alone.</p>
-          ) : (
-            <pre className="whitespace-pre-wrap leading-relaxed">
-              {JSON.stringify({ excerpts: payload.map((m) => ({ from: m.from.toLowerCase(), text: m.text })), stored: false }, null, 2)}
-            </pre>
-          )}
-        </div>
+      <div className="flex h-full flex-col rounded-[28px] p-6 sm:p-9" style={{ background: BRAND.ink }} aria-live="polite">
+        <p className={`${labelClass} mb-5 text-center text-white/45`}>Your chat with him</p>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={topic.id}
+            initial={reduce ? false : { opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={reduce ? undefined : { opacity: 0, y: -8 }}
+            transition={{ duration: 0.3 }}
+            className="flex flex-col gap-3"
+          >
+            <p className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-white px-4 py-2.5 text-sm font-light text-black">{topic.ask}</p>
+            <motion.p
+              initial={reduce ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: reduce ? 0 : 0.55, duration: 0.3 }}
+              className="mr-auto max-w-[85%] rounded-2xl rounded-bl-md bg-white/10 px-4 py-2.5 text-sm font-light text-white/90"
+            >
+              {topic.reply}
+            </motion.p>
+          </motion.div>
+        </AnimatePresence>
+        <p className="mt-auto pt-6 text-center text-[11px] font-light text-white/40">You choose what to share. Your match chats stay encrypted.</p>
       </div>
     </div>
   );

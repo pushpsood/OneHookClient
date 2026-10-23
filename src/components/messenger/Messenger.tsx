@@ -1756,6 +1756,10 @@ const MR_MESSAGES = [
   { from: 'You', text: 'I miss how we used to talk.', pick: true },
 ] as const;
 
+// Brushed silver, toned down a step so it still reads on the light page.
+const SILVER_LINE_H = 'linear-gradient(90deg, #7F8792, #B9BFC8 50%, #7F8792)';
+const SILVER_LINE_V = 'linear-gradient(180deg, #7F8792, #B9BFC8 50%, #7F8792)';
+
 function SceneMrOneHook() {
   const reduce = useReducedMotion() ?? false;
   const k = reduce ? 0.3 : 1;
@@ -1813,21 +1817,43 @@ function SceneMrOneHook() {
 
         {/* centre · Mr OneHook, in full */}
         <div className="relative flex min-h-[300px] flex-col items-center justify-center gap-3">
-          {/* the ticked lines travelling through him */}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-1/2 hidden lg:block">
+          {/* brushed-silver links from each card to Mr OneHook — horizontal when the three sit side by
+              side, vertical when they stack. Each is two segments that stop short of him (so nothing runs
+              through his face), with the ticked lines travelling along them as pink dots. */}
+          <div aria-hidden="true" className="pointer-events-none absolute -inset-x-6 top-1/2 hidden -translate-y-1/2 items-center lg:flex">
+            <span className="block h-[2px] flex-1 rounded-full" style={{ background: SILVER_LINE_H }} />
+            <span className="w-[150px] shrink-0" />
+            <span className="block h-[2px] flex-1 rounded-full" style={{ background: SILVER_LINE_H }} />
             {[0, 1].map((d) => (
               <motion.span
                 key={d}
-                className="absolute h-2 w-2 rounded-full"
+                className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full"
                 style={{ background: PINK }}
                 initial={{ left: '0%', opacity: 0 }}
-                animate={{ left: ['0%', '100%'], opacity: [0, 1, 0] }}
+                animate={{ left: ['0%', '100%'], opacity: [0, 1, 1, 0] }}
                 transition={{ delay: (1.6 + d * 0.35) * k, duration: 1.3, repeat: Infinity, repeatDelay: 1.4 }}
               />
             ))}
           </div>
-          <AlienScanner size={108} hideTooltips />
-          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-black/40">Mr OneHook</p>
+          <div aria-hidden="true" className="pointer-events-none absolute -inset-y-6 left-1/2 flex w-2 -translate-x-1/2 flex-col items-center lg:hidden">
+            <span className="block w-[3px] min-w-[3px] flex-1 rounded-full" style={{ background: SILVER_LINE_V }} />
+            <span className="h-[170px] shrink-0" />
+            <span className="block w-[3px] min-w-[3px] flex-1 rounded-full" style={{ background: SILVER_LINE_V }} />
+            {[0, 1].map((d) => (
+              <motion.span
+                key={d}
+                className="absolute left-1/2 h-2 w-2 -translate-x-1/2 rounded-full"
+                style={{ background: PINK }}
+                initial={{ top: '0%', opacity: 0 }}
+                animate={{ top: ['0%', '100%'], opacity: [0, 1, 1, 0] }}
+                transition={{ delay: (1.6 + d * 0.35) * k, duration: 1.3, repeat: Infinity, repeatDelay: 1.4 }}
+              />
+            ))}
+          </div>
+          <div className="relative z-[1] flex flex-col items-center gap-3">
+            <AlienScanner size={108} hideTooltips />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-black/40">Mr OneHook</p>
+          </div>
         </div>
 
         {/* right · exactly what leaves your phone */}

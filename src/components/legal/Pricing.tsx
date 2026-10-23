@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Check, Minus, Sparkles, Smartphone } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, Check, Minus, Sparkles, Smartphone } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { Seo } from '../common/Seo';
@@ -192,9 +193,17 @@ export function Pricing() {
           <h1 className="text-5xl md:text-6xl font-serif italic tracking-tight mb-6">
             Memberships
           </h1>
-          <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-accent/25 bg-accent/5 px-5 py-3 text-sm font-semibold text-accent">
-            Messaging is free forever — keep OneHook as your everyday encrypted messenger.
+          <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-accent/25 bg-accent/5 px-5 py-3 text-sm text-accent">
+            <p className="font-semibold">Every feature of the OneHook Messenger is free, forever, on every plan.</p>
+            <Link
+              to="/messenger"
+              {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
+              className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.2em] underline-offset-4 hover:underline"
+            >
+              Know more <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
           </div>
+          <p className="mt-2 text-[11px] opacity-50">Mr OneHook, the AI helper, gives 10 messages a day on the free plan.</p>
           <p className="text-base opacity-60 max-w-2xl mx-auto mt-5">
             Paid tiers add discovery reach for when you&apos;re actively dating. Only{' '}
             {MEMBERSHIP_TIERS.filter((t) => t.maxConnections > 1).map((t) => t.displayName).join(' and ')}{' '}
