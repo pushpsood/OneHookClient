@@ -2172,10 +2172,10 @@ export function Landing() {
                       {navLevel === 2 && (
                         <>
                           <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })} className={mobNav('science', false)}>
-                            Dating Science
+                            <span className="flex flex-col leading-none"><span className="text-[8px] font-semibold tracking-[0.2em] opacity-60">Dating</span><span className="mt-1">Science</span></span>
                           </Link>
                           <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className={mobNav('messenger')}>
-                            Private Messenger
+                            <span className="flex flex-col leading-none"><span className="text-[8px] font-semibold tracking-[0.2em] opacity-60">Private</span><span className="mt-1">Messenger</span></span>
                           </Link>
                           <span aria-hidden="true" className="block h-[2px] bg-black/80" />
                         </>
@@ -2236,10 +2236,10 @@ export function Landing() {
                 <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-48 border border-border bg-white shadow-lg">
                   {/* same order as the full desktop header */}
                   <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })} className={mobNav('science', false)}>
-                    Dating Science
+                    <span className="flex flex-col leading-none"><span className="text-[8px] font-semibold tracking-[0.2em] opacity-60">Dating</span><span className="mt-1">Science</span></span>
                   </Link>
                   <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className={mobNav('messenger')}>
-                    Private Messenger
+                    <span className="flex flex-col leading-none"><span className="text-[8px] font-semibold tracking-[0.2em] opacity-60">Private</span><span className="mt-1">Messenger</span></span>
                   </Link>
                   <span aria-hidden="true" className="block h-[2px] bg-black/80" />
                   <button
