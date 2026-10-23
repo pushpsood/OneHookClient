@@ -137,40 +137,52 @@ function TierCard({ tier, period }: { key?: string; tier: MembershipTier; period
 }
 
 /** Mobile-only: one stacked card per tier listing every feature value. */
-function StackedTierFeatures({ tier }: { key?: string; tier: MembershipTier }) {
+/**
+ * Mobile comparison: the tiers stay side by side as three columns (with a header that sticks under
+ * the site header while you scroll), and each feature name gets its own full-width line above its
+ * three values — so every row can be compared at a glance even on a narrow phone.
+ */
+function MobileCompare({ period }: { period: BillingPeriod }) {
+  const cols = { gridTemplateColumns: `repeat(${MEMBERSHIP_TIERS.length}, minmax(0, 1fr))` };
   return (
-    <div
-      className={`rounded-2xl border p-6 bg-white ${
-        tier.mostPopular ? 'border-accent' : 'border-border'
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-serif italic">{tier.displayName}</h3>
-        {tier.mostPopular && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.2em] text-accent">
-            <Sparkles className="w-3 h-3" /> Popular
-          </span>
-        )}
-      </div>
-      <div className="mt-4 space-y-5">
-        {FEATURE_GROUPS.map((group) => (
-          <div key={group.title}>
-            <h4 className="text-[11px] font-bold uppercase tracking-[0.15em] opacity-40 mb-2">
-              {group.title}
-            </h4>
-            <ul className="space-y-2">
-              {group.rows.map((row: FeatureRow) => (
-                <li key={row.label} className="flex items-center justify-between gap-4 text-sm">
-                  <span className="opacity-70">{row.label}</span>
-                  <span className="shrink-0 font-medium">
-                    <FeatureCell value={row.values[tier.wire]} />
-                  </span>
-                </li>
-              ))}
-            </ul>
+    <div className="rounded-2xl border border-border bg-white">
+      <div className="sticky top-[68px] z-10 grid rounded-t-2xl border-b border-border bg-white/95 backdrop-blur" style={cols}>
+        {MEMBERSHIP_TIERS.map((tier) => (
+          <div
+            key={tier.wire}
+            className={`flex flex-col items-center gap-0.5 px-1 py-3 text-center ${tier.mostPopular ? 'bg-accent/5' : ''}`}
+          >
+            <span className="text-base font-serif italic leading-tight">{tier.displayName}</span>
+            {tier.mostPopular && (
+              <span className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-[0.15em] text-accent">
+                <Sparkles className="h-2.5 w-2.5" /> Popular
+              </span>
+            )}
+            <span className="text-[10px] opacity-50">{priceLabel(tier, period)}</span>
           </div>
         ))}
       </div>
+
+      {FEATURE_GROUPS.map((group) => (
+        <div key={group.title}>
+          <h4 className="block w-full border-b border-border bg-black/[0.03] px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-[0.15em] text-black/50">{group.title}</h4>
+          <ul>
+            {group.rows.map((row: FeatureRow) => (
+              <li key={row.label} className="border-b border-border px-3 pb-2.5 pt-3 last:border-b-0">
+                <p className="mb-2 text-center text-xs opacity-70">{row.label}</p>
+                <div className="grid text-[13px] font-medium leading-snug" style={cols}>
+                  {MEMBERSHIP_TIERS.map((tier) => (
+                    <div key={tier.wire} className="flex justify-center text-center">
+                      <FeatureCell value={row.values[tier.wire]} />
+                    </div>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+
     </div>
   );
 }
@@ -272,14 +284,10 @@ export function Pricing() {
         </div>
       </section>
 
-      {/* Comparison stacked cards (mobile) */}
-      <section className="px-6 py-12 sm:hidden">
+      {/* Comparison (mobile): tiers side by side, one feature per row */}
+      <section className="px-4 py-12 sm:hidden">
         <h2 className="text-2xl font-serif italic mb-6 text-center">Compare every feature</h2>
-        <div className="space-y-6">
-          {MEMBERSHIP_TIERS.map((tier) => (
-            <StackedTierFeatures key={tier.wire} tier={tier} />
-          ))}
-        </div>
+        <MobileCompare period={period} />
         <p className="mt-6 text-xs italic opacity-50 text-center">∞ means unlimited</p>
       </section>
 
