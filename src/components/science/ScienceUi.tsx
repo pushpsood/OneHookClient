@@ -68,6 +68,8 @@ export function Chapter({
   handoff,
   dark = false,
   continues = false,
+  quote,
+  by,
 }: {
   chapter: ChapterDef;
   kicker: string;
@@ -78,14 +80,18 @@ export function Chapter({
   dark?: boolean;
   /** Follows a section of the same colour: skip the top padding so the gap is not doubled. */
   continues?: boolean;
+  /** Decorative pull-quote shown ONLY on dark chapters, as a vertical strip on the right edge. */
+  quote?: string;
+  by?: string;
 }) {
   const reduce = useReducedMotion();
+  const showQuote = dark && Boolean(quote);
   return (
     <section
       id={chapter.id}
       data-chapter={chapter.id}
       aria-labelledby={`${chapter.id}-title`}
-      className={`relative scroll-mt-20 px-6 ${continues ? 'pb-16 pt-2 sm:pb-20 sm:pt-4' : 'py-16 sm:py-20'}`}
+      className={`relative scroll-mt-20 px-6 ${showQuote ? 'sm:pr-20 lg:pr-28' : ''} ${continues ? 'pb-16 pt-2 sm:pb-20 sm:pt-4' : 'py-16 sm:py-20'}`}
       style={{ background: dark ? BRAND.ink : BRAND.paper, color: dark ? '#FFFFFF' : BRAND.ink }}
     >
       <div className="mx-auto max-w-6xl">
@@ -116,6 +122,19 @@ export function Chapter({
           </p>
         )}
       </div>
+
+      {showQuote && (
+        <figure className="pointer-events-none absolute right-3 top-1/2 hidden max-h-[84%] -translate-y-1/2 flex-row items-center gap-3 sm:flex sm:right-6 lg:right-9">
+          <blockquote className="[writing-mode:vertical-rl] text-sm font-light italic leading-snug tracking-wide text-white/55 sm:text-base">
+            &ldquo;{quote}&rdquo;
+          </blockquote>
+          {by && (
+            <figcaption className="[writing-mode:vertical-rl] text-[10px] font-semibold uppercase tracking-[0.32em] text-white/30">
+              {by}
+            </figcaption>
+          )}
+        </figure>
+      )}
     </section>
   );
 }

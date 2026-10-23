@@ -24,6 +24,7 @@ import {
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { Seo } from '../common/Seo';
+import { ROUTE_SEO } from '../../config/seo-routes';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
@@ -270,11 +271,7 @@ export function Careers() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Seo
-        title="Careers at OneHook — Build Intentional Dating"
-        description="Join OneHook and help build a private, intentional dating app that replaces endless swiping with one real connection at a time. See open roles and apply."
-        path="/careers"
-      />
+      <Seo {...ROUTE_SEO['/careers']} path="/careers" />
       {/* Navigation */}
       <SiteHeader pageTitle="Careers" onApply={scrollToForm} />
 

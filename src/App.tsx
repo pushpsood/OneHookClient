@@ -17,6 +17,7 @@ import { Pricing } from './components/legal/Pricing';
 import { Contact } from './components/legal/Contact';
 import { Careers } from './components/careers/Careers';
 import { Science } from './components/science/Science';
+import { Messenger } from './components/messenger/Messenger';
 import { MrOneHookDock } from './components/Chatbot/MrOneHookDock';
 import { getCognitoAuth, initializeCognitoAuth } from './lib/cognito-auth';
 import { config } from './utils/env.config';
@@ -195,6 +196,7 @@ export default function App() {
             <Route path="/contact" element={<Contact />} />
             <Route path="/careers" element={<Careers />} />
             <Route path="/science" element={<Science />} />
+            <Route path="/messenger" element={<Messenger />} />
             <Route
               path="/auth/setup"
               element={

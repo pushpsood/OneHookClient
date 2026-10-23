@@ -69,9 +69,6 @@ export function SignupInAppNotice() {
           className="w-full max-w-md"
         >
           <div className="text-center mb-12 space-y-4">
-            <h1 className="text-4xl font-serif italic uppercase tracking-tighter">
-              Join from the App
-            </h1>
             <p className="text-sm opacity-60 italic">
               New accounts are created in the OneHook app
             </p>

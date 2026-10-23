@@ -151,6 +151,28 @@ export class FrontendStack extends Stack {
       ? [props.domainName, `www.${props.domainName}`]
       : [props.domainName];
 
+    // Clean URLs for the pre-built marketing pages: /messenger → /messenger/index.html (and
+    // /messenger/ → /messenger/index.html). The build writes one HTML file per public route with its
+    // own title, description and canonical in the raw <head>, so crawlers and link previews that don't
+    // run JavaScript see the right page. Paths with a file extension are untouched, and app routes that
+    // have no pre-built file (e.g. /app, /login) still fall back to /index.html via the error responses.
+    const cleanUrlFunction = new CloudFrontFunction(this, 'CleanUrlFunction', {
+      comment: 'Maps /<route> and /<route>/ to /<route>/index.html for the pre-built pages',
+      code: FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request;
+  var uri = request.uri;
+  if (uri === '/' || uri === '') return request;
+  if (uri.charAt(uri.length - 1) === '/') {
+    request.uri = uri + 'index.html';
+  } else if (uri.split('/').pop().indexOf('.') === -1) {
+    request.uri = uri + '/index.html';
+  }
+  return request;
+}
+`),
+    });
+
     // CloudFront distribution
     const distributionProps: DistributionProps = {
       defaultBehavior: {
@@ -161,6 +183,7 @@ export class FrontendStack extends Stack {
         cachePolicy,
         responseHeadersPolicy,
         compress: true,
+        functionAssociations: [{ function: cleanUrlFunction, eventType: FunctionEventType.VIEWER_REQUEST }],
       },
       defaultRootObject: 'index.html',
       errorResponses: [

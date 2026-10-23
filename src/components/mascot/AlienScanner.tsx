@@ -43,9 +43,15 @@ interface AlienScannerProps {
   forceExcited?: boolean;
   /** Hides the built-in tooltips so they can be rendered elsewhere */
   hideTooltips?: boolean;
+  /**
+   * Just the character — body, eyes, mouth, hands and legs in their usual positions — without the
+   * paint brush, the paint bucket, the ground shadow or the silver sparkle behind it.
+   */
+  bare?: boolean;
 }
 
 export const AlienScanner: React.FC<AlienScannerProps> = ({
+  bare = false,
   size,
   primaryColor = '#ff69b4',
   scanColor = '#0052CC',
@@ -103,7 +109,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
       xmlns="http://www.w3.org/2000/svg"
     >
       {/* Soft ground shadow */}
-      <ellipse cx="60" cy="114" rx="26" ry="4" fill="#000000" opacity={0.12} />
+      {!bare && <ellipse cx="60" cy="114" rx="26" ry="4" fill="#000000" opacity={0.12} />}
 
       {/* Static limbs (left arm + legs) */}
       <g stroke={primaryColor} strokeLinecap="round" fill="none">
@@ -116,6 +122,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
         >
           <path d="M31 64 Q20 70 12 74" strokeWidth="9" />
           {/* Paint bucket */}
+          {!bare && (
           <g transform="translate(12, 74)">
             {/* Handle */}
             <path d="M -4 0 C -4 -6, 4 -6, 4 0" fill="none" strokeWidth="1.5" />
@@ -124,6 +131,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
             {/* Paint inside bucket */}
             <path d="M -3.5 1 L 3.5 1 L 3 3 L -3 3 Z" fill={primaryColor} stroke="none" />
           </g>
+          )}
         </motion.g>
         <path d="M50 92 L49 108" strokeWidth="9" />
         <path d="M70 92 L71 108" strokeWidth="9" />
@@ -158,6 +166,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
         />
         <circle cx="106" cy="31" r="5.5" fill={primaryColor} />
         {/* Paint Brush */}
+        {!bare && (
         <g transform="translate(106, 31) rotate(30)">
           {/* Handle */}
           <rect x="-1.5" y="-10" width="3" height="10" fill="#d4a373" rx="1" />
@@ -168,6 +177,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
           {/* Paint drip */}
           <circle cx="0" cy="-20" r="1.2" fill={primaryColor} />
         </g>
+        )}
       </motion.g>
 
       {/* Body (egg) — gentle breathing, quicker and deeper when excited */}
@@ -281,10 +291,10 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
       onMouseLeave={interactive ? () => setIsHovered(false) : undefined}
     >
       {/* Ai Sparkle Background Effect */}
-      <AiSparkle 
+      {!bare && <AiSparkle 
         size="320%" 
         className="hidden md:block absolute top-[80%] left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 pointer-events-none opacity-80" 
-      />
+      />}
 
       {/* Excited hover tooltip (plain conditional: exit-coordination could leave
           a stale tooltip mounted, so it simply fades in and unmounts at once) */}

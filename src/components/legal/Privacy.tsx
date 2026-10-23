@@ -1,17 +1,32 @@
 import React from 'react';
+import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { Seo } from '../common/Seo';
+import { ROUTE_SEO } from '../../config/seo-routes';
+
+/** Anchor the apply-with-video consent checkbox links to (onehook.club/privacy#admissions-assist). */
+export const ADMISSIONS_ASSIST_ANCHOR = 'admissions-assist';
 
 export function Privacy() {
+  const location = useLocation();
+
+  // Deep links such as /privacy#admissions-assist (from the in-app consent checkbox) land on that
+  // section once it is laid out; the app-wide ScrollToTop leaves hashed navigations alone.
+  useEffect(() => {
+    if (!location.hash) return;
+    const id = decodeURIComponent(location.hash.slice(1));
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [location.hash]);
+
   return (
     <div className="min-h-screen bg-white">
-      <Seo
-        title="Privacy Policy — OneHook"
-        description="How OneHook protects your data. Your matches and messages are end-to-end encrypted and private — read how we handle your information on our intentional dating app."
-        path="/privacy"
-      />
+      <Seo {...ROUTE_SEO['/privacy']} path="/privacy" />
       {/* Navigation */}
       <SiteHeader pageTitle="Privacy" />
 
@@ -26,7 +41,7 @@ export function Privacy() {
             Privacy Policy
           </h1>
           <p className="text-lg opacity-60">
-            Last updated: May 23, 2026
+            Last updated: October 23, 2026
             <br />
             Effective from: May 23, 2026
           </p>
@@ -123,7 +138,139 @@ export function Privacy() {
                 <h4 className="font-bold mb-2">✗ We Do NOT Use Your Data For</h4>
                 <p className="opacity-70">
                   Marketing to third parties, selling to data brokers, algorithmic profiling,
-                  behavioral manipulation
+                  behavioral manipulation. The one exception to &ldquo;algorithmic profiling&rdquo; is
+                  Admissions Assist, which only runs with your explicit consent when you apply with a
+                  video (see section 4).
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Admissions Assist (linked from the apply-with-video consent checkbox) */}
+          <div id={ADMISSIONS_ASSIST_ANCHOR} className="scroll-mt-28">
+            <h2 className="text-3xl font-serif italic mb-4">
+              4. Applying with a Video (Admissions Assist)
+            </h2>
+            <p className="text-lg opacity-70 leading-relaxed">
+              OneHook is invite-only. If you don&rsquo;t have an invite, you can apply by recording a
+              short video (2&ndash;3 minutes) in the app. This section explains what we collect when
+              you apply, who sees it, how Admissions Assist uses it, and how long we keep it.
+            </p>
+
+            <div className="bg-bg p-6 rounded-lg border border-border mt-6 space-y-4">
+              <div>
+                <h4 className="font-bold mb-2">What we collect</h4>
+                <ul className="list-disc list-inside space-y-1 opacity-70">
+                  <li>
+                    Your phone number, verified with a one-time SMS code. It is stored encrypted and
+                    used to verify you and to text you the outcome and, if approved, your invite.
+                  </li>
+                  <li>Your application video.</li>
+                  <li>An automatic transcript of what you say in the video.</li>
+                  <li>
+                    Quality measurements taken from the video file and transcript: length, speaking
+                    time and pace, transcription confidence, filler words, resolution and bitrate.
+                  </li>
+                  <li>Our reviewers&rsquo; decision and scores for your application.</li>
+                  <li>
+                    A record of your consent: the wording version you agreed to, when, and your app
+                    version and platform.
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">What we do not do</h4>
+                <p className="opacity-70">
+                  No face recognition, no facial or appearance analysis, and no emotion detection.
+                  We never sell or share your application with third parties.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Who sees your application</h4>
+                <p className="opacity-70">
+                  Only authorised members of OneHook&rsquo;s admissions team. Your phone number is
+                  masked while they review and is shown only when needed, and every time it is
+                  shown is logged. Reviewer notes are never sent to you; if you are not approved, we
+                  tell you the general reason category.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Transcripts and personal details</h4>
+                <p className="opacity-70">
+                  Videos are transcribed by Amazon Transcribe. Where it supports this (including
+                  English as spoken in India), names, phone numbers, addresses and similar personal
+                  details are removed, and only the redacted transcript is kept. In languages where
+                  removal is not available (for example Hindi), the transcript is visible only to the
+                  admissions team and is never used to train Admissions Assist.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">What Admissions Assist is</h4>
+                <p className="opacity-70">
+                  Admissions Assist is a model that learns from our team&rsquo;s past review
+                  decisions to help reviewers work through applications. It is trained on transcript
+                  text, the quality measurements above, reviewers&rsquo; decisions, and whether an
+                  invite was later used. It is not trained on the images in your video. A person on
+                  our team makes every decision; Admissions Assist does not approve or reject anyone
+                  on its own.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Your consent</h4>
+                <p className="opacity-70">
+                  Agreeing to the use of your video and transcript for Admissions Assist is required
+                  to apply with a video. You agree by ticking the consent box in the app, which is
+                  never pre-ticked; recording only unlocks after you tick it. If you don&rsquo;t want
+                  to agree, you can join OneHook with an invite from a member instead.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Decisions and reapplying</h4>
+                <p className="opacity-70">
+                  If you are approved, we text you an invite code, valid for 14 days. If you are not
+                  approved, you can apply again after 6 months, and the app shows you the date.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">How long we keep it</h4>
+                <ul className="list-disc list-inside space-y-1 opacity-70">
+                  <li>
+                    Not approved, withdrawn or expired: the video and transcript are deleted 90 days
+                    after the decision.
+                  </li>
+                  <li>
+                    Approved: the video and transcript are deleted 30 days after you use your invite.
+                  </li>
+                  <li>
+                    Deleting your OneHook account deletes your application, video and transcript.
+                  </li>
+                  <li>
+                    The training records derived from your application (transcript text,
+                    measurements and decision) are kept while Admissions Assist is in use, unless
+                    you ask us to delete them.
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Withdrawing</h4>
+                <p className="opacity-70">
+                  You can withdraw your application in the app at any time. To withdraw your consent
+                  for Admissions Assist, or to have your training records deleted, email{' '}
+                  <a href="mailto:privacy@onehook.club" className="text-accent font-mono">
+                    privacy@onehook.club
+                  </a>{' '}
+                  with the phone number you applied with. We will exclude
+                  your data from all future training and delete your training records within 30
+                  days. A model trained before your request is not changed retroactively, but your
+                  data is not used in any later training.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Where it is stored</h4>
+                <p className="opacity-70">
+                  Applications, transcripts and training data are encrypted and stored on Amazon Web
+                  Services in India (Mumbai region). Transcription, SMS and model training also run
+                  on AWS in that region.
                 </p>
               </div>
             </div>
@@ -131,13 +278,17 @@ export function Privacy() {
 
           {/* Data Security */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">4. Data Security & Encryption</h2>
+            <h2 className="text-3xl font-serif italic mb-4">5. Data Security & Encryption</h2>
             <div className="bg-accent/5 p-6 rounded-lg border border-accent/20 mt-4 space-y-4">
               <div>
                 <h4 className="font-bold mb-2">End-to-End Encryption (E2EE)</h4>
                 <p className="opacity-70">
-                  All messages between users are encrypted end-to-end using industry-standard
-                  encryption (TLS 1.3). We cannot decrypt or read message contents.
+                  Messages between matched users are end-to-end encrypted on your device before they
+                  are sent. The encryption keys are generated and held on the participants&rsquo;
+                  devices &mdash; never on our servers in a form we can read &mdash; so OneHook
+                  relays only ciphertext and cannot decrypt or read your conversations. (Transport
+                  security such as TLS 1.3 is covered under &ldquo;Data in Transit&rdquo; below; it
+                  protects the connection, and is separate from the end-to-end layer above.)
                 </p>
               </div>
               <div>
@@ -173,7 +324,7 @@ export function Privacy() {
 
           {/* Third-Party Sharing */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">5. We Do Not Share Your Data</h2>
+            <h2 className="text-3xl font-serif italic mb-4">6. We Do Not Share Your Data</h2>
             <div className="bg-red-50 p-6 rounded-lg border border-red-200 mt-4">
               <p className="font-bold text-red-900 mb-4">❌ OneHook Does NOT:</p>
               <ul className="list-disc list-inside space-y-2 text-red-800">
@@ -211,7 +362,7 @@ export function Privacy() {
 
           {/* International Transfers */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">6. Data International Transfers</h2>
+            <h2 className="text-3xl font-serif italic mb-4">7. Data International Transfers</h2>
             <p className="opacity-70 leading-relaxed">
               OneHook operates primarily in India. If you are outside India, your data
               will be transferred to and stored inside India. By using OneHook, you
@@ -227,7 +378,7 @@ export function Privacy() {
 
           {/* Data Retention */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">7. Data Retention</h2>
+            <h2 className="text-3xl font-serif italic mb-4">8. Data Retention</h2>
             <div className="bg-bg p-6 rounded-lg border border-border mt-4 space-y-3">
               <div>
                 <strong>Active Accounts:</strong>
@@ -237,6 +388,13 @@ export function Privacy() {
                 <strong>After Deletion:</strong>
                 <p className="opacity-70">
                   Data deleted within 30 days of account deletion (except where required by law)
+                </p>
+              </div>
+              <div>
+                <strong>Video Applications:</strong>
+                <p className="opacity-70">
+                  Application videos and transcripts are deleted 90 days after a decision, or 30
+                  days after an approved applicant uses their invite (see section 4)
                 </p>
               </div>
               <div>
@@ -257,7 +415,7 @@ export function Privacy() {
 
           {/* Your Rights */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">8. Your Privacy Rights</h2>
+            <h2 className="text-3xl font-serif italic mb-4">9. Your Privacy Rights</h2>
             <p className="opacity-70 mb-4">
               You have the following rights regarding your personal data:
             </p>
@@ -294,7 +452,7 @@ export function Privacy() {
 
           {/* Compliance */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">9. Regulatory Compliance</h2>
+            <h2 className="text-3xl font-serif italic mb-4">10. Regulatory Compliance</h2>
             <div className="space-y-4">
               <div className="border-l-4 border-accent pl-4">
                 <h4 className="font-bold mb-2">GDPR (EU General Data Protection Regulation)</h4>
@@ -336,7 +494,7 @@ export function Privacy() {
 
           {/* Security Incident Response */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">10. Security Incident Response</h2>
+            <h2 className="text-3xl font-serif italic mb-4">11. Security Incident Response</h2>
             <p className="opacity-70 mb-4">In the event of a data breach, we will:</p>
             <ul className="list-disc list-inside space-y-2 opacity-70">
               <li>Notify affected users without undue delay (as required by law)</li>
@@ -349,7 +507,7 @@ export function Privacy() {
 
           {/* Third-Party Services */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">11. Third-Party Service Providers</h2>
+            <h2 className="text-3xl font-serif italic mb-4">12. Third-Party Service Providers</h2>
             <p className="opacity-70 mb-4">
               We use limited third-party services only where necessary. All processors sign Data
               Processing Agreements (DPAs) ensuring the same level of data protection:
@@ -363,6 +521,10 @@ export function Privacy() {
                 <strong>Email Service:</strong> SNS
               </li>
               <li>
+                <strong>Video Applications:</strong> Amazon Transcribe and Amazon SageMaker, hosted
+                in AWS (India region)
+              </li>
+              <li>
                 <strong>Analytics:</strong> Hosted in AWS (India region)
               </li>
               <li>
@@ -373,7 +535,7 @@ export function Privacy() {
 
           {/* Contact */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">12. Contact Us</h2>
+            <h2 className="text-3xl font-serif italic mb-4">13. Contact Us</h2>
             <div className="bg-bg p-6 rounded-lg border border-border mt-4 space-y-3">
               <div>
                 <strong>Privacy Inquiries:</strong>
@@ -412,7 +574,7 @@ export function Privacy() {
 
           {/* Changes to Policy */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">13. Changes to This Policy</h2>
+            <h2 className="text-3xl font-serif italic mb-4">14. Changes to This Policy</h2>
             <p className="opacity-70">
               We may update this Privacy Policy from time to time. We will notify you of material
               changes by email or through the platform. Your continued use of OneHook after changes
@@ -423,7 +585,7 @@ export function Privacy() {
           {/* Footer */}
           <div className="pt-8 mt-12 border-t border-border">
             <p className="text-sm opacity-50 text-center">
-              © 2026 OneHook. Your privacy is our priority. Last updated May 23, 2026.
+              © 2026 OneHook. Your privacy is our priority. Last updated October 23, 2026.
             </p>
           </div>
         </motion.div>

@@ -3,10 +3,11 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { rm } from 'fs/promises';
-import { mkdirSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { createRequire } from 'module';
 import { execSync } from 'child_process';
 import Sitemap from 'vite-plugin-sitemap';
+import { PRERENDER_ROUTES, ROUTE_SEO, SITE_URL } from './src/config/seo-routes';
 
 const distDir = resolve(__dirname, 'dist');
 
@@ -47,6 +48,48 @@ function resolveApiClient() {
     );
   }
 }
+
+/**
+ * Per-route HTML for crawlers. The app renders in the browser, so on its own every URL would serve
+ * the same index.html — homepage title, description and canonical — until JavaScript runs. That is a
+ * real indexing risk: a crawler can read /messenger's raw HTML as "canonical: /", i.e. a duplicate of
+ * the homepage. After the build this writes dist/<route>/index.html for every public route, with that
+ * page's own title, description, canonical, og:/twitter: tags and JSON-LD in the raw <head>. The body
+ * and scripts are untouched, so the app boots exactly as before. CloudFront maps /<route> to
+ * /<route>/index.html (see infra/stacks/frontend-stack.ts).
+ */
+const escapeHtml = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const prerenderRouteHeadsPlugin = (): Plugin => ({
+  name: 'prerender-route-heads',
+  apply: 'build',
+  closeBundle() {
+    const base = readFileSync(resolve(distDir, 'index.html'), 'utf8');
+    const setAttr = (html: string, selector: RegExp, value: string) => {
+      if (!selector.test(html)) throw new Error(`[prerender-route-heads] tag not found in index.html: ${selector}`);
+      return html.replace(selector, (_m, pre: string, post: string) => `${pre}${escapeHtml(value)}${post}`);
+    };
+    for (const route of PRERENDER_ROUTES) {
+      const seo = ROUTE_SEO[route];
+      const url = `${SITE_URL}${route}`;
+      let html = base;
+      html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(seo.title)}</title>`);
+      html = setAttr(html, /(<meta name="description" content=")[^"]*(")/, seo.description);
+      html = setAttr(html, /(<link rel="canonical" href=")[^"]*(")/, url);
+      html = setAttr(html, /(<meta property="og:url" content=")[^"]*(")/, url);
+      html = setAttr(html, /(<meta property="og:title" content=")[^"]*(")/, seo.title);
+      html = setAttr(html, /(<meta property="og:description" content=")[^"]*(")/, seo.description);
+      html = setAttr(html, /(<meta name="twitter:title" content=")[^"]*(")/, seo.title);
+      html = setAttr(html, /(<meta name="twitter:description" content=")[^"]*(")/, seo.description);
+      if (seo.jsonLd) {
+        const ld = JSON.stringify(seo.jsonLd).replace(/</g, '\\u003c');
+        html = html.replace('</head>', `    <script type="application/ld+json" data-seo="page">${ld}</script>\n  </head>`);
+      }
+      const dir = resolve(distDir, route.replace(/^\//, ''));
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(resolve(dir, 'index.html'), html);
+    }
+  },
+});
 
 const leanMediaPrunePlugin = (): Plugin => ({
   name: 'lean-media-prune',
@@ -97,18 +140,13 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       ensureOutDirPlugin(),
       leanMediaPrunePlugin(),
+      prerenderRouteHeadsPlugin(),
       Sitemap({
         hostname: 'https://onehook.club',
-        // Public marketing routes only. '/' is auto-derived from index.html, so it is NOT
-        // listed here (listing it would duplicate the home entry). Its priority is set below.
-        dynamicRoutes: [
-          '/science',
-          '/pricing',
-          '/careers',
-          '/contact',
-          '/privacy',
-          '/terms',
-        ],
+        // Public marketing pages are discovered from the pre-built dist/<route>/index.html files written
+        // by prerenderRouteHeadsPlugin (which runs first), so they are not listed again here — listing
+        // them would duplicate every entry. '/' comes from dist/index.html.
+        dynamicRoutes: [],
         exclude: ['/app', '/onboarding', '/auth/setup', '/login', '/redeem'],
         // Generated robots.txt must mirror public/robots.txt (the plugin overwrites dist/robots.txt).
         robots: [
@@ -118,11 +156,13 @@ export default defineConfig(({ mode }) => {
             disallow: ['/app', '/onboarding', '/auth/', '/redeem'],
           },
         ],
-        readable: true,
+        // compact output: no whitespace inside <loc>, which some validators reject
+        readable: false,
         changefreq: 'weekly',
         priority: {
           '/': 1.0,
           '/science': 0.8,
+          '/messenger': 0.8,
           '/pricing': 0.8,
           '/careers': 0.6,
           '/contact': 0.6,

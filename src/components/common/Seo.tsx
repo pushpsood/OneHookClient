@@ -10,9 +10,9 @@ import { useEffect } from 'react';
  * sees a correct, unique title/description/canonical per marketing route.
  *
  * It deliberately reuses the tags already present in `index.html` (description, og:*, twitter:*)
- * and only creates the few that the static head omits (canonical, robots). Non-JS social scrapers
- * still read the static home-page head; true per-route social previews would require SSR/prerender,
- * which this SPA does not have.
+ * and only creates the few that the static head omits (robots). Crawlers and link previews that do
+ * NOT run JavaScript read the per-route HTML pre-built at deploy time (src/config/seo-routes.ts +
+ * the prerender plugin in vite.config.ts), so both paths agree.
  */
 
 export const SITE_NAME = 'OneHook';
@@ -32,6 +32,8 @@ export interface SeoProps {
   image?: string;
   /** Set true for thin/private pages that should not be indexed. */
   noindex?: boolean;
+  /** Optional page-specific structured data (schema.org JSON-LD), removed again on unmount. */
+  jsonLd?: Record<string, unknown>;
 }
 
 function upsertMeta(attr: 'name' | 'property', key: string, content: string): void {
@@ -54,7 +56,20 @@ function upsertLink(rel: string, href: string): void {
   el.setAttribute('href', href);
 }
 
-export function Seo({ title, description, path, image, noindex = false }: SeoProps): null {
+export function Seo({ title, description, path, image, noindex = false, jsonLd }: SeoProps): null {
+  const jsonLdText = jsonLd ? JSON.stringify(jsonLd) : '';
+  useEffect(() => {
+    // The pre-built HTML for this route may already carry this page's JSON-LD; replace it so the
+    // structured data is never duplicated.
+    document.head.querySelectorAll('script[data-seo="page"]').forEach((n) => n.remove());
+    if (!jsonLdText) return;
+    const el = document.createElement('script');
+    el.type = 'application/ld+json';
+    el.dataset.seo = 'page';
+    el.textContent = jsonLdText;
+    document.head.appendChild(el);
+    return () => el.remove();
+  }, [jsonLdText]);
   useEffect(() => {
     const url = `${SITE_URL}${path}`;
     const ogImage = image

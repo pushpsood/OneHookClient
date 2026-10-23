@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { UiElement, trackProps } from '../lib/analytics/analytics';
 import { MOST_POPULAR_TIER, PAID_TIER_NAMES } from '../config/membership.config';
 import { motion, AnimatePresence, useMotionValue, useSpring, useScroll, useTransform, useReducedMotion, type MotionValue } from 'motion/react';
@@ -36,6 +36,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { BrandWordmark } from './common/BrandWordmark';
 import { Seo } from './common/Seo';
+import { ROUTE_SEO } from '../config/seo-routes';
 import { AppleIcon, AndroidIcon } from './common/BrandIcons';
 import { SiteFooter } from './common/SiteFooter';
 import { AlienScanner } from './mascot';
@@ -300,7 +301,7 @@ const COUPLE_STORIES: readonly CoupleStory[] = [
     names: 'Dev & Sara',
     location: 'Gurugram',
     story:
-      'Already together when they joined, they read the openers aloud one lazy Sunday — now it is their weekly date-night game. Loser picks dinner.',
+      'Already together when they joined, they made OneHook their own private, encrypted corner — now the openers are their weekly date-night game. Loser picks dinner.',
   },
   {
     id: 'meera-kabir',
@@ -310,7 +311,7 @@ const COUPLE_STORIES: readonly CoupleStory[] = [
     names: 'Meera & Kabir',
     location: 'Noida',
     story:
-      'They joined already together, just to send each other the openers at midnight. Two jobs and one move later, they still do — and still answer honestly.',
+      'They joined already together and kept OneHook as their private messenger — midnight openers, two jobs and one move later, they still trade them, and still answer honestly.',
   },
 ] as const;
 
@@ -549,7 +550,7 @@ function ForestBackdrop({ className = '' }: { className?: string }) {
         </linearGradient>
       </defs>
       {/* farthest ridge — tiny, blurred, very faint */}
-      <g filter="url(#forestBlur)" opacity="0.22">
+      <g filter="url(#forestBlur)" opacity="0.14">
         {farthest.map(([x, w, h], i) => {
           const f = pineFaces(x, w, h, 2);
           return (
@@ -561,7 +562,7 @@ function ForestBackdrop({ className = '' }: { className?: string }) {
         })}
       </g>
       {/* far layer — blurred, hazy, lighter for depth */}
-      <g filter="url(#forestBlur)" opacity="0.34">
+      <g filter="url(#forestBlur)" opacity="0.18">
         {back.map(([x, w, h], i) => {
           const f = pineFaces(x, w, h);
           return (
@@ -575,7 +576,7 @@ function ForestBackdrop({ className = '' }: { className?: string }) {
       {/* atmospheric haze veil — pushes the two distant layers back */}
       <rect x="0" y="0" width="1200" height="560" fill="url(#forestHaze)" />
       {/* near layer — richer, stronger light/shadow contrast */}
-      <g opacity="0.8">
+      <g opacity="0.32">
         {front.map(([x, w, h], i) => {
           const f = pineFaces(x, w, h);
           return (
@@ -588,7 +589,7 @@ function ForestBackdrop({ className = '' }: { className?: string }) {
         })}
       </g>
       {/* three towering pines (slender, 5 tiers) */}
-      <g opacity="0.92">
+      <g opacity="0.4">
         {tall.map(([x, w, h], i) => {
           const f = pineFaces(x, w, h, 5);
           return (
@@ -600,7 +601,7 @@ function ForestBackdrop({ className = '' }: { className?: string }) {
           );
         })}
       </g>
-      <rect x="0" y="540" width="1200" height="20" fill="#1e2733" opacity="0.65" />
+      <rect x="0" y="540" width="1200" height="20" fill="#1e2733" opacity="0.28" />
     </svg>
   );
 }
@@ -1022,17 +1023,62 @@ type PhoneTab = 'discover' | 'messages' | 'profile';
  * page (`scrollY`); the other screens are static. The only interactive controls are the three tabs
  * (tracked as a landing demo interaction).
  */
-function ManifestoPhone({
+export function ManifestoPhone({
   progress,
   reduce,
   className,
+  initialTab = 'discover',
+  liveThread,
+  liveDelay = 0,
+  liveSpeed = 1,
+  contactName = PHONE_PROFILE.name,
+  contactPhoto = PHONE_PROFILE.photos[0],
 }: {
   progress: MotionValue<number>;
   reduce: boolean | null;
   /** Overrides the outer frame sizing. Defaults to the manifesto's large size. */
   className?: string;
+  /** Which screen the phone opens on (the messenger page opens straight onto Messages). */
+  initialTab?: PhoneTab;
+  /** If set, the Messages screen plays this conversation live (typing dots, then each bubble). */
+  liveThread?: readonly { me: boolean; t: string }[];
+  /** Milliseconds before the live conversation starts (e.g. after an entrance animation). */
+  liveDelay?: number;
+  /** Playback speed multiplier for timings (e.g. 0.2 to "restore" a history quickly, no typing dots). */
+  liveSpeed?: number;
+  /** Who the Messages screen is talking to (defaults to the demo profile). */
+  contactName?: string;
+  contactPhoto?: string;
 }) {
-  const [tab, setTab] = useState<PhoneTab>('discover');
+  const [tab, setTab] = useState<PhoneTab>(initialTab);
+  // Live conversation playback: how many bubbles are revealed, and whether "typing…" is showing.
+  const [revealed, setRevealed] = useState(liveThread ? 0 : Number.POSITIVE_INFINITY);
+  const revealedRef = useRef(0);
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    if (!liveThread) return;
+    // Continue from what is already on screen, so growing the thread only plays the new messages.
+    const from = Math.min(revealedRef.current, liveThread.length);
+    const timers: number[] = [];
+    let t = liveDelay;
+    liveThread.slice(from).forEach((m, k) => {
+      const i = from + k;
+      if (!m.me && liveSpeed >= 0.5) {
+        timers.push(window.setTimeout(() => setTyping(true), t));
+        t += (reduce ? 200 : 900) * liveSpeed;
+      }
+      timers.push(
+        window.setTimeout(() => {
+          setTyping(false);
+          revealedRef.current = i + 1;
+          setRevealed(i + 1);
+        }, t)
+      );
+      t += (reduce ? 250 : 750) * liveSpeed;
+    });
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, [liveThread, liveDelay, liveSpeed, reduce]);
+  const thread = liveThread ?? PHONE_THREAD;
   // The active screen is a NATIVE scroll container. When the pointer is NOT on the device, the page
   // scroll drives its position; when the pointer IS on it, the visitor scrolls (and taps tabs) freely;
   // on pointer-leave we smoothly hand the position back to the page-driven one. Messages has no scroll.
@@ -1208,9 +1254,9 @@ function ManifestoPhone({
               {/* chat header */}
               <div className="pointer-events-none absolute inset-x-0 top-11 z-20 flex h-12 items-center gap-2 border-b bg-[#FDFDFD] px-3" style={{ borderColor: OH_BORDER }}>
                 <ArrowLeft className="h-4 w-4" style={{ color: OH_INK }} />
-                <img src={PHONE_PROFILE.photos[0]} alt="" className="h-7 w-7 rounded-full object-cover" />
+                <img src={contactPhoto} alt="" className="h-7 w-7 rounded-full object-cover" />
                 <div className="leading-tight">
-                  <p className="text-[12px] font-bold" style={{ color: OH_INK }}>{PHONE_PROFILE.name}</p>
+                  <p className="text-[12px] font-bold" style={{ color: OH_INK }}>{contactName}</p>
                   <p className="text-[8px] font-semibold" style={{ color: '#22C55E' }}>● Active now</p>
                 </div>
               </div>
@@ -1220,22 +1266,48 @@ function ManifestoPhone({
                 <div className="flex justify-center">
                   <span className="rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider" style={{ background: 'rgba(26,26,26,0.06)', color: muted }}>Today</span>
                 </div>
-                {PHONE_THREAD.map((m, i) => (
-                  <div key={i} className={`flex ${m.me ? 'justify-end' : 'justify-start'}`}>
+                {liveThread && (
+                  <p className="flex items-center justify-center gap-1 text-[8px] font-semibold" style={{ color: muted }}>
+                    <Lock className="h-2.5 w-2.5" /> Only the two of you can read this
+                  </p>
+                )}
+                {thread.slice(0, revealed).map((m, i) => (
+                  <motion.div
+                    key={i}
+                    initial={liveThread ? { opacity: 0, y: 10, scale: 0.94 } : false}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                    className={`flex ${m.me ? 'justify-end' : 'justify-start'}`}
+                  >
                     <span
                       className={`max-w-[78%] rounded-2xl px-3 py-2 text-[11px] leading-snug ${m.me ? 'rounded-br-sm text-white' : 'rounded-bl-sm border'}`}
                       style={m.me ? { background: OH_INK } : { background: '#fff', borderColor: OH_BORDER, color: OH_INK }}
                     >
                       {m.t}
                     </span>
-                  </div>
+                  </motion.div>
                 ))}
+                {typing && (
+                  <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
+                    <span className="flex items-center gap-1 rounded-2xl rounded-bl-sm border bg-white px-3 py-2.5" style={{ borderColor: OH_BORDER }}>
+                      {[0, 1, 2].map((d) => (
+                        <motion.span
+                          key={d}
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ background: muted }}
+                          animate={{ y: [0, -3, 0], opacity: [0.4, 1, 0.4] }}
+                          transition={{ duration: 0.8, repeat: Infinity, delay: d * 0.15 }}
+                        />
+                      ))}
+                    </span>
+                  </motion.div>
+                )}
               </div>
 
               {/* input bar */}
               <div className="absolute inset-x-0 bottom-16 z-20 flex items-center gap-2 border-t bg-[#FDFDFD] px-3 py-2.5" style={{ borderColor: OH_BORDER }}>
                 <Plus className="h-4 w-4 shrink-0" style={{ color: muted }} />
-                <div className="flex-1 rounded-full border px-3 py-1.5 text-[10px]" style={{ borderColor: OH_BORDER, color: muted }}>Message {PHONE_PROFILE.name}…</div>
+                <div className="flex-1 rounded-full border px-3 py-1.5 text-[10px]" style={{ borderColor: OH_BORDER, color: muted }}>Message {contactName}…</div>
                 <Mic className="h-4 w-4 shrink-0" style={{ color: OH_INK }} />
               </div>
             </motion.div>
@@ -1885,11 +1957,7 @@ export function Landing() {
       className="min-h-screen bg-white text-text overflow-hidden relative"
       ref={pageContainerRef}
     >
-      <Seo
-        title="OneHook — Intentional Dating App for One Real Connection"
-        description="OneHook is a private, intentional dating app for one meaningful connection at a time — no endless swiping or ghosting, just real, end-to-end encrypted conversations."
-        path="/"
-      />
+      <Seo {...ROUTE_SEO['/']} path="/" />
       {/* Background Paint Stroke spanning sections */}
       {strokeCoords && (
         <svg
@@ -2011,18 +2079,21 @@ export function Landing() {
               Get the app
             </button>
             <span aria-hidden="true" className="h-4 w-px bg-border" />
-            <button
-              onClick={() => navigate('/pricing')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
+            <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
               className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
             >
               Pricing
-            </button>
-            <button
-              onClick={() => navigate('/science')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
+            </Link>
+            <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
               className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
             >
               Science
-            </button>
+            </Link>
+            <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
+              className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
+            >
+              Messenger
+            </Link>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-2.5">
             <div className="relative xl:hidden">
@@ -2065,18 +2136,21 @@ export function Landing() {
                   >
                     Get the app
                   </button>
-                  <button
-                    onClick={() => navigate('/pricing')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
+                  <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
                     className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
                   >
                     Pricing
-                  </button>
-                  <button
-                    onClick={() => navigate('/science')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
+                  </Link>
+                  <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
                     className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
                   >
                     Science
-                  </button>
+                  </Link>
+                  <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
+                    className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
+                  >
+                    Messenger
+                  </Link>
                 </div>
               )}
             </div>
@@ -2150,12 +2224,13 @@ export function Landing() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="text-center max-w-4xl relative w-full z-10 mt-[40vh] md:mt-0 md:max-w-2xl md:self-start md:ml-[6%] lg:ml-[9%]"
+          className="text-center max-w-4xl relative w-full z-10 mt-[40vh] md:mt-0 md:max-w-2xl lg:max-w-[52rem] md:self-start md:ml-[6%] lg:ml-[9%]"
         >
           <div className="mb-8 text-white/75">
             <Kicker className="text-white/75">
+              By invitation
               <span className="w-1.5 h-1.5 rounded-full bg-status-hooked animate-pulse" />
-              By invitation · One at a time
+              One at a time
             </Kicker>
           </div>
 
@@ -2173,18 +2248,36 @@ export function Landing() {
             </span>
           </p>
 
+          {/* Desktop: Dating Science | Redeem | Encrypted messenger in one row, all the same size.
+              Small screens: Redeem on top, the two explore buttons below it, side by side. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.6 }}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4"
+            className="mx-auto grid w-full max-w-[420px] grid-cols-2 gap-3 lg:flex lg:max-w-none lg:items-center lg:justify-center lg:gap-4"
           >
+            <Link
+              to="/science"
+              {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
+              className="order-2 flex h-[52px] flex-col items-center justify-center rounded border border-white/40 px-4 text-center leading-tight text-white backdrop-blur-sm transition-colors hover:bg-white/10 lg:order-none lg:w-[252px]"
+            >
+              <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/60">Dating</span>
+              <span className="text-xs font-black uppercase tracking-[0.3em]">Science</span>
+            </Link>
             <button
               onClick={goRedeemInvite} {...trackProps(UiElement.LANDING_GET_STARTED)}
-              className="px-8 py-4 bg-white text-accent text-xs font-black uppercase tracking-[0.3em] rounded hover:opacity-90 transition-opacity flex items-center gap-2 shadow-xl"
+              className="order-1 col-span-2 flex h-[52px] items-center justify-center gap-2 rounded bg-white px-8 text-xs font-black uppercase tracking-[0.3em] text-accent shadow-xl transition-opacity hover:opacity-90 whitespace-nowrap lg:order-none lg:w-[252px] lg:px-4 lg:tracking-[0.18em]"
             >
               Redeem your invite <ArrowRight className="w-4 h-4" />
             </button>
+            <Link
+              to="/messenger"
+              {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
+              className="order-3 flex h-[52px] flex-col items-center justify-center rounded border border-white/40 px-4 text-center leading-tight text-white backdrop-blur-sm transition-colors hover:bg-white/10 lg:order-none lg:w-[252px]"
+            >
+              <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/60">Encrypted</span>
+              <span className="text-xs font-black uppercase tracking-[0.3em]">Messenger</span>
+            </Link>
           </motion.div>
 
           <p className="mt-5 text-[11px] sm:text-xs text-white/60 italic">
@@ -2548,7 +2641,7 @@ export function Landing() {
             </div>
           </motion.div>
 
-          <p className="mt-4 text-center text-[10px] uppercase tracking-[0.2em] text-white [text-shadow:0_0_4px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.5)]">
+          <p className="mt-4 text-center text-[10px] uppercase tracking-[0.2em] text-black/55">
             No apps were named in the making of this comparison. Any resemblance to your last three
             is purely your own memory.
           </p>
@@ -2561,6 +2654,14 @@ export function Landing() {
           <div
             aria-hidden="true"
             className="pointer-events-none absolute bottom-full left-1/2 z-[1] h-[22rem] w-screen -translate-x-1/2 overflow-hidden md:h-[36rem]"
+            style={{
+              // Keep only the side trees: fade the forest out across the centre so it never clutters
+              // behind the comparison box / disclaimer text (which are horizontally centred).
+              WebkitMaskImage:
+                'linear-gradient(to right, #000 0%, #000 18%, transparent 34%, transparent 66%, #000 82%, #000 100%)',
+              maskImage:
+                'linear-gradient(to right, #000 0%, #000 18%, transparent 34%, transparent 66%, #000 82%, #000 100%)',
+            }}
           >
             <ForestBackdrop className="h-full w-full" />
           </div>
@@ -2608,7 +2709,7 @@ export function Landing() {
               <p className="text-lg opacity-70 leading-relaxed max-w-2xl mx-auto">
                 {relationshipMode === 'single'
                   ? 'OneHook is designed to feel focused and intentional, never rushed. Follow the steps to see how it keeps your attention on one promising connection at a time.'
-                  : 'Already seeing someone? Use OneHook as a priority-notification messenger, so the one person who matters always reaches you first, without the noise of another inbox.'}
+                  : 'Already together? Keep OneHook as your private, end-to-end encrypted messenger — the one person who matters reaches you first, with no feeds, no ads and no audience. Just the two of you.'}
               </p>
 
               {/* Single / not-single toggle */}

@@ -4,6 +4,7 @@ import { Check, Minus, Sparkles, Smartphone } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { Seo } from '../common/Seo';
+import { ROUTE_SEO } from '../../config/seo-routes';
 import { hideMrOneHook } from '../Chatbot/ChatbotWidget';
 import {
   ANNUAL_DISCOUNT_LABEL,
@@ -178,11 +179,7 @@ export function Pricing() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Seo
-        title="OneHook Membership & Pricing — Free, Super & Infinity"
-        description="Compare OneHook membership tiers. Start dating free with one meaningful connection at a time, or upgrade to Super and Infinity for more ways to find a real relationship."
-        path="/pricing"
-      />
+      <Seo {...ROUTE_SEO['/pricing']} path="/pricing" />
       <SiteHeader pageTitle="Pricing" />
 
       {/* Hero */}
@@ -195,8 +192,10 @@ export function Pricing() {
           <h1 className="text-5xl md:text-6xl font-serif italic tracking-tight mb-6">
             Memberships
           </h1>
-          <p className="text-lg opacity-60 max-w-2xl mx-auto">
+          <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-accent/25 bg-accent/5 px-5 py-3 text-sm font-semibold text-accent">
             Messaging is free forever — keep OneHook as your everyday encrypted messenger.
+          </div>
+          <p className="text-base opacity-60 max-w-2xl mx-auto mt-5">
             Paid tiers add discovery reach for when you&apos;re actively dating. Only{' '}
             {MEMBERSHIP_TIERS.filter((t) => t.maxConnections > 1).map((t) => t.displayName).join(' and ')}{' '}
             lets you hold more than one connection at a time.

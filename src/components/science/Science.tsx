@@ -5,6 +5,7 @@ import { ArrowRight, Send, Smartphone } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { Seo } from '../common/Seo';
+import { ROUTE_SEO } from '../../config/seo-routes';
 import { Accent, BRAND, Chapter, ENGINE_META, Kicker, Panel, labelClass, pillClass, type ChapterDef } from './ScienceUi';
 import { Constellation, ErasureDemo, PipelineDiagram, SIGNALS } from './ScienceDiagrams';
 import { ScienceHero } from './ScienceHero';
@@ -107,6 +108,8 @@ function JourneyChapter() {
   return (
     <Chapter
       dark
+      quote="Numbers do not fall in love. They just help two people notice each other."
+      by="The idea behind it"
       chapter={CHAPTERS[1]}
       kicker="The journey"
       title={
@@ -212,12 +215,11 @@ function MindsChapter() {
 
   return (
     <Chapter
-      dark
       chapter={CHAPTERS[2]}
       kicker="Three minds"
       title={
         <>
-          One moment, heard <Accent dark>three ways</Accent>
+          One moment, heard <Accent>three ways</Accent>
         </>
       }
       lede={
@@ -235,7 +237,7 @@ function MindsChapter() {
           onKeyDown={onKey}
           data-track-exempt="duplicate: the arrow-key tab switch emits landing.demo_interact (science_tab) imperatively in onKey, mirroring each tab button's tracked click."
           className="inline-grid grid-cols-3 gap-1 rounded-full border p-1"
-          style={{ borderColor: BRAND.hairlineDark }}
+          style={{ borderColor: BRAND.hairlineLight }}
         >
           {MIND_ORDER.map((id) => {
             const on = tab === id;
@@ -254,7 +256,7 @@ function MindsChapter() {
                 onClick={() => setTab(id)}
                 {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_tab' })}
                 className="rounded-full px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.25em] transition-colors sm:px-8"
-                style={on ? { background: ENGINE_META[id].color, color: BRAND.ink } : { color: 'rgba(255,255,255,0.55)' }}
+                style={on ? { background: ENGINE_META[id].color, color: BRAND.ink } : { color: 'rgba(10,11,16,0.5)' }}
               >
                 {ENGINE_META[id].name}
               </button>
@@ -271,8 +273,8 @@ function MindsChapter() {
         initial={reduce ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="mt-6 rounded-[32px] border p-6 sm:p-9"
-        style={{ borderColor: `${meta.color}33`, background: `radial-gradient(120% 80% at 50% 0%, ${meta.soft}, rgba(255,255,255,0.01) 70%)` }}
+        className="mt-6 rounded-[32px] border p-6 text-white sm:p-9"
+        style={{ borderColor: `${meta.color}55`, background: `radial-gradient(120% 80% at 50% 0%, ${meta.soft}, transparent 70%), ${BRAND.ink}` }}
       >
         <div className="mx-auto max-w-2xl text-center">
           <p className={labelClass} style={{ color: meta.color }}>
@@ -307,6 +309,8 @@ function PromisesChapter() {
   return (
     <Chapter
       dark
+      quote="Help that never reads over your shoulder."
+      by="Mr OneHook"
       chapter={CHAPTERS[5]}
       kicker="Promises"
       title={
@@ -355,7 +359,18 @@ function PromisesChapter() {
 
 /* ── Finale ────────────────────────────────────────────────────────────────── */
 
-function Finale() {
+/**
+ * "Thousands of quiet signals. One connection." — the heartbeat closer. Shared with the messenger
+ * page, which passes its own supporting line and secondary action (the Science page keeps its own).
+ */
+export function Finale({
+  body = 'All of this exists so you can spend less time in a dating app, and more time with the one person worth leaving it for.',
+  secondary = 'philosophy',
+}: {
+  body?: string;
+  /** 'philosophy' → Our philosophy (Science page); 'invite' → Start with an invite (messenger). */
+  secondary?: 'philosophy' | 'invite';
+} = {}) {
   const navigate = useNavigate();
   const reduce = useReducedMotion() ?? false;
   const sectionRef = useRef<HTMLElement>(null);
@@ -433,15 +448,21 @@ function Finale() {
           Thousands of quiet signals. <Accent dark>One</Accent> connection.
         </h2>
         <p className="mx-auto mt-5 max-w-xl font-light text-white/55">
-          All of this exists so you can spend less time in a dating app, and more time with the one person worth leaving it for.
+          {body}
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <button type="button" onClick={() => navigate('/#get-app')} {...trackProps(UiElement.LANDING_OPEN_IN_APP)} className={pillClass('solid-light')}>
             <Smartphone className="h-3.5 w-3.5" aria-hidden="true" /> Get the app
           </button>
-          <button type="button" onClick={() => navigate('/#philosophy')} {...trackProps(UiElement.LANDING_HOME_LINK)} className={pillClass('ghost-light')}>
-            Our philosophy <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+          {secondary === 'invite' ? (
+            <button type="button" onClick={() => navigate('/redeem')} {...trackProps(UiElement.LANDING_GET_STARTED)} className={pillClass('ghost-light')}>
+              Start with an invite <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          ) : (
+            <button type="button" onClick={() => navigate('/#philosophy')} {...trackProps(UiElement.LANDING_HOME_LINK)} className={pillClass('ghost-light')}>
+              Our philosophy <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
     </section>
@@ -454,11 +475,7 @@ export function Science() {
 
   return (
     <div className="min-h-screen" style={{ background: BRAND.paper }}>
-      <Seo
-        title="The Science of One — How OneHook Matching Works"
-        description="The science behind OneHook: how reading intent, rhythm and meaning in real conversations helps two people build one genuine connection instead of swiping endlessly."
-        path="/science"
-      />
+      <Seo {...ROUTE_SEO['/science']} path="/science" />
       <ProgressBar />
       <SiteHeader pageTitle="Science" />
       <OrbitNav chapters={CHAPTERS} onSelect={scrollToId} />
@@ -487,19 +504,17 @@ export function Science() {
 
         <JourneyChapter />
 
-        {/* Same-colour sections never touch: a quote always sits between them. */}
-        <Interlude image={webinarImage} quote="Three small minds, each asking one honest question." by="How OneHook listens" />
-
         <MindsChapter />
 
-        <Interlude image={guitarImage} quote="Numbers do not fall in love. They just help two people notice each other." by="The idea behind it" />
-
         <Chapter
+          dark
+          quote="Time is the most honest thing you say."
+          by="Reading intent"
           chapter={CHAPTERS[3]}
           kicker="Time & intent"
           title={
             <>
-              Time is the most <Accent>honest</Accent> signal
+              Time is the most <Accent dark>honest</Accent> signal
             </>
           }
           lede={
@@ -520,15 +535,13 @@ export function Science() {
               { k: 'Quiet threads', v: 'A conversation silent for three days is noticed, so the app can suggest a date idea instead of letting it fade.' },
               { k: 'A reset, not a slot machine', v: 'After a long run of likes with no match, the next card is someone likely to like you back.' },
             ].map((f) => (
-              <div key={f.k} className="bg-white p-6 text-center">
+              <div key={f.k} className="bg-white p-6 text-center text-accent">
                 <p className="text-sm font-semibold">{f.k}</p>
                 <p className="mx-auto mt-2 max-w-xs text-xs font-light leading-relaxed text-black/50">{f.v}</p>
               </div>
             ))}
           </div>
         </Chapter>
-
-        <Interlude image={cityImage} quote="Help that never reads over your shoulder." by="Mr OneHook" />
 
         <Chapter
           chapter={CHAPTERS[4]}

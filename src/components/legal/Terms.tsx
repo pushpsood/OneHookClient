@@ -3,15 +3,12 @@ import { motion } from 'motion/react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { Seo } from '../common/Seo';
+import { ROUTE_SEO } from '../../config/seo-routes';
 
 export function Terms() {
   return (
     <div className="min-h-screen bg-white">
-      <Seo
-        title="Terms of Service — OneHook"
-        description="The terms that govern your use of OneHook, the intentional dating app for one meaningful connection at a time."
-        path="/terms"
-      />
+      <Seo {...ROUTE_SEO['/terms']} path="/terms" />
       {/* Navigation */}
       <SiteHeader pageTitle="Terms" />
 

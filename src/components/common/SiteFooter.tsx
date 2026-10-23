@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Smartphone } from 'lucide-react';
 import { BrandWordmark } from './BrandWordmark';
 import { SOCIALS } from './socials';
@@ -54,15 +54,15 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] opacity-50">
           <p>© 2026 OneHook. All rights reserved.</p>
           <div className="flex items-center gap-6">
-            <button onClick={() => navigate('/privacy')} {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
+            <Link to="/privacy" {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
               Privacy
-            </button>
-            <button onClick={() => navigate('/terms')} {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
+            </Link>
+            <Link to="/terms" {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
               Terms
-            </button>
-            <button onClick={() => navigate('/contact')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'contact' })} className="hover:opacity-100 transition-opacity">
+            </Link>
+            <Link to="/contact" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'contact' })} className="hover:opacity-100 transition-opacity">
               Contact
-            </button>
+            </Link>
           </div>
         </div>
       </footer>
@@ -87,28 +87,30 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
           <button onClick={() => goToSection('features')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'how_it_works' })} className="hover:opacity-100 transition-opacity">
             How it works
           </button>
-          <button onClick={() => navigate('/pricing')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className="hover:opacity-100 transition-opacity">
+          <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className="hover:opacity-100 transition-opacity">
             Pricing
-          </button>
-          <button onClick={() => navigate('/privacy')} {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
+          </Link>
+          <Link to="/privacy" {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
             Privacy
-          </button>
-          <button onClick={() => navigate('/terms')} {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
+          </Link>
+          <Link to="/terms" {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
             Terms
-          </button>
-          <button onClick={() => navigate('/contact')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'contact' })} className="hover:opacity-100 transition-opacity">
+          </Link>
+          <Link to="/contact" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'contact' })} className="hover:opacity-100 transition-opacity">
             Contact
-          </button>
-          <button onClick={() => navigate('/careers')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'careers' })} className="hover:opacity-100 transition-opacity">
+          </Link>
+          <Link to="/careers" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'careers' })} className="hover:opacity-100 transition-opacity">
             Careers
-          </button>
-          <button
-            onClick={() => navigate('/science')}
+          </Link>
+          <Link to="/science"
             {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
             className="hover:opacity-100 transition-opacity"
           >
             Science
-          </button>
+          </Link>
+          <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className="hover:opacity-100 transition-opacity">
+            Messenger
+          </Link>
 
           {/* Socials (4) + highlighted app-flow CTA + socials (4) */}
           <div className="w-full md:w-auto flex flex-col md:flex-row items-center justify-center gap-4 md:gap-5">

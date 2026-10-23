@@ -5,6 +5,7 @@ import { Mail } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { Seo } from '../common/Seo';
+import { ROUTE_SEO } from '../../config/seo-routes';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /** Map an email address to the catalog's landing.email_link mailbox value set. */
@@ -47,11 +48,7 @@ export function Contact() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Seo
-        title="Contact OneHook — Dating Support & Partnerships"
-        description="Get in touch with the OneHook team for help with your account, privacy and security questions, press, or partnership enquiries about our intentional dating app."
-        path="/contact"
-      />
+      <Seo {...ROUTE_SEO['/contact']} path="/contact" />
       {/* Navigation */}
       <SiteHeader pageTitle="Contact" />
 
