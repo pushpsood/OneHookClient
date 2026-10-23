@@ -973,7 +973,7 @@ const LAYOUTS = {
     // phones: compositions packed into the band each screen shows, so it can use the full width
     solo: { cx: 210, cy: 650, s: 1.0 },
     left: { cx: 92, cy: 300, s: 0.72 },
-    right: { cx: 328, cy: 822, s: 0.72 },
+    right: { cx: 328, cy: 990, s: 0.72 },
     broken: { cx: 106, cy: 700, s: 0.8 },
     fresh: { cx: 314, cy: 700, s: 0.8 },
     cloud: { x: 210, y: 345 },
@@ -1005,7 +1005,7 @@ function portLayout(W: number) {
 /** Portrait (phone) camera per screen 1–5: the vertical band of the 420×1300 canvas each scene uses. */
 const PORT_VIEWS: { y: number; h: number }[] = [
   { y: 285, h: 730 }, // 1 · phone + preview cards
-  { y: 100, h: 890 }, // 2 · zig-zag: phone + box, box on the route, box + phone
+  { y: 100, h: 1075 }, // 2 · Isha, the route with its three checkpoints, Rohan
   { y: 280, h: 660 }, // 3 · the two phones side by side under the cloud
   { y: 66, h: 900 }, // 4 · devices around the cloud
   { y: 0, h: 1300 }, // 5 · captions (unchanged)
@@ -1204,13 +1204,10 @@ function PhonesStage({ index }: { index: number }) {
                     </>
                   ) : (
                     (() => {
-                      // phones, a zig-zag read top to bottom — one thing per zone, nothing crowded:
-                      //   Isha (left)            · Attackers (right)
-                      //            OneHook database (on the route, the message passes through it)
-                      //   Friends & family (left) · Rohan (right)
-                      // The route is one straight line that starts behind Isha's phone and ends behind
-                      // Rohan's, crossing the middle; the side boxes are tied to it by level (parallel)
-                      // dashed lines that run in behind the phones too.
+                      // phones: Isha top-left, Rohan bottom-right; one straight route from behind Isha's
+                      // phone to behind Rohan's. All three checkpoints hang off the VISIBLE stretch of the
+                      // route between the phones, each by a level dashed line (so all three run parallel):
+                      // Attackers and OneHook database to the right, Friends & family to the left.
                       const A = { x: L.left.cx, y: L.left.cy };
                       const B = { x: L.right.cx, y: L.right.cy };
                       const atY = (y: number) => {
@@ -1219,21 +1216,15 @@ function PhonesStage({ index }: { index: number }) {
                       };
                       const along = (t: number) => ({ x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t });
                       const CARD_HALF = 93; // half the box width (186)
-                      const GAP = 22; // dashed connector between the route and a side box
-                      const ishaBottom = L.left.cy + (PH / 2) * L.left.s;
-                      const rohanTop = L.right.cy - (PH / 2) * L.right.s;
-                      const dots = [atY(L.left.cy - 20), atY((ishaBottom + rohanTop) / 2), atY(L.right.cy + 20)];
-                      // side boxes sit at the outer edges (clear of the phones); their connectors run level
-                      // from the box into the route behind the phone
                       const MARGIN = 14;
-                      const rightX = Math.max(L.left.cx + (PW / 2) * L.left.s + GAP + CARD_HALF, L.w - MARGIN - CARD_HALF);
-                      const leftX = Math.min(L.right.cx - (PW / 2) * L.right.s - GAP - CARD_HALF, MARGIN + CARD_HALF);
+                      const ishaBottom = L.left.cy + (PH / 2) * L.left.s + 12;
+                      const rohanTop = L.right.cy - (PH / 2) * L.right.s - 12;
+                      // the two right-hand boxes need ~165 units between them; the left one sits low
+                      const dots = [atY(ishaBottom + 18), atY(ishaBottom + 185), atY(rohanTop - 18)];
+                      const rightX = L.w - MARGIN - CARD_HALF;
+                      const leftX = MARGIN + CARD_HALF;
                       const cards = dots.map((d, i) =>
-                        i === 1
-                          ? { x: d.x, y: d.y, edge: d.x } // centred on the route
-                          : i === 0
-                            ? { x: rightX, y: d.y, edge: rightX - CARD_HALF }
-                            : { x: leftX, y: d.y, edge: leftX + CARD_HALF },
+                        i < 2 ? { x: rightX, y: d.y, edge: rightX - CARD_HALF } : { x: leftX, y: d.y, edge: leftX + CARD_HALF },
                       );
                       const tAt = (st: number) => (st <= 0 ? 0 : st >= 4 ? 1 : dots[st - 1].t);
                       const head = along(tAt(stage));
@@ -1257,11 +1248,9 @@ function PhonesStage({ index }: { index: number }) {
                               animate={{ x2: head.x, y2: head.y }}
                               transition={travel}
                             />
-                            {stops.map((s, i) =>
-                              i === 1 ? null : (
-                                <line key={s} x1={dots[i].x} y1={dots[i].y} x2={cards[i].edge} y2={cards[i].y} stroke="rgba(10,11,16,0.25)" strokeWidth={1.5} strokeDasharray="4 6" />
-                              ),
-                            )}
+                            {stops.map((s, i) => (
+                              <line key={s} x1={dots[i].x} y1={dots[i].y} x2={cards[i].edge} y2={cards[i].y} stroke="rgba(10,11,16,0.25)" strokeWidth={1.5} strokeDasharray="4 6" />
+                            ))}
                           </svg>
                           {stops.map((s, i) => {
                             const d = dots[i];
