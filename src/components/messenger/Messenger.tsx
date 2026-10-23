@@ -2492,6 +2492,26 @@ export function Messenger() {
     };
     const hold = (y: number) => window.scrollTo({ top: y, behavior: 'instant' });
 
+    // Freezing page scroll outright (html + body overflow hidden) is the only thing that stops a scroll
+    // that can't be cancelled: Chrome's latched trackpad swipes, and the momentum glide after a touch
+    // swipe on phones (iOS Safari ignores scrollTo while it glides, which made screens get skipped).
+    // It lifts as soon as the scene's hold is over.
+    const root = document.documentElement;
+    const body = document.body;
+    let frozenUntil = 0;
+    let unfreeze = 0;
+    const freeze = () => {
+      if (frozenUntil) return;
+      frozenUntil = doneAtRef.current;
+      root.style.overflow = 'hidden';
+      body.style.overflow = 'hidden';
+      unfreeze = window.setTimeout(() => {
+        root.style.overflow = '';
+        body.style.overflow = '';
+        frozenUntil = 0;
+      }, Math.max(0, doneAtRef.current - performance.now()));
+    };
+    const touchDevice = window.matchMedia('(pointer: coarse)').matches;
     show(rawIndex());
     const onScroll = () => {
       const d = shownRef.current;
@@ -2500,20 +2520,28 @@ export function Messenger() {
         // upward: one scene at a time, held briefly while it re-enters
         if (performance.now() < doneAtRef.current) {
           hold(startY(d)); // the current scene is still settling — stay on it
+          if (touchDevice) freeze();
           return;
         }
         show(d - 1, true);
-        if (window.scrollY < startY(d - 1)) hold(startY(d - 1));
+        if (window.scrollY < startY(d - 1)) {
+          hold(startY(d - 1));
+          if (touchDevice) freeze(); // stop the glide here, one screen up
+        }
         return;
       }
       if (window.scrollY <= limitY(d)) return;
       if (performance.now() < doneAtRef.current) {
         hold(limitY(d)); // animation still playing — stay on this scene
+        if (touchDevice) freeze();
         return;
       }
       if (d < n - 1) {
         show(d + 1); // one scene at a time
-        if (window.scrollY > limitY(d + 1)) hold(limitY(d + 1));
+        if (window.scrollY > limitY(d + 1)) {
+          hold(limitY(d + 1));
+          if (touchDevice) freeze();
+        }
       }
     };
     // While a scene is still playing, swallow any input that would scroll past it, so the page never
@@ -2524,21 +2552,6 @@ export function Messenger() {
       ((dy > 0 && window.scrollY + dy > limitY(shownRef.current)) ||
         // upward too (never above the story's own first screen, so the page header stays reachable)
         (dy < 0 && shownRef.current > 0 && window.scrollY + dy < startY(shownRef.current)));
-    // Chrome "latches" a trackpad swipe: once it has started scrolling, the rest of that swipe's wheel
-    // events can't be cancelled, so the page would overshoot and be snapped back (the glitch). For
-    // those, freeze page scrolling outright until the scene has finished — no movement, no snap.
-    const root = document.documentElement;
-    let frozenUntil = 0;
-    let unfreeze = 0;
-    const freeze = () => {
-      if (frozenUntil) return;
-      frozenUntil = doneAtRef.current;
-      root.style.overflow = 'hidden';
-      unfreeze = window.setTimeout(() => {
-        root.style.overflow = '';
-        frozenUntil = 0;
-      }, Math.max(0, doneAtRef.current - performance.now()));
-    };
     const onWheel = (e: WheelEvent) => {
       if (!blocking(e.deltaY)) return;
       if (e.cancelable) e.preventDefault();
@@ -2578,6 +2591,7 @@ export function Messenger() {
       window.removeEventListener('keydown', onKey);
       window.clearTimeout(unfreeze);
       root.style.overflow = '';
+      body.style.overflow = '';
     };
   }, [n, reduce]);
   const scene = SCENES[index];
