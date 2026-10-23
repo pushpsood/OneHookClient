@@ -210,7 +210,7 @@ export function Pricing() {
           <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-accent/25 bg-accent/5 px-5 py-3 text-sm text-accent">
             <p className="font-semibold">
               Every feature of the{' '}
-              <span className="underline decoration-2 underline-offset-4">OneHook Messenger is free, forever</span>, on every plan.
+              <span className="underline decoration-1 underline-offset-4">OneHook Messenger is free, forever</span>, on every plan.
             </p>
             <Link
               to="/messenger"
