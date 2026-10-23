@@ -315,12 +315,13 @@ const COUPLE_STORIES: readonly CoupleStory[] = [
   },
 ] as const;
 
-/** Accent pairs so each couple's illustration looks distinct ("random" but stable per couple). */
+/** Brand-only palettes (navy · brushed silver · pink): the front partner is always brushed silver;
+ *  the partner behind and the card's navy tint vary so each couple still looks distinct. */
 const ART_PALETTES = [
-  { a: '#ff9ecb', b: '#c9a7ff' },
-  { a: '#ffc2a1', b: '#ff9ecb' },
-  { a: '#a7c7ff', b: '#ff9ecb' },
-  { a: '#ffd0e6', b: '#9a7fd6' },
+  { back: '#5B7DB8', glow: '#24447A' },
+  { back: '#ff8fc7', glow: '#1F3A6B' },
+  { back: '#9AA1AB', glow: '#2A4C86' },
+  { back: '#3F63A3', glow: '#1A3263' },
 ] as const;
 
 /**
@@ -331,7 +332,7 @@ const ART_PALETTES = [
  */
 function CoupleIllustration({ id }: { id: string }) {
   const seed = Array.from(id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
-  const { a, b } = ART_PALETTES[seed % ART_PALETTES.length];
+  const { back, glow } = ART_PALETTES[seed % ART_PALETTES.length];
   const flip = seed % 2 === 1;
   const gid = `art-${id}`;
   return (
@@ -343,19 +344,21 @@ function CoupleIllustration({ id }: { id: string }) {
     >
       <defs>
         <radialGradient id={`${gid}-bg`} cx="30%" cy="16%" r="130%">
-          <stop offset="0%" stopColor="#46324f" />
-          <stop offset="58%" stopColor="#241a2b" />
-          <stop offset="100%" stopColor="#130f18" />
+          <stop offset="0%" stopColor={glow} />
+          <stop offset="58%" stopColor="#111C33" />
+          <stop offset="100%" stopColor="#0A0B10" />
         </radialGradient>
+        {/* brushed silver */}
         <linearGradient id={`${gid}-p`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor={a} />
-          <stop offset="100%" stopColor={b} />
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="45%" stopColor="#E6E9EE" />
+          <stop offset="100%" stopColor="#9AA1AB" />
         </linearGradient>
       </defs>
       <rect width="200" height="320" fill={`url(#${gid}-bg)`} />
       <g transform={flip ? 'translate(200,0) scale(-1,1)' : undefined}>
         {/* partner behind */}
-        <g fill={b} opacity="0.5">
+        <g fill={back} opacity="0.55">
           <circle cx="74" cy="122" r="30" />
           <rect x="30" y="158" width="88" height="170" rx="44" />
         </g>
@@ -373,10 +376,10 @@ function CoupleIllustration({ id }: { id: string }) {
       />
       {/* privacy lock badge */}
       <g transform="translate(100,250)">
-        <circle r="19" fill="#130f18" opacity="0.72" />
-        <circle r="19" fill="none" stroke={a} strokeOpacity="0.7" strokeWidth="1.5" />
-        <rect x="-7" y="-1" width="14" height="12" rx="2.5" fill={a} />
-        <path d="M-4 -1 V-5 a4 4 0 0 1 8 0 V-1" fill="none" stroke={a} strokeWidth="2" />
+        <circle r="19" fill="#0A0B10" opacity="0.75" />
+        <circle r="19" fill="none" stroke="#E6E9EE" strokeOpacity="0.6" strokeWidth="1.5" />
+        <rect x="-7" y="-1" width="14" height="12" rx="2.5" fill="#E6E9EE" />
+        <path d="M-4 -1 V-5 a4 4 0 0 1 8 0 V-1" fill="none" stroke="#E6E9EE" strokeWidth="2" />
       </g>
     </svg>
   );
@@ -386,7 +389,7 @@ function CoupleIllustration({ id }: { id: string }) {
  *  caller via `className` (e.g. `absolute inset-0` for a panel backdrop). */
 function StoryPortrait({ story, className = '' }: { story: CoupleStory; className?: string }) {
   return (
-    <div className={`overflow-hidden bg-[#130f18] ${className}`}>
+    <div className={`overflow-hidden bg-[#0A0B10] ${className}`}>
       <CoupleIllustration id={story.id} />
     </div>
   );
@@ -422,18 +425,18 @@ function ExpandingCouplePanel({
       initial={false}
       animate={{ flexGrow: active ? 5 : 1 }}
       transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 200, damping: 28 }}
-      className="group relative h-full min-w-0 basis-0 overflow-hidden rounded-[1.5rem] border border-white/10 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#ff9ecb]"
+      className="group relative h-full min-w-0 basis-0 overflow-hidden rounded-[1.5rem] border border-[#E6E9EE]/15 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#ff8fc7]"
     >
       <StoryPortrait story={story} className="absolute inset-0 h-full w-full" />
       <div
         aria-hidden="true"
         className="absolute inset-0"
-        style={{ background: 'linear-gradient(to top, rgba(15,10,20,0.95) 4%, rgba(15,10,20,0.45) 46%, rgba(15,10,20,0.08) 100%)' }}
+        style={{ background: 'linear-gradient(to top, rgba(10,11,16,0.95) 4%, rgba(10,11,16,0.45) 46%, rgba(10,11,16,0.05) 100%)' }}
       />
       <motion.div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 h-20"
-        style={{ background: 'radial-gradient(90% 100% at 50% 0%, rgba(255,143,199,0.5), transparent 70%)' }}
+        style={{ background: 'radial-gradient(90% 100% at 50% 0%, rgba(255,143,199,0.28), transparent 70%)' }}
         initial={false}
         animate={{ opacity: active && !reduce ? 1 : 0 }}
         transition={{ duration: 0.4 }}
@@ -442,11 +445,11 @@ function ExpandingCouplePanel({
       <div className="relative z-10 flex h-full flex-col justify-between gap-2 p-3 md:p-4">
         {/* two pills: how they came to OneHook, and their current status */}
         <div className="flex flex-col items-start gap-1.5">
-          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#ff9ecb]/30 bg-black/45 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#ffd0e6] backdrop-blur-sm">
+          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#ff8fc7]/40 bg-[#0A0B10]/55 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#ff8fc7] backdrop-blur-sm">
             <OriginIcon className="h-2.5 w-2.5 shrink-0" />
             <span className={`truncate ${labelVisibility}`}>{origin.label}</span>
           </span>
-          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-white/25 bg-black/45 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-white/85 backdrop-blur-sm">
+          <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#E6E9EE]/30 bg-[#0A0B10]/55 px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.12em] text-[#E6E9EE] backdrop-blur-sm">
             <PresenceIcon className="h-2.5 w-2.5 shrink-0" />
             <span className={`truncate ${labelVisibility}`}>{presence.label}</span>
           </span>
@@ -2436,8 +2439,9 @@ export function Landing() {
       <section
         ref={convoRef}
         {...hideMrOneHook}
-        className="py-12 pb-16 px-6 bg-accent text-white relative overflow-hidden z-40"
+        className="py-12 pb-16 px-6 text-white relative overflow-hidden z-40"
         style={{
+          background: 'radial-gradient(120% 90% at 50% 0%, #16264A 0%, #0D1428 55%, #0A0B10 100%)',
           // Convex "parabola" bottom edge instead of a flat line, with a soft
           // black shadow cast downward onto the section below for depth.
           borderBottomLeftRadius: '50% 72px',
