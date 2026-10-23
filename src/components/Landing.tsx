@@ -1643,12 +1643,19 @@ export function Landing() {
     const ids = ['philosophy', 'features', 'under-the-hood', 'get-app'];
     let raf = 0;
     const compute = () => {
+      // A nav click owns the highlight until its smooth scroll settles, so the underline goes straight
+      // to the clicked item instead of sweeping through every section on the way.
+      if (Date.now() < navLockUntilRef.current) return;
       const line = window.innerHeight * 0.38;
       let current = '';
       for (const id of ids) {
         const el = document.getElementById(id);
         if (el && el.getBoundingClientRect().top <= line) current = id;
       }
+      // At the very bottom the last section may never reach the line; if it's on screen, it wins.
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      const last = document.getElementById(ids[ids.length - 1]);
+      if (atBottom && last && last.getBoundingClientRect().top < window.innerHeight) current = ids[ids.length - 1];
       setActiveSection((prev) => (prev === current ? prev : current));
     };
     const onScroll = () => {
@@ -1683,6 +1690,8 @@ export function Landing() {
   }, []);
   const [activeStep, setActiveStep] = useState(0);
   const [activeSection, setActiveSection] = useState<string>('');
+  /** Until this time (ms) the scroll-spy leaves the highlight alone — set by a nav click. */
+  const navLockUntilRef = useRef(0);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   // Desktop nav: keep the four in-page section links inline while they fit; once the nav would
   // overflow, fold them into an "Explore" dropdown. Measured, so it reacts to the real available width.
@@ -1966,9 +1975,15 @@ export function Landing() {
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
+    // One highlight at a time: the clicked item takes it immediately, and the scroll-spy waits for
+    // the smooth scroll to finish before taking over again.
+    setActiveSection(id);
+    navLockUntilRef.current = Date.now() + 1200;
     element?.scrollIntoView({ behavior: 'smooth' });
     setIsMobileNavOpen(false);
     setExploreOpen(false);
+    // don't leave the clicked button focused/"pressed" once we've moved on
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   };
 
   // Nav link styling with an active-section underline (scroll-spy driven).
@@ -1976,7 +1991,7 @@ export function Landing() {
     `text-xs font-bold uppercase tracking-[0.2em] whitespace-nowrap transition-all ${
       activeSection === id
         ? 'opacity-100 underline underline-offset-[6px] decoration-2 decoration-accent'
-        : 'opacity-60 hover:opacity-100'
+        : 'opacity-60 [@media(hover:hover)]:hover:opacity-100'
     }`;
   const mobNav = (id: string, topBorder = true) =>
     `block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] transition-all ${
@@ -1984,7 +1999,7 @@ export function Landing() {
     }${
       activeSection === id
         ? 'opacity-100 underline underline-offset-4 decoration-2 decoration-accent'
-        : 'opacity-70 hover:opacity-100'
+        : 'opacity-70 [@media(hover:hover)]:hover:opacity-100'
     }`;
 
   const goRedeemInvite = () => navigate('/redeem');
