@@ -1208,10 +1208,11 @@ function PhonesStage({ index }: { index: number }) {
                       //   Isha (left)            · Attackers (right)
                       //            OneHook database (on the route, the message passes through it)
                       //   Friends & family (left) · Rohan (right)
-                      // The route is one straight inclined line down the middle; the side boxes are
-                      // tied to it by short, level (parallel) dashed lines.
-                      const A = { x: L.w / 2 - 12, y: L.left.cy - 150 };
-                      const B = { x: L.w / 2 + 12, y: L.right.cy + 150 };
+                      // The route is one straight line that starts behind Isha's phone and ends behind
+                      // Rohan's, crossing the middle; the side boxes are tied to it by level (parallel)
+                      // dashed lines that run in behind the phones too.
+                      const A = { x: L.left.cx, y: L.left.cy };
+                      const B = { x: L.right.cx, y: L.right.cy };
                       const atY = (y: number) => {
                         const t = (y - A.y) / (B.y - A.y);
                         return { t, x: A.x + (B.x - A.x) * t, y };
@@ -1222,10 +1223,17 @@ function PhonesStage({ index }: { index: number }) {
                       const ishaBottom = L.left.cy + (PH / 2) * L.left.s;
                       const rohanTop = L.right.cy - (PH / 2) * L.right.s;
                       const dots = [atY(L.left.cy - 20), atY((ishaBottom + rohanTop) / 2), atY(L.right.cy + 20)];
+                      // side boxes sit at the outer edges (clear of the phones); their connectors run level
+                      // from the box into the route behind the phone
+                      const MARGIN = 14;
+                      const rightX = Math.max(L.left.cx + (PW / 2) * L.left.s + GAP + CARD_HALF, L.w - MARGIN - CARD_HALF);
+                      const leftX = Math.min(L.right.cx - (PW / 2) * L.right.s - GAP - CARD_HALF, MARGIN + CARD_HALF);
                       const cards = dots.map((d, i) =>
                         i === 1
                           ? { x: d.x, y: d.y, edge: d.x } // centred on the route
-                          : { x: i === 0 ? d.x + GAP + CARD_HALF : d.x - GAP - CARD_HALF, y: d.y, edge: i === 0 ? d.x + GAP : d.x - GAP },
+                          : i === 0
+                            ? { x: rightX, y: d.y, edge: rightX - CARD_HALF }
+                            : { x: leftX, y: d.y, edge: leftX + CARD_HALF },
                       );
                       const tAt = (st: number) => (st <= 0 ? 0 : st >= 4 ? 1 : dots[st - 1].t);
                       const head = along(tAt(stage));
