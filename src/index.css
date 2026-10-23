@@ -96,6 +96,16 @@ html {
   scroll-behavior: smooth;
 }
 
+/* No elastic "rubber-band" overscroll past the top or the footer on mouse/trackpad devices (it showed
+   an empty strip below the footer, most visibly on the Messenger story whose scene holds stop the page
+   while a swipe's momentum is still running). Touch screens keep it, so pull-to-refresh still works. */
+@media (hover: hover) and (pointer: fine) {
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
 body {
   min-height: 100vh;
   margin: 0;
