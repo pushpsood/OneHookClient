@@ -2477,9 +2477,17 @@ export function Messenger() {
       const { top, span } = geo();
       return top + ((d + 1) / n) * span - 2;
     };
-    const show = (i: number) => {
+    // first scroll position that belongs to scene d
+    const startY = (d: number) => {
+      const { top, span } = geo();
+      return top + (d / n) * span + 2;
+    };
+    // Going back plays a shorter hold (the scene re-enters quickly) — enough that a fast upward swipe
+    // steps back one screen at a time instead of skipping one.
+    const BACK_HOLD = 1.1;
+    const show = (i: number, back = false) => {
       shownRef.current = i;
-      doneAtRef.current = performance.now() + secs(i) * 1000;
+      doneAtRef.current = performance.now() + (back ? Math.min(BACK_HOLD, secs(i)) : secs(i)) * 1000;
       setIndex(i);
     };
     const hold = (y: number) => window.scrollTo({ top: y, behavior: 'instant' });
@@ -2489,7 +2497,13 @@ export function Messenger() {
       const d = shownRef.current;
       const raw = rawIndex();
       if (raw < d) {
-        show(raw);
+        // upward: one scene at a time, held briefly while it re-enters
+        if (performance.now() < doneAtRef.current) {
+          hold(startY(d)); // the current scene is still settling — stay on it
+          return;
+        }
+        show(d - 1, true);
+        if (window.scrollY < startY(d - 1)) hold(startY(d - 1));
         return;
       }
       if (window.scrollY <= limitY(d)) return;
@@ -2506,7 +2520,10 @@ export function Messenger() {
     // moves and gets snapped back (that snap-back juddered, worst on the zooming finale). Scrolling up
     // is always allowed, and the scroll-event hold above remains as a fallback (scrollbar drags etc).
     const blocking = (dy: number) =>
-      dy > 0 && performance.now() < doneAtRef.current && window.scrollY + dy > limitY(shownRef.current);
+      performance.now() < doneAtRef.current &&
+      ((dy > 0 && window.scrollY + dy > limitY(shownRef.current)) ||
+        // upward too (never above the story's own first screen, so the page header stays reachable)
+        (dy < 0 && shownRef.current > 0 && window.scrollY + dy < startY(shownRef.current)));
     // Chrome "latches" a trackpad swipe: once it has started scrolling, the rest of that swipe's wheel
     // events can't be cancelled, so the page would overshoot and be snapped back (the glitch). For
     // those, freeze page scrolling outright until the scene has finished — no movement, no snap.
@@ -2526,7 +2543,8 @@ export function Messenger() {
       if (!blocking(e.deltaY)) return;
       if (e.cancelable) e.preventDefault();
       else freeze();
-      if (window.scrollY < limitY(shownRef.current)) hold(limitY(shownRef.current));
+      if (e.deltaY > 0 && window.scrollY < limitY(shownRef.current)) hold(limitY(shownRef.current));
+      if (e.deltaY < 0 && window.scrollY > startY(shownRef.current)) hold(startY(shownRef.current));
     };
     let touchY = 0;
     const onTouchStart = (e: TouchEvent) => {
@@ -2540,11 +2558,12 @@ export function Messenger() {
       }
       touchY = y;
     };
-    const KEYS: Record<string, number> = { ArrowDown: 40, PageDown: 600, ' ': 600, End: 1e6 };
+    const KEYS: Record<string, number> = { ArrowDown: 40, PageDown: 600, ' ': 600, End: 1e6, ArrowUp: -40, PageUp: -600, Home: -1e6 };
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-      if (!e.shiftKey && KEYS[e.key] && blocking(KEYS[e.key])) e.preventDefault();
+      const dy = e.key === ' ' && e.shiftKey ? -600 : KEYS[e.key];
+      if (dy && blocking(dy)) e.preventDefault();
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('wheel', onWheel, { passive: false });
@@ -2625,7 +2644,7 @@ export function Messenger() {
             // toolbar collapsed (100lvh), but everything in it is laid out for the screen WITH the
             // toolbar (100svh), so nothing re-sizes or moves when the toolbar shows or hides while
             // scrolling. The extra strip the collapsed toolbar uncovers holds "Start with an invite".
-            className="sticky flex flex-col items-center overflow-hidden px-4 pb-[calc(100lvh-100svh+12px)] pt-1 sm:px-6 sm:pb-8 sm:pt-6"
+            className="sticky flex flex-col items-center overflow-hidden px-4 pb-[calc(100lvh-100svh+12px)] pt-1 sm:px-6 sm:pb-[calc(100lvh-100svh+32px)] sm:pt-6"
             style={{ top: headerH, height: `calc(100lvh - ${headerH}px)` }}
           >
             {/* screen 6: Mr OneHook peeking in from the edges */}

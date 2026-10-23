@@ -2375,7 +2375,7 @@ export function Landing() {
       </nav>
 
       {/* Hero Section */}
-      <section {...hideMrOneHook} className="min-h-screen flex flex-col items-center justify-start md:justify-center px-6 mt-[72px] pt-0 relative bg-black overflow-hidden z-40">
+      <section {...hideMrOneHook} className="min-h-[calc(100lvh-72px)] flex flex-col items-center justify-start md:justify-center px-6 mt-[72px] pt-0 pb-[calc(100lvh-100svh)] relative bg-black overflow-hidden z-40">
         {/* Mobile: a full-width video rectangle pinned to the top (sides preserved) that fades
             into black. Desktop (md+): full-cover background as before. */}
         <video
