@@ -471,7 +471,7 @@ const DEV = {
 };
 const SYNC_LAYOUT = {
   land: { cloud: { x: 590, y: 70 }, xL: 205, xR: 975, rowTop: 300, rowBot: 540, gutterL: 36, gutterR: 1144 },
-  port: { cloud: { x: 210, y: 130 }, xL: 105, xR: 315, rowTop: 420, rowBot: 1080, gutterL: 4, gutterR: 416 },
+  port: { cloud: { x: 210, y: 112 }, xL: 100, xR: 330, rowTop: 372, rowBot: 905, gutterL: 2, gutterR: 418 },
 } as const;
 
 /** A device standing on its row baseline (so a row lines up exactly), with its label just below. */
@@ -538,7 +538,7 @@ function SyncDevices({ layout, phone, k }: { layout: 'land' | 'port'; phone: Pos
   const toIpad = [C, { x: xL, y: C.y }, { x: xL, y: ipadTop }];
   const toAndroid = [C, { x: xR, y: C.y }, { x: xR, y: androidTop }];
   const enterY = land ? lapMid : laptopTop + 30;
-  const crossYL = land ? 385 : 880;
+  const crossYL = land ? 385 : 640;
   const cloudToLaptop = failRoute([C, { x: xL, y: C.y }, { x: gutterL, y: C.y }], { x: gutterL, y: crossYL }, [
     { x: gutterL, y: enterY },
     { x: laptopLeft, y: enterY },
@@ -957,23 +957,23 @@ const LAYOUTS = {
     h: 1300,
     // phones: compositions packed into the band each screen shows, so it can use the full width
     solo: { cx: 210, cy: 650, s: 1.0 },
-    left: { cx: 112, cy: 230, s: 0.82 },
-    right: { cx: 308, cy: 820, s: 0.82 },
+    left: { cx: 106, cy: 240, s: 0.78 },
+    right: { cx: 314, cy: 640, s: 0.78 },
     broken: { cx: 106, cy: 700, s: 0.8 },
     fresh: { cx: 314, cy: 700, s: 0.8 },
     cloud: { x: 210, y: 345 },
-    center: { cx: 210, cy: 660, s: 0.64 },
+    center: { cx: 210, cy: 612, s: 0.6 },
     aside: { cx: -900, cy: 1040, s: 0.8 },
-    cloud4: { x: 210, y: 130 },
+    cloud4: { x: 210, y: 112 },
   },
 } as const;
 const at = (p: Pose) => ({ left: p.cx - PW / 2, top: p.cy - PH / 2, scale: p.s });
 /** Portrait (phone) camera per screen 1–5: the vertical band of the 420×1300 canvas each scene uses. */
 const PORT_VIEWS: { y: number; h: number }[] = [
   { y: 285, h: 730 }, // 1 · phone + preview cards
-  { y: 28, h: 1000 }, // 2 · two phones and the message's diagonal journey
+  { y: 36, h: 806 }, // 2 · two phones leaning left, the route and boxes between them
   { y: 280, h: 660 }, // 3 · the two phones side by side under the cloud
-  { y: 100, h: 1090 }, // 4 · devices around the cloud
+  { y: 66, h: 900 }, // 4 · devices around the cloud
   { y: 0, h: 1300 }, // 5 · captions (unchanged)
 ];
 
@@ -1101,7 +1101,7 @@ function PhonesStage({ index }: { index: number }) {
         const rohan = at(L.right);
         const fresh = at(syncing ? L.center : L.fresh);
         const tilt = layout === 'port' ? 0 : TILT; // phones: the two phones sit upright, side by side
-        const ishaRotate = broken ? tilt : journey ? 0 : -6;
+        const ishaRotate = broken ? tilt : journey ? (layout === 'port' ? -6 : 0) : -6;
         // key path: broken phone → cloud → new phone
         const keyPath = {
           left: [L.broken.cx, L.cloud.x, L.cloud.x, L.fresh.cx],
@@ -1172,13 +1172,14 @@ function PhonesStage({ index }: { index: number }) {
                     (() => {
                       // phones: a slanted route from Isha (top-left) down to Rohan (bottom-right); the
                       // three checkpoints sit in the free corners and on the route itself
-                      const A = { x: L.left.cx, y: L.left.cy + (PH / 2) * L.left.s + 6 };
-                      const B = { x: L.right.cx, y: L.right.cy - (PH / 2) * L.right.s - 6 };
+                      const A = { x: L.left.cx + (PW / 2) * L.left.s + 4, y: L.left.cy + 40 };
+                      const B = { x: L.right.cx - (PW / 2) * L.right.s - 4, y: L.right.cy - 40 };
                       const along = (t: number) => ({ x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t });
+                      // the free space between the phones: right of Isha (two boxes) and left of Rohan (one)
                       const cards = [
-                        { x: 322, y: 250 }, // attackers — top-right corner
-                        { x: 170, y: 500 }, // database — on the route, clear of Rohan's phone
-                        { x: 102, y: 812 }, // friends & family — bottom-left corner
+                        { x: 323, y: 138 }, // attackers
+                        { x: 323, y: 330 }, // OneHook database
+                        { x: 98, y: 645 }, // friends & family
                       ];
                       const p = (stage / 4) as number;
                       const head = along(Math.min(1, p));
@@ -1204,7 +1205,7 @@ function PhonesStage({ index }: { index: number }) {
                             />
                             {stops.map((s, i) => {
                               const d = along((i + 1) / 4);
-                              return i === 1 ? null : (
+                              return (
                                 <line key={s} x1={d.x} y1={d.y} x2={cards[i].x} y2={cards[i].y} stroke="rgba(10,11,16,0.2)" strokeWidth={1.5} strokeDasharray="4 6" />
                               );
                             })}
@@ -1220,8 +1221,8 @@ function PhonesStage({ index }: { index: number }) {
                             );
                           })}
                           {stops.map((s, i) => (
-                            <div key={s} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: cards[i].x, top: cards[i].y, zoom: 1.1 }}>
-                              <Checkpoint kind={s} state={stateOf(i)} width={176} />
+                            <div key={s} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: cards[i].x, top: cards[i].y }}>
+                              <Checkpoint kind={s} state={stateOf(i)} width={186} />
                             </div>
                           ))}
                           <motion.div
@@ -1429,7 +1430,7 @@ function PhonesStage({ index }: { index: number }) {
                   className="absolute z-20"
                   style={{ width: PW, height: PH, transformStyle: 'preserve-3d' }}
                   initial={reduce ? { ...rohan, opacity: 0 } : { left: rohan.left, top: -PH - 260, scale: rohan.scale * 0.88, rotate: 18, rotateX: 34, opacity: 0 }}
-                  animate={{ ...rohan, rotate: 0, rotateX: 0, opacity: 1 }}
+                  animate={{ ...rohan, rotate: layout === 'port' ? -6 : 0, rotateX: 0, opacity: 1 }}
                   exit={reduce ? { opacity: 0 } : { top: -PH - 260, rotate: 12, opacity: 0, transition: { duration: 0.5, ease: 'easeIn' } }}
                   transition={
                     reduce
@@ -1699,7 +1700,6 @@ function CaptionMain() {
  * it on widening rings and cover the whole space — big near the centre, smaller further out.
  */
 function TranslationBurst({ layout, k }: { layout: 'land' | 'port'; k: number }) {
-  const lite = useLite();
   const reduce = useReducedMotion() ?? false;
   const land = layout === 'land';
   const W = land ? LAYOUTS.land.w : LAYOUTS.port.w;
@@ -1754,7 +1754,7 @@ function TranslationBurst({ layout, k }: { layout: 'land' | 'port'; k: number })
         <motion.div
           key={b.i}
           className="absolute w-[230px] -translate-x-1/2 -translate-y-1/2"
-          style={b.blurred && !lite ? { filter: 'blur(6px)' } : undefined}
+          style={b.blurred ? { filter: 'blur(6px)' } : undefined}
           initial={{ left: cx, top: cy, scale: 0.2, opacity: 0 }}
           animate={{ left: b.x, top: b.y, scale: b.s, opacity: b.blurred ? 0.35 : 1 }}
           transition={
