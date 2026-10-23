@@ -665,7 +665,50 @@ type HeroAccentState = {
  * so spacing between words always matches normal text and the centred line eases rather than jumps.
  * Screen readers get the plain sentence once; reduced-motion users get the static "One" accent.
  */
-function HeroHeadline() {
+/**
+ * The three trust badges under the hero buttons: all on one line when they fit, otherwise one per
+ * line — never an uneven two-and-one wrap. Decided from a hidden one-line copy's natural width.
+ */
+function HeroBadges() {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [stacked, setStacked] = useState(false);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const measure = measureRef.current;
+    if (!box || !measure) return;
+    const check = () => setStacked(measure.scrollWidth > box.clientWidth + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(box);
+    document.fonts?.ready.then(check).catch(() => undefined);
+    return () => ro.disconnect();
+  }, []);
+  const items = (
+    <>
+      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+        <Lock className="w-3.5 h-3.5" /> End-to-end encrypted
+      </span>
+      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+        <Focus className="w-3.5 h-3.5" /> One match at a time
+      </span>
+      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+        <Sparkles className="w-3.5 h-3.5" /> Matched by science
+      </span>
+    </>
+  );
+  const type = 'text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-white/70';
+  return (
+    <div ref={boxRef} className={`relative mt-10 w-full ${type}`}>
+      <div ref={measureRef} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 flex w-max gap-x-6">
+        {items}
+      </div>
+      <div className={`flex items-center justify-center ${stacked ? 'flex-col gap-y-2.5' : 'flex-row gap-x-6'}`}>{items}</div>
+    </div>
+  );
+}
+
+function HeroHeadline({ onLine2Width }: { onLine2Width?: (px: number) => void } = {}) {
   const reduceMotion = useReducedMotion();
   const [state, setState] = useState<HeroAccentState>({ active: 0, released: null, vars: {}, tick: 0 });
   // Glitch classes apply only once cycling starts, so first paint is the clean static headline.
@@ -765,10 +808,24 @@ function HeroHeadline() {
     );
   };
 
+  // Width of the plain "Zero distractions." line (accent excluded, so it doesn't change as the accent
+  // hops) — the hero's buttons are never allowed to be wider than it.
+  const line2Ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const el = line2Ref.current;
+    if (!el || !onLine2Width) return;
+    const report = () => onLine2Width(Math.round(el.getBoundingClientRect().width));
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    document.fonts?.ready.then(report).catch(() => undefined);
+    return () => ro.disconnect();
+  }, [onLine2Width]);
+
   return (
     <h1
       ref={headingRef}
-      className="font-light tracking-[-0.03em] leading-[1.03] text-white mb-6 drop-shadow-lg"
+      className="relative font-light tracking-[-0.03em] leading-[1.03] text-white mb-6 drop-shadow-lg"
       style={{ fontSize: 'clamp(2.75rem, 8vw, 5.5rem)' }}
     >
       <span className="sr-only">
@@ -782,6 +839,9 @@ function HeroHeadline() {
         {word(0)} {word(1)}.
         <br />
         {word(2)} {word(3)}.
+      </span>
+      <span ref={line2Ref} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap">
+        Zero distractions.
       </span>
     </h1>
   );
@@ -1733,6 +1793,8 @@ export function Landing() {
   // Auto-advancing "spotlight" couple in the stories accordion; pauses while the visitor interacts.
   const [spotlight, setSpotlight] = useState(0);
   const [storyPaused, setStoryPaused] = useState(false);
+  // width of the hero headline's "Zero distractions." line — caps the hero buttons
+  const [heroLineW, setHeroLineW] = useState<number>();
   const [showStickyCta, setShowStickyCta] = useState(false);
 
   // Mascot explainer video shown inside the "Under the hood" section.
@@ -2414,7 +2476,7 @@ export function Landing() {
             </Kicker>
           </div>
 
-          <HeroHeadline />
+          <HeroHeadline onLine2Width={setHeroLineW} />
 
           <p className="relative mx-auto mb-10 max-w-2xl text-lg md:text-2xl font-light leading-relaxed text-white/85 drop-shadow-md">
             {/* Invisible sizer reserves the final space so buttons below don't
@@ -2440,26 +2502,28 @@ export function Landing() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.6 }}
+            // never wider than the "Zero distractions." line above
+            style={heroLineW ? { maxWidth: heroLineW } : undefined}
             className="mx-auto grid w-full max-w-[420px] grid-cols-2 gap-3 lg:flex lg:max-w-none lg:items-center lg:justify-center lg:gap-4"
           >
             <Link
               to="/science"
               {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
-              className="order-2 flex h-[52px] flex-col items-center justify-center rounded border border-white/40 px-4 text-center leading-tight text-white backdrop-blur-sm transition-colors hover:bg-white/10 lg:order-none lg:w-[252px]"
+              className="order-2 flex h-[52px] flex-col items-center justify-center rounded border border-white/40 px-4 text-center leading-tight text-white backdrop-blur-sm transition-colors hover:bg-white/10 lg:order-none lg:min-w-0 lg:flex-1 lg:basis-0"
             >
               <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/60">Dating</span>
               <span className="text-xs font-black uppercase tracking-[0.3em]">Science</span>
             </Link>
             <button
               onClick={goRedeemInvite} {...trackProps(UiElement.LANDING_GET_STARTED)}
-              className="order-1 col-span-2 flex h-[52px] items-center justify-center gap-2 rounded bg-white px-8 text-xs font-black uppercase tracking-[0.3em] text-accent shadow-xl transition-opacity hover:opacity-90 whitespace-nowrap lg:order-none lg:w-[252px] lg:px-4 lg:tracking-[0.18em]"
+              className="order-1 col-span-2 flex h-[52px] items-center justify-center gap-2 rounded bg-white px-8 text-xs font-black uppercase tracking-[0.3em] text-accent shadow-xl transition-opacity hover:opacity-90 whitespace-nowrap lg:order-none lg:min-w-0 lg:flex-1 lg:basis-0 lg:gap-1.5 lg:px-3 lg:tracking-[0.12em] xl:tracking-[0.18em]"
             >
-              Redeem your invite <ArrowRight className="w-4 h-4" />
+              Redeem your invite <ArrowRight className="w-4 h-4 shrink-0" />
             </button>
             <Link
               to="/messenger"
               {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
-              className="order-3 flex h-[52px] flex-col items-center justify-center rounded border border-white/40 px-4 text-center leading-tight text-white backdrop-blur-sm transition-colors hover:bg-white/10 lg:order-none lg:w-[252px]"
+              className="order-3 flex h-[52px] flex-col items-center justify-center rounded border border-white/40 px-4 text-center leading-tight text-white backdrop-blur-sm transition-colors hover:bg-white/10 lg:order-none lg:min-w-0 lg:flex-1 lg:basis-0"
             >
               <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/60">Private</span>
               <span className="text-xs font-black uppercase tracking-[0.3em]">Messenger</span>
@@ -2470,17 +2534,7 @@ export function Landing() {
             Have an invite code? Redeem it in seconds. Not yet? Ask a member to bring you in.
           </p>
 
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-white/70">
-            <span className="inline-flex items-center gap-2">
-              <Lock className="w-3.5 h-3.5" /> End-to-end encrypted
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <Focus className="w-3.5 h-3.5" /> One match at a time
-            </span>
-            <span className="inline-flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5" /> Matched by science
-            </span>
-          </div>
+          <HeroBadges />
 
           <p className="mt-5 inline-flex items-center justify-center gap-2 text-[10px] sm:text-xs font-bold uppercase tracking-[0.28em] text-white/90">
             <span aria-hidden="true" className="text-xs sm:text-sm leading-none">
