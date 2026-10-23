@@ -972,8 +972,8 @@ const LAYOUTS = {
     h: 1300,
     // phones: compositions packed into the band each screen shows, so it can use the full width
     solo: { cx: 210, cy: 650, s: 1.0 },
-    left: { cx: 106, cy: 240, s: 0.78 },
-    right: { cx: 314, cy: 640, s: 0.78 },
+    left: { cx: 106, cy: 330, s: 0.78 },
+    right: { cx: 314, cy: 760, s: 0.78 },
     broken: { cx: 106, cy: 700, s: 0.8 },
     fresh: { cx: 314, cy: 700, s: 0.8 },
     cloud: { x: 210, y: 345 },
@@ -1005,7 +1005,7 @@ function portLayout(W: number) {
 /** Portrait (phone) camera per screen 1–5: the vertical band of the 420×1300 canvas each scene uses. */
 const PORT_VIEWS: { y: number; h: number }[] = [
   { y: 285, h: 730 }, // 1 · phone + preview cards
-  { y: 36, h: 806 }, // 2 · two phones leaning left, the route and boxes between them
+  { y: 104, h: 872 }, // 2 · two phones, the route and the boxes between them
   { y: 280, h: 660 }, // 3 · the two phones side by side under the cloud
   { y: 66, h: 900 }, // 4 · devices around the cloud
   { y: 0, h: 1300 }, // 5 · captions (unchanged)
@@ -1204,19 +1204,29 @@ function PhonesStage({ index }: { index: number }) {
                     </>
                   ) : (
                     (() => {
-                      // phones: a slanted route from Isha (top-left) down to Rohan (bottom-right); the
-                      // three checkpoints sit in the free corners and on the route itself
-                      const A = { x: L.left.cx + (PW / 2) * L.left.s + 4, y: L.left.cy + 40 };
-                      const B = { x: L.right.cx - (PW / 2) * L.right.s - 4, y: L.right.cy - 40 };
+                      // phones: one straight inclined route from Isha (top-left) down to Rohan
+                      // (bottom-right). Each checkpoint box sits level with its point on the route and
+                      // is tied to it by a horizontal dashed line, so the three connectors run parallel:
+                      // two boxes right of Isha (above Rohan), one left of Rohan, just under Isha.
+                      const A = { x: L.left.cx + (PW / 2) * L.left.s + 22, y: L.left.cy - 120 }; // clear of the tilted phone
+                      const B = { x: L.right.cx - (PW / 2) * L.right.s - 6, y: L.right.cy + 140 };
+                      const atY = (y: number) => {
+                        const t = (y - A.y) / (B.y - A.y);
+                        return { t, x: A.x + (B.x - A.x) * t, y };
+                      };
                       const along = (t: number) => ({ x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t });
-                      // the free space between the phones: right of Isha (two boxes) and left of Rohan (one)
-                      const cards = [
-                        { x: 323, y: 138 }, // attackers
-                        { x: 323, y: 330 }, // OneHook database
-                        { x: 98, y: 645 }, // friends & family
-                      ].map((q) => ({ ...q, x: spreadX(q.x, L.w) }));
-                      const p = (stage / 4) as number;
-                      const head = along(Math.min(1, p));
+                      const CARD_HALF = 93; // half the box width (186)
+                      const GAP = 26; // dashed connector length between the route and the box
+                      const isha = { bottom: L.left.cy + (PH / 2) * L.left.s };
+                      const dots = [atY(L.left.cy - 70), atY(L.right.cy - (PH / 2) * L.right.s - 95), atY(isha.bottom + 118)];
+                      const cards = dots.map((d, i) => ({
+                        x: i < 2 ? d.x + GAP + CARD_HALF : d.x - GAP - CARD_HALF,
+                        y: d.y,
+                        edge: i < 2 ? d.x + GAP : d.x - GAP,
+                      }));
+                      // the message stops exactly on each checkpoint, then reaches Rohan
+                      const tAt = (st: number) => (st <= 0 ? 0 : st >= 4 ? 1 : dots[st - 1].t);
+                      const head = along(tAt(stage));
                       return (
                         <>
                           <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
@@ -1237,15 +1247,12 @@ function PhonesStage({ index }: { index: number }) {
                               animate={{ x2: head.x, y2: head.y }}
                               transition={travel}
                             />
-                            {stops.map((s, i) => {
-                              const d = along((i + 1) / 4);
-                              return (
-                                <line key={s} x1={d.x} y1={d.y} x2={cards[i].x} y2={cards[i].y} stroke="rgba(10,11,16,0.2)" strokeWidth={1.5} strokeDasharray="4 6" />
-                              );
-                            })}
+                            {stops.map((s, i) => (
+                              <line key={s} x1={dots[i].x} y1={dots[i].y} x2={cards[i].edge} y2={cards[i].y} stroke="rgba(10,11,16,0.25)" strokeWidth={1.5} strokeDasharray="4 6" />
+                            ))}
                           </svg>
                           {stops.map((s, i) => {
-                            const d = along((i + 1) / 4);
+                            const d = dots[i];
                             return (
                               <span
                                 key={`dot-${s}`}
