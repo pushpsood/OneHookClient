@@ -82,7 +82,7 @@ function DownloadCta({ tier, className = '' }: { tier: MembershipTier; className
       {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
       className={`inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-full text-[11px] font-black uppercase tracking-[0.2em] transition-opacity hover:opacity-90 ${
         primary
-          ? 'bg-accent text-white'
+          ? 'border border-accent bg-accent text-white'
           : 'border border-border bg-white text-text'
       } ${className}`}
     >
@@ -94,7 +94,9 @@ function DownloadCta({ tier, className = '' }: { tier: MembershipTier; className
 function TierCard({ tier, period }: { key?: string; tier: MembershipTier; period: BillingPeriod }) {
   return (
     <div
-      className={`relative flex flex-col rounded-2xl border p-6 bg-white ${
+      // On sm+ each card is a subgrid spanning the parent's 8 shared rows, so the title, tagline,
+      // price, headline, list and button sit at exactly the same height in all three cards.
+      className={`relative flex flex-col rounded-2xl border p-6 bg-white sm:grid sm:row-span-8 sm:grid-rows-subgrid ${
         tier.mostPopular ? 'border-accent shadow-lg' : 'border-border'
       }`}
     >
@@ -104,7 +106,7 @@ function TierCard({ tier, period }: { key?: string; tier: MembershipTier; period
         </span>
       )}
       <h3 className="text-2xl font-serif italic">{tier.displayName}</h3>
-      <p className="mt-1 text-sm opacity-60 min-h-[2.5rem]">{tier.tagline}</p>
+      <p className="mt-1 text-sm opacity-60">{tier.tagline}</p>
       <div className="mt-4">
         <span className="text-3xl font-bold tracking-tight">{priceLabel(tier, period)}</span>
       </div>
@@ -129,7 +131,7 @@ function TierCard({ tier, period }: { key?: string; tier: MembershipTier; period
         ))}
       </ul>
 
-      <div className="mt-6">
+      <div className="mt-6 self-end">
         <DownloadCta tier={tier} />
       </div>
     </div>
@@ -229,7 +231,7 @@ export function Pricing() {
 
       {/* Tier cards */}
       <section className="px-6 pb-4">
-        <div className="max-w-5xl mx-auto grid gap-6 sm:grid-cols-3">
+        <div className="max-w-5xl mx-auto grid gap-6 sm:grid-cols-3 sm:gap-y-0">
           {MEMBERSHIP_TIERS.map((tier) => (
             <TierCard key={tier.wire} tier={tier} period={period} />
           ))}

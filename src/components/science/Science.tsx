@@ -371,10 +371,13 @@ function PromisesChapter() {
 export function Finale({
   body = 'All of this exists so you can spend less time in a dating app, and more time with the one person worth leaving it for.',
   secondary = 'philosophy',
+  fill = false,
 }: {
   body?: string;
   /** 'philosophy' → Our philosophy (Science page); 'invite' → Start with an invite (messenger). */
   secondary?: 'philosophy' | 'invite';
+  /** Grow to fill a flex-column parent, with the content centred vertically (messenger closer). */
+  fill?: boolean;
 } = {}) {
   const navigate = useNavigate();
   const reduce = useReducedMotion() ?? false;
@@ -407,7 +410,7 @@ export function Finale({
     <section
       ref={sectionRef}
       aria-labelledby="finale-title"
-      className={`relative overflow-hidden px-6 py-16 text-white ${onScreen ? '' : 'oh-beat-paused'}`}
+      className={`relative overflow-hidden px-6 py-16 text-white ${fill ? 'flex flex-1 flex-col justify-center' : ''} ${onScreen ? '' : 'oh-beat-paused'}`}
       style={{ background: BRAND.ink, ['--oh-origin' as string]: `${origin.x} ${origin.y}` }}
     >
       {/* The photo breathes very slightly with each beat, scaling from the logo (transform only). */}

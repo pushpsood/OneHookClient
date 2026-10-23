@@ -22,7 +22,7 @@ function renderSocial({ label, href, Icon }: { label: string; href: string; Icon
       rel="noreferrer"
       aria-label={`OneHook on ${label}`}
       {...trackProps(UiElement.LANDING_SOCIAL_LINK, { value: socialValue(label) })}
-      className="hover:opacity-100 transition-opacity"
+      className="opacity-60 hover:opacity-100 transition-opacity"
     >
       <Icon className="w-[18px] h-[18px]" />
     </a>
@@ -112,22 +112,6 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
             Messenger
           </Link>
 
-          {/* Socials (4) + highlighted app-flow CTA + socials (4) */}
-          <div className="w-full md:w-auto flex flex-col md:flex-row items-center justify-center gap-4 md:gap-5">
-            {/* All 8 social icons in one row on mobile */}
-            <div className="flex flex-wrap items-center justify-center gap-4 md:gap-5">
-              {SOCIALS.map(renderSocial)}
-            </div>
-
-            {/* Get the app button - separate line on mobile, inline on desktop */}
-            <button
-              onClick={() => goToSection('get-app')}
-              {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-accent text-white rounded-full text-[11px] font-black uppercase tracking-[0.2em] opacity-100 hover:opacity-90 transition-opacity md:order-first"
-            >
-              <Smartphone className="w-3.5 h-3.5" /> Get the app
-            </button>
-          </div>
         </div>
 
         <div className="text-center md:text-right">
@@ -135,6 +119,23 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
             <span className="whitespace-nowrap">© 2026 OneHook.</span>{' '}
             <span className="whitespace-nowrap">All rights reserved.</span>
           </p>
+        </div>
+      </div>
+
+      {/* Its own row: "Get the app" in the centre, the social icons split evenly either side */}
+      <div className="max-w-6xl mx-auto mt-10 flex items-center justify-center gap-3 sm:gap-6">
+        <div className="flex flex-1 items-center justify-end gap-3 sm:gap-5">
+          {SOCIALS.slice(0, Math.ceil(SOCIALS.length / 2)).map(renderSocial)}
+        </div>
+        <button
+          onClick={() => goToSection('get-app')}
+          {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
+          className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap px-4 py-2.5 bg-accent text-white rounded-full text-[10px] sm:text-[11px] font-black uppercase tracking-[0.16em] sm:tracking-[0.2em] hover:opacity-90 transition-opacity"
+        >
+          <Smartphone className="w-3.5 h-3.5" /> Get the app
+        </button>
+        <div className="flex flex-1 items-center justify-start gap-3 sm:gap-5">
+          {SOCIALS.slice(Math.ceil(SOCIALS.length / 2)).map(renderSocial)}
         </div>
       </div>
 
