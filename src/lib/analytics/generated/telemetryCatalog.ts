@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 44b3607e29cab34f3f914c6478b9cb296a3d21e55399c3fccd9c3ecac420806e
+// telemetry-integrity: sha256 d056181449f8f1338ba1f67fcca18da6873ef5d1ddecc63a861f39cdd2a8f286
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.4.0, hash 5cf9f7740c92eebe.
+// Catalog version 1.5.0, hash 4ab81c4d5f20cdb7.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.4.0";
-export const TELEMETRY_CATALOG_HASH = "5cf9f7740c92eebe";
+export const TELEMETRY_CATALOG_VERSION = "1.5.0";
+export const TELEMETRY_CATALOG_HASH = "4ab81c4d5f20cdb7";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -267,6 +267,7 @@ export const UiElement = {
   ADMISSIONS_STATUS_REFRESH: "admissions_status.refresh",
   ADMISSIONS_STATUS_CONTINUE_INVITE: "admissions_status.continue_invite",
   ADMISSIONS_STATUS_WITHDRAW: "admissions_status.withdraw",
+  ADMISSIONS_STATUS_TRAINING_OPT_OUT: "admissions_status.training_opt_out",
   ONBOARDING_NEXT: "onboarding.next",
   ONBOARDING_BACK: "onboarding.back",
   ONBOARDING_FINISH: "onboarding.finish",
@@ -520,6 +521,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "admissions_status.refresh": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "admissions_status.continue_invite": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "admissions_status.withdraw": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
+  "admissions_status.training_opt_out": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "onboarding.next": { screen: "ONBOARDING", kind: "button", actions: ["submit"], values: ["basics", "photos", "media", "prompts", "details"], platforms: ["web", "ios"] },
   "onboarding.back": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "onboarding.finish": { screen: "ONBOARDING", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
