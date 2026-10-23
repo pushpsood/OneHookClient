@@ -111,10 +111,15 @@ function useNoise(len: number, active: boolean) {
 function FitCanvas({
   land,
   port,
+  portView,
   children,
 }: {
   land: { w: number; h: number };
   port: { w: number; h: number };
+  /** Portrait only: the part of the canvas (canvas units, vertical band) that holds this screen's
+   *  content. The canvas zooms so that band fills the space — on a phone the full 1300-unit canvas
+   *  would otherwise make everything tiny. Changes glide, like a camera. */
+  portView?: { y: number; h: number };
   children: (layout: 'land' | 'port') => ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -128,9 +133,14 @@ function FitCanvas({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const layout = box.h > 0 && box.w / box.h >= 1.05 ? 'land' : 'port';
+  // phones always get the portrait composition (a short phone can make the stage wider than tall)
+  const phone = typeof window !== 'undefined' && window.innerWidth < 640;
+  const layout = box.h > 0 && box.w / box.h >= 1.05 && !phone ? 'land' : 'port';
   const dim = layout === 'land' ? land : port;
-  const scale = box.w && box.h ? Math.min(box.w / dim.w, box.h / dim.h, 1.3) : 0;
+  const view = layout === 'port' && portView ? portView : { y: 0, h: dim.h };
+  const scale = box.w && box.h ? Math.min(box.w / dim.w, box.h / view.h, 1.3) : 0;
+  // shift so the view band's centre sits in the middle of the space
+  const shiftY = (dim.h / 2 - (view.y + view.h / 2)) * scale;
   return (
     // overflow stays visible: the canvas is already scaled to fit, and clipping would cut the
     // phones' soft shadows into a hard line where the text below begins.
@@ -138,7 +148,13 @@ function FitCanvas({
       {scale > 0 && (
         <div
           className="absolute left-1/2 top-1/2"
-          style={{ width: dim.w, height: dim.h, transform: `translate(-50%, -50%) scale(${scale})`, transformOrigin: 'center' }}
+          style={{
+            width: dim.w,
+            height: dim.h,
+            transform: `translate(-50%, -50%) translateY(${shiftY}px) scale(${scale})`,
+            transformOrigin: 'center',
+            transition: 'transform 0.9s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
         >
           {children(layout)}
         </div>
@@ -951,6 +967,14 @@ const LAYOUTS = {
   },
 } as const;
 const at = (p: Pose) => ({ left: p.cx - PW / 2, top: p.cy - PH / 2, scale: p.s });
+/** Portrait (phone) camera per screen 1–5: the vertical band of the 420×1300 canvas each scene uses. */
+const PORT_VIEWS: { y: number; h: number }[] = [
+  { y: 175, h: 950 }, // 1 · phone + preview cards
+  { y: 0, h: 1300 }, // 2 · two phones and the message's journey
+  { y: 70, h: 1220 }, // 3 · break, key to the cloud, new phone
+  { y: 100, h: 1090 }, // 4 · devices around the cloud
+  { y: 330, h: 640 }, // 5 · captions — close on the caption window
+];
 
 // Screen-2 timeline (ms after arriving on it): Rohan drops at 0.5s, Isha sends at 1.8s, then the
 // message passes attackers → database → family and lands on Rohan's phone.
@@ -1068,7 +1092,7 @@ function PhonesStage({ index }: { index: number }) {
   const travel = { duration: reduce ? 0.2 : 0.9, ease: [0.65, 0, 0.35, 1] as [number, number, number, number] };
 
   return (
-    <FitCanvas land={LAYOUTS.land} port={LAYOUTS.port}>
+    <FitCanvas land={LAYOUTS.land} port={LAYOUTS.port} portView={PORT_VIEWS[index]}>
       {(layout) => {
         const L = LAYOUTS[layout];
         const ishaPose = syncing ? L.aside : broken ? L.broken : journey ? L.left : L.solo;
@@ -1161,8 +1185,9 @@ function PhonesStage({ index }: { index: number }) {
                               className="absolute left-0 top-0 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 bg-white"
                               style={{ borderColor: stage >= i + 1 ? PINK : 'rgba(10,11,16,0.2)' }}
                             />
-                            <div className="absolute top-0 -translate-y-1/2" style={leftSide ? { right: 16 } : { left: 16 }}>
-                              <Checkpoint kind={s} state={stateOf(i)} width={188} />
+                            {/* alternating sides of the path, enlarged so they read on a phone */}
+                            <div className="absolute top-0 -translate-y-1/2" style={leftSide ? { right: 12, zoom: 1.22 } : { left: 12, zoom: 1.22 }}>
+                              <Checkpoint kind={s} state={stateOf(i)} width={176} />
                             </div>
                           </div>
                         );
@@ -1730,41 +1755,79 @@ function LanguageRail() {
   const reduce = useReducedMotion() ?? false;
   const list = [...CAPTION_LANGS, ...CAPTION_LANGS]; // doubled for a seamless loop
   return (
-    <motion.div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-y-0 right-0 z-[5] flex w-[42%] max-w-[320px] flex-col border-l border-black/[0.06] bg-[#FAFAF8]/85 backdrop-blur-md sm:w-[30%]"
-      style={{
-        WebkitMaskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
-        maskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
-      }}
-      initial={{ opacity: 0, x: 40 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 40, transition: { duration: 0.3 } }}
-      transition={{ delay: 0.9, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-    >
-      <div className="px-5 pb-2 pt-5">
-        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-black/45">Supported languages ✱</p>
-        <p className="mt-1.5 text-[10px] leading-relaxed text-black/45">✱ Based on your device’s capability — translation runs on your device, so available pairs vary by phone and browser.</p>
-      </div>
-      <div
-        className="relative flex-1 overflow-hidden"
-        style={{
-          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%)',
-          maskImage: 'linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%)',
-        }}
+    <>
+      {/* phones: a slim strip across the top, rolling sideways, so the caption window stays in view */}
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 z-[5] border-b border-black/[0.06] bg-[#FAFAF8]/95 sm:hidden"
+        initial={{ opacity: 0, y: -16 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -16, transition: { duration: 0.3 } }}
+        transition={{ delay: 0.9, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <motion.ul className="px-5" animate={reduce ? undefined : { y: ['0%', '-50%'] }} transition={reduce ? undefined : { duration: 30, repeat: Infinity, ease: 'linear' }}>
-          {list.map((l, i) => (
-            <li key={i} className="flex items-baseline justify-between gap-3 border-b border-black/[0.05] py-3.5">
-              <span dir={l.rtl ? 'rtl' : undefined} className="font-serif text-2xl italic text-text sm:text-3xl">
-                {l.native}
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/40">{l.english}</span>
-            </li>
-          ))}
-        </motion.ul>
-      </div>
-    </motion.div>
+        <p className="px-4 pt-2 text-[9px] font-black uppercase tracking-[0.22em] text-black/45">
+          Supported languages ✱ <span className="font-medium normal-case tracking-normal">· varies by device</span>
+        </p>
+        <div
+          className="overflow-hidden"
+          style={{
+            WebkitMaskImage: 'linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%)',
+            maskImage: 'linear-gradient(to right, transparent 0, #000 8%, #000 92%, transparent 100%)',
+          }}
+        >
+          <motion.ul
+            className="flex w-max gap-5 px-4 pb-2 pt-1"
+            animate={reduce ? undefined : { x: ['0%', '-50%'] }}
+            transition={reduce ? undefined : { duration: 30, repeat: Infinity, ease: 'linear' }}
+          >
+            {list.map((l, i) => (
+              <li key={i} className="flex shrink-0 items-baseline gap-1.5">
+                <span dir={l.rtl ? 'rtl' : undefined} className="font-serif text-lg italic text-text">
+                  {l.native}
+                </span>
+                <span className="text-[8px] font-semibold uppercase tracking-[0.16em] text-black/40">{l.english}</span>
+              </li>
+            ))}
+          </motion.ul>
+        </div>
+      </motion.div>
+
+      <motion.div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 right-0 z-[5] hidden w-[30%] max-w-[320px] flex-col border-l border-black/[0.06] bg-[#FAFAF8]/85 backdrop-blur-md sm:flex"
+        style={{
+          WebkitMaskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
+          maskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
+        }}
+        initial={{ opacity: 0, x: 40 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: 40, transition: { duration: 0.3 } }}
+        transition={{ delay: 0.9, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="px-5 pb-2 pt-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-black/45">Supported languages ✱</p>
+          <p className="mt-1.5 text-[10px] leading-relaxed text-black/45">✱ Based on your device’s capability — translation runs on your device, so available pairs vary by phone and browser.</p>
+        </div>
+        <div
+          className="relative flex-1 overflow-hidden"
+          style={{
+            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%)',
+            maskImage: 'linear-gradient(to bottom, transparent 0, #000 8%, #000 92%, transparent 100%)',
+          }}
+        >
+          <motion.ul className="px-5" animate={reduce ? undefined : { y: ['0%', '-50%'] }} transition={reduce ? undefined : { duration: 30, repeat: Infinity, ease: 'linear' }}>
+            {list.map((l, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-3 border-b border-black/[0.05] py-3.5">
+                <span dir={l.rtl ? 'rtl' : undefined} className="font-serif text-2xl italic text-text sm:text-3xl">
+                  {l.native}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/40">{l.english}</span>
+              </li>
+            ))}
+          </motion.ul>
+        </div>
+      </motion.div>
+    </>
   );
 }
 
@@ -1797,9 +1860,9 @@ function SceneMrOneHook() {
 
   return (
     <div className="mx-auto w-full max-w-[1100px] px-2">
-      <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_380px_minmax(0,1fr)] lg:gap-6">
+      <div className="grid items-stretch gap-3 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_380px_minmax(0,1fr)] lg:gap-6">
         {/* left · on your phone, decrypted — you tick what he may see */}
-        <div className="flex h-full min-h-[300px] flex-col rounded-[28px] border border-black/[0.07] bg-white p-5 shadow-[0_30px_80px_-50px_rgba(10,11,16,0.35)] sm:p-6">
+        <div className="flex h-full flex-col rounded-[28px] border border-black/[0.07] bg-white p-4 shadow-[0_30px_80px_-50px_rgba(10,11,16,0.35)] sm:p-6 lg:min-h-[300px]">
           <p className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-black/40">On your phone · decrypted</p>
           <ul className="mt-5 space-y-2.5">
             {MR_MESSAGES.map((m, i) => (
@@ -1841,7 +1904,7 @@ function SceneMrOneHook() {
         </div>
 
         {/* centre · Mr OneHook, in full */}
-        <div className="relative flex min-h-[300px] flex-col items-center justify-center gap-3">
+        <div className="relative flex min-h-[150px] flex-col items-center justify-center gap-3 lg:min-h-[300px]">
           {/* brushed-silver links from each card to Mr OneHook — horizontal when the three sit side by
               side, vertical when they stack. Each is two segments that stop short of him (so nothing runs
               through his face), with the ticked lines travelling along them as pink dots. */}
@@ -1882,7 +1945,7 @@ function SceneMrOneHook() {
         </div>
 
         {/* right · exactly what leaves your phone */}
-        <div className="flex h-full min-h-[300px] flex-col rounded-[28px] p-5 font-mono text-[12px] text-white/80 sm:p-6" style={{ background: INK }}>
+        <div className="flex h-full flex-col rounded-[28px] p-4 font-mono text-[11px] text-white/80 sm:p-6 sm:text-[12px] lg:min-h-[300px]" style={{ background: INK }}>
           <p className="mb-4 text-center font-sans text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">What leaves your phone</p>
           <motion.pre
             className="whitespace-pre-wrap leading-relaxed"
@@ -1901,7 +1964,7 @@ function SceneMrOneHook() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 2.6 * k, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="mx-auto mt-6 flex max-w-3xl items-start gap-4 rounded-[24px] border border-[#ff8fc7]/40 bg-white p-5 text-left shadow-[0_24px_60px_-40px_rgba(255,105,180,0.6)]"
+        className="mx-auto mt-3 flex max-w-3xl items-start gap-3 rounded-[24px] border border-[#ff8fc7]/40 bg-white p-4 text-left shadow-[0_24px_60px_-40px_rgba(255,105,180,0.6)] sm:mt-6 sm:gap-4 sm:p-5"
       >
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full" style={{ background: 'rgba(255,143,199,0.15)' }}>
           <Heart className="h-4 w-4" style={{ color: PINK }} fill={PINK} />
@@ -1911,7 +1974,7 @@ function SceneMrOneHook() {
           <p className="mt-1.5 text-[15px] leading-relaxed text-text">
             It sounds like you’re missing closeness, not just conversation. You could start with: <em>“I miss our talks — can we take a walk tonight, just us?”</em> 💛
           </p>
-          <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.16em]">
+          <div className="mt-3 hidden flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] sm:flex">
             <span className="rounded-full bg-black/[0.04] px-2.5 py-1 text-black/55">Suggested reply</span>
             <span className="rounded-full bg-black/[0.04] px-2.5 py-1 text-black/55">Date idea · an evening walk</span>
             <span className="rounded-full bg-black/[0.04] px-2.5 py-1 text-black/55">You decide what to send</span>
@@ -2466,7 +2529,7 @@ export function Messenger() {
         {/* One tall scroll track; the stage inside stays pinned while the story plays. */}
         <div ref={storyRef} className="relative" style={{ height: `${n * 95}vh` }}>
           <div
-            className="sticky flex flex-col items-center overflow-hidden px-6 pb-5 pt-4 sm:pb-8 sm:pt-6"
+            className="sticky flex flex-col items-center overflow-hidden px-4 pb-3 pt-1 sm:px-6 sm:pb-8 sm:pt-6"
             style={{ top: headerH, height: `calc(100svh - ${headerH}px)` }}
           >
             {/* screen 6: Mr OneHook peeking in from the edges */}
@@ -2554,7 +2617,7 @@ export function Messenger() {
             {/* 2 — a few words below it */}
             <div
               aria-hidden="true"
-              className="relative z-10 mt-3 flex min-h-[92px] w-full max-w-3xl shrink-0 items-start justify-center text-center sm:mt-5 sm:min-h-[120px]"
+              className="relative z-10 mt-1 flex min-h-[78px] w-full max-w-3xl shrink-0 items-start justify-center text-center sm:mt-5 sm:min-h-[120px]"
             >
               {/* `custom` = "is the next screen the finale?" — when it is, the outgoing words rise and
                   grow toward the centre of the stage and dissolve there, right where the finale's big
@@ -2617,7 +2680,7 @@ export function Messenger() {
 
             {/* 3 — the same three buttons, always in the same place */}
             <motion.div
-              className="relative z-10 mt-3 flex shrink-0 flex-wrap items-center justify-center gap-2 sm:mt-5 sm:gap-3"
+              className="relative z-10 mt-2 flex shrink-0 flex-wrap items-center justify-center gap-1.5 sm:mt-5 sm:gap-3"
               initial={false}
               animate={{ opacity: 1 }}
             >
@@ -2626,24 +2689,24 @@ export function Messenger() {
                 target="_blank"
                 rel="noreferrer"
                 {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
-                className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.16em] sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-white transition-opacity hover:opacity-90"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-accent px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-white transition-opacity hover:opacity-90"
               >
-                <Smartphone className="h-4 w-4" /> Get the app
+                <Smartphone className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Get the app
               </a>
               <button
                 type="button"
                 onClick={() => navigate('/redeem')}
                 {...trackProps(UiElement.LANDING_GET_STARTED)}
-                className="inline-flex items-center gap-2 rounded-full border border-black/15 bg-white px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.16em] sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-black/[0.04]"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-black/15 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-black/[0.04]"
               >
-                Start with an invite <ArrowRight className="h-4 w-4" />
+                Start with an invite <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </button>
               <a
                 href={DONATE_HREF}
                 {...trackProps(UiElement.LANDING_EMAIL_LINK, { value: 'other' })}
-                className="inline-flex items-center gap-2 rounded-full border border-[#ff8fc7]/60 bg-[#ff8fc7]/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.16em] sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-[#ff8fc7]/20"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#ff8fc7]/60 bg-[#ff8fc7]/10 px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-[#ff8fc7]/20"
               >
-                <HandHeart className="h-4 w-4" style={{ color: PINK }} /> Support
+                <HandHeart className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: PINK }} /> Support
               </a>
             </motion.div>
 
