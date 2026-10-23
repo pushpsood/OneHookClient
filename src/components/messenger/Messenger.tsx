@@ -32,7 +32,7 @@ import { ROUTE_SEO } from '../../config/seo-routes';
 import { AlienScanner } from '../mascot';
 import { QRCodeSVG } from 'qrcode.react';
 import { ManifestoPhone } from '../Landing';
-import { Finale } from '../science/Science';
+import { Finale, ProgressBar } from '../science/Science';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { APP_DOWNLOAD_URL } from '../../config/membership.config';
@@ -2332,6 +2332,7 @@ export function Messenger() {
   return (
     <div className="min-h-screen bg-[#FAFAF8] text-text">
       <Seo {...ROUTE_SEO['/messenger']} path="/messenger" />
+      <ProgressBar background={`linear-gradient(90deg, ${PINK}, #1F3A6B 50%, ${PINK})`} />
       <SiteHeader pageTitle="Messenger" />
 
       <main>

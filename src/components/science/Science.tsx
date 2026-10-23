@@ -51,14 +51,19 @@ function scrollToId(id: string) {
 
 /* ── Reading progress + chapter rail (the page's continuity thread) ──────────── */
 
-function ProgressBar() {
+/** Thin bar across the top that fills as you read. Also used by the Messenger page, which passes a
+ *  darker `background` because the default silver centre disappears on a light page. */
+export function ProgressBar({ background }: { background?: string } = {}) {
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 30, mass: 0.3 });
   return (
     <motion.div
       aria-hidden="true"
       className="fixed left-0 right-0 top-0 z-50 h-[2px] origin-center"
-      style={{ scaleX, background: `linear-gradient(90deg, ${ENGINE_META.engagement.color}, ${BRAND.silver} 50%, ${ENGINE_META.meaning.color})` }}
+      style={{
+        scaleX,
+        background: background ?? `linear-gradient(90deg, ${ENGINE_META.engagement.color}, ${BRAND.silver} 50%, ${ENGINE_META.meaning.color})`,
+      }}
     />
   );
 }
