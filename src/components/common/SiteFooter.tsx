@@ -80,39 +80,43 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
           </p>
         </div>
 
-        <div className="flex flex-wrap justify-center items-center gap-6 md:gap-8">
-          <button onClick={() => goToSection('philosophy')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'philosophy' })} className="hover:opacity-100 transition-opacity">
-            Philosophy
-          </button>
-          <button onClick={() => goToSection('features')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'how_it_works' })} className="hover:opacity-100 transition-opacity">
-            How it works
-          </button>
-          <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className="hover:opacity-100 transition-opacity">
-            Pricing
-          </Link>
-          <Link to="/privacy" {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
-            Privacy
-          </Link>
-          <Link to="/terms" {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
-            Terms
-          </Link>
-          <Link to="/contact" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'contact' })} className="hover:opacity-100 transition-opacity">
-            Contact
-          </Link>
-          <Link to="/careers" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'careers' })} className="hover:opacity-100 transition-opacity">
-            Careers
-          </Link>
-          <Link to="/science"
-            {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
-            className="hover:opacity-100 transition-opacity"
-          >
-            Science
-          </Link>
-          <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className="hover:opacity-100 transition-opacity">
-            Messenger
-          </Link>
-
-        </div>
+        {/* two groups: explore OneHook, then the company / legal links */}
+        <nav aria-label="Footer" className="flex flex-col items-center gap-4">
+          <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-3 md:gap-x-8">
+            <button onClick={() => goToSection('philosophy')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'philosophy' })} className="hover:opacity-100 transition-opacity">
+              Philosophy
+            </button>
+            <button onClick={() => goToSection('features')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'how_it_works' })} className="hover:opacity-100 transition-opacity">
+              How it works
+            </button>
+            <Link to="/science"
+              {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
+              className="hover:opacity-100 transition-opacity"
+            >
+              Science
+            </Link>
+            <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className="hover:opacity-100 transition-opacity">
+              Messenger
+            </Link>
+            <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className="hover:opacity-100 transition-opacity">
+              Pricing
+            </Link>
+          </div>
+          <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-3 md:gap-x-8 text-[13px] opacity-80">
+            <Link to="/privacy" {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
+              Privacy
+            </Link>
+            <Link to="/terms" {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
+              Terms
+            </Link>
+            <Link to="/contact" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'contact' })} className="hover:opacity-100 transition-opacity">
+              Contact
+            </Link>
+            <Link to="/careers" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'careers' })} className="hover:opacity-100 transition-opacity">
+              Careers
+            </Link>
+          </div>
+        </nav>
 
         <div className="text-center md:text-right">
           <p>
