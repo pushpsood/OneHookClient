@@ -2054,6 +2054,17 @@ export function Landing() {
           {/* Primary nav — centred between the logo and the actions (in-flow, so it can never
               overlap the side buttons) */}
           <div className="hidden xl:flex min-w-0 flex-1 items-center justify-center gap-4 2xl:gap-7">
+            <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
+              className={deskNav('science')}
+            >
+              <span className="flex flex-col items-center leading-none"><span className="text-[8px] font-semibold uppercase tracking-[0.2em] opacity-60">Dating</span>Science</span>
+            </Link>
+            <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
+              className={deskNav('messenger')}
+            >
+              <span className="flex flex-col items-center leading-none"><span className="text-[8px] font-semibold uppercase tracking-[0.2em] opacity-60">Private</span>Messenger</span>
+            </Link>
+            <span aria-hidden="true" className="h-4 w-px bg-border" />
             <button
               onClick={() => scrollToSection('philosophy')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'philosophy' })}
               className={deskNav('philosophy')}
@@ -2078,7 +2089,6 @@ export function Landing() {
             >
               Get the app
             </button>
-            <span aria-hidden="true" className="h-4 w-px bg-border" />
             <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })}
               className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 hover:opacity-100 transition-opacity whitespace-nowrap"
             >
@@ -2144,12 +2154,12 @@ export function Landing() {
                   <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
                     className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
                   >
-                    Science
+                    Dating Science
                   </Link>
                   <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
                     className="block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] opacity-70 hover:opacity-100 transition-opacity border-t border-border"
                   >
-                    Messenger
+                    Private Messenger
                   </Link>
                 </div>
               )}
@@ -2248,7 +2258,7 @@ export function Landing() {
             </span>
           </p>
 
-          {/* Desktop: Dating Science | Redeem | Encrypted messenger in one row, all the same size.
+          {/* Desktop: Dating Science | Redeem | Private Messenger in one row, all the same size.
               Small screens: Redeem on top, the two explore buttons below it, side by side. */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -2275,7 +2285,7 @@ export function Landing() {
               {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
               className="order-3 flex h-[52px] flex-col items-center justify-center rounded border border-white/40 px-4 text-center leading-tight text-white backdrop-blur-sm transition-colors hover:bg-white/10 lg:order-none lg:w-[252px]"
             >
-              <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/60">Encrypted</span>
+              <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/60">Private</span>
               <span className="text-xs font-black uppercase tracking-[0.3em]">Messenger</span>
             </Link>
           </motion.div>
