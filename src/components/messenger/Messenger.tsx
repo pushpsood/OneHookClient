@@ -2325,11 +2325,26 @@ export function Messenger() {
     // is always allowed, and the scroll-event hold above remains as a fallback (scrollbar drags etc).
     const blocking = (dy: number) =>
       dy > 0 && performance.now() < doneAtRef.current && window.scrollY + dy > limitY(shownRef.current);
+    // Chrome "latches" a trackpad swipe: once it has started scrolling, the rest of that swipe's wheel
+    // events can't be cancelled, so the page would overshoot and be snapped back (the glitch). For
+    // those, freeze page scrolling outright until the scene has finished — no movement, no snap.
+    const root = document.documentElement;
+    let frozenUntil = 0;
+    let unfreeze = 0;
+    const freeze = () => {
+      if (frozenUntil) return;
+      frozenUntil = doneAtRef.current;
+      root.style.overflow = 'hidden';
+      unfreeze = window.setTimeout(() => {
+        root.style.overflow = '';
+        frozenUntil = 0;
+      }, Math.max(0, doneAtRef.current - performance.now()));
+    };
     const onWheel = (e: WheelEvent) => {
-      if (blocking(e.deltaY)) {
-        e.preventDefault();
-        if (window.scrollY < limitY(shownRef.current)) hold(limitY(shownRef.current));
-      }
+      if (!blocking(e.deltaY)) return;
+      if (e.cancelable) e.preventDefault();
+      else freeze();
+      if (window.scrollY < limitY(shownRef.current)) hold(limitY(shownRef.current));
     };
     let touchY = 0;
     const onTouchStart = (e: TouchEvent) => {
@@ -2337,7 +2352,10 @@ export function Messenger() {
     };
     const onTouchMove = (e: TouchEvent) => {
       const y = e.touches[0]?.clientY ?? touchY;
-      if (blocking(touchY - y)) e.preventDefault();
+      if (blocking(touchY - y)) {
+        if (e.cancelable) e.preventDefault();
+        else freeze();
+      }
       touchY = y;
     };
     const KEYS: Record<string, number> = { ArrowDown: 40, PageDown: 600, ' ': 600, End: 1e6 };
@@ -2357,6 +2375,8 @@ export function Messenger() {
       window.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('keydown', onKey);
+      window.clearTimeout(unfreeze);
+      root.style.overflow = '';
     };
   }, [n, reduce]);
   const scene = SCENES[index];
@@ -2365,6 +2385,35 @@ export function Messenger() {
   // Last screen ("Free forever"): the heart blurs and fades into the background, and the words take
   // over the whole stage — large and centred — with the buttons staying in their usual place.
   const finale = index === n - 1;
+
+  // Arriving on the finale from screen 7, the section below (closer + footer) is held back until the
+  // finale's animation has played: with nothing below the story there is nothing to scroll into, so
+  // a fast swipe simply stops at the end — Chrome otherwise lets an in-flight swipe run past and the
+  // page would be yanked back (the glitch). It appears, below the fold, the moment the words settle.
+  const [endingHeld, setEndingHeld] = useState(false);
+  const prevIndexRef = useRef(index);
+  useEffect(() => {
+    const from = prevIndexRef.current;
+    prevIndexRef.current = index;
+    if (!(index === n - 1 && from === n - 2) || reduce) {
+      setEndingHeld(false);
+      return;
+    }
+    setEndingHeld(true);
+    const id = window.setTimeout(() => setEndingHeld(false), (SCENE_SECONDS[n - 1] ?? 2) * 1000);
+    return () => window.clearTimeout(id);
+  }, [index, n, reduce]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const prev = { anchor: root.style.overflowAnchor, gutter: root.style.scrollbarGutter };
+    root.style.overflowAnchor = 'none';
+    root.style.scrollbarGutter = 'stable';
+    return () => {
+      root.style.overflowAnchor = prev.anchor;
+      root.style.scrollbarGutter = prev.gutter;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#FAFAF8] text-text">
@@ -2585,7 +2634,7 @@ export function Messenger() {
         </div>
         {/* the heartbeat closer (shared with the Science page) + the footer below it fill exactly one
             screen under the header, so the last scroll lands on a clean, full-screen ending */}
-        <div className="flex flex-col" style={{ minHeight: ending.minHeight }}>
+        <div className="flex flex-col" style={{ minHeight: ending.minHeight, display: endingHeld ? 'none' : undefined }}>
           <Finale
             body="Every message locked end to end, every memory kept safe, on every screen you own — free, forever. All so the two of you can just talk."
             secondary="invite"
@@ -2594,7 +2643,7 @@ export function Messenger() {
         </div>
       </main>
 
-      <div ref={ending.footerRef}>
+      <div ref={ending.footerRef} style={endingHeld ? { display: 'none' } : undefined}>
         <SiteFooter />
       </div>
     </div>

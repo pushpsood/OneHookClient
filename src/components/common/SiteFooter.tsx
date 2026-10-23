@@ -82,31 +82,35 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
 
         {/* two groups: explore OneHook, then the company / legal links */}
         <nav aria-label="Footer" className="flex flex-col items-center gap-4">
-          {/* the two product pages · the landing sections · pricing */}
-          <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-3 md:gap-x-8">
-            <Link to="/science"
-              {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
-              className="hover:opacity-100 transition-opacity"
-            >
-              Science
-            </Link>
-            <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className="hover:opacity-100 transition-opacity">
-              Messenger
-            </Link>
-            <span aria-hidden="true" className="h-4 w-px bg-current opacity-30" />
-            <button onClick={() => goToSection('philosophy')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'philosophy' })} className="hover:opacity-100 transition-opacity">
-              Philosophy
-            </button>
-            <button onClick={() => goToSection('features')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'how_it_works' })} className="hover:opacity-100 transition-opacity">
-              How it works
-            </button>
-            <button onClick={() => goToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })} className="hover:opacity-100 transition-opacity">
-              Mr.OneHook
-            </button>
-            <span aria-hidden="true" className="h-4 w-px bg-current opacity-30" />
-            <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className="hover:opacity-100 transition-opacity">
-              Pricing
-            </Link>
+          {/* two groups that never split: a group that doesn't fit moves to the next line whole.
+              The divider only shows where both groups sit on one line. */}
+          <div className="flex flex-wrap justify-center items-center gap-x-10 gap-y-3 xl:gap-x-8">
+            <span className="inline-flex flex-nowrap items-center gap-x-6 whitespace-nowrap md:gap-x-8">
+              <Link to="/science"
+                {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
+                className="hover:opacity-100 transition-opacity"
+              >
+                Science
+              </Link>
+              <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className="hover:opacity-100 transition-opacity">
+                Messenger
+              </Link>
+              <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className="hover:opacity-100 transition-opacity">
+                Pricing
+              </Link>
+            </span>
+            <span aria-hidden="true" className="hidden h-4 w-px bg-current opacity-30 xl:block" />
+            <span className="inline-flex flex-nowrap items-center gap-x-6 whitespace-nowrap md:gap-x-8">
+              <button onClick={() => goToSection('philosophy')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'philosophy' })} className="hover:opacity-100 transition-opacity">
+                Philosophy
+              </button>
+              <button onClick={() => goToSection('features')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'how_it_works' })} className="hover:opacity-100 transition-opacity">
+                How it works
+              </button>
+              <button onClick={() => goToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })} className="hover:opacity-100 transition-opacity">
+                Mr.OneHook
+              </button>
+            </span>
           </div>
           <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-3 md:gap-x-8 text-[13px] opacity-80">
             <Link to="/privacy" {...trackProps(UiElement.LANDING_POLICY_LINK)} className="hover:opacity-100 transition-opacity">
