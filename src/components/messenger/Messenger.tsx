@@ -2735,7 +2735,8 @@ export function Messenger() {
                 type="button"
                 onClick={() => navigate('/redeem')}
                 {...trackProps(UiElement.LANDING_GET_STARTED)}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-black/15 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-black/[0.04]"
+                // not on phones (/messenger): Get the app + Support only
+                className="hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-black/15 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:inline-flex sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-black/[0.04]"
               >
                 Start with an invite <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </button>

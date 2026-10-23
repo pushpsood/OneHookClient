@@ -527,7 +527,8 @@ export function Finale({
             <Smartphone className="h-3.5 w-3.5" aria-hidden="true" /> Get the app
           </button>
           {secondary === 'invite' ? (
-            <button type="button" onClick={() => navigate('/redeem')} {...trackProps(UiElement.LANDING_GET_STARTED)} className={pillClass('ghost-light')}>
+            // the Messenger closer: hidden on phones
+            <button type="button" onClick={() => navigate('/redeem')} {...trackProps(UiElement.LANDING_GET_STARTED)} className={`${pillClass('ghost-light')} max-sm:!hidden`}>
               Start with an invite <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           ) : (
