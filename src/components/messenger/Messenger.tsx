@@ -810,7 +810,7 @@ function ScreenPreviews({ layout, k }: { layout: 'land' | 'port'; k: number }) {
   // where each card's line meets the phone
   const meet = (i: number) =>
     land ? { x: i < 3 ? cx - pw : cx + pw, y: spots[i].y } : { x: spots[i].x, y: spots[i].y < cy ? cy - PH * s * 0.5 : cy + PH * s * 0.5 };
-  const start = 2.2; // after the phone has landed
+  const start = 1.3; // as the phone settles
 
   return (
     <motion.div className="absolute inset-0" initial={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.35 } }}>
@@ -822,7 +822,7 @@ function ScreenPreviews({ layout, k }: { layout: 'land' | 'port'; k: number }) {
         style={{ left: cx, top: cy, width: land ? 760 : 400 }}
         initial={{ opacity: 0, scale: 0.8 }}
         animate={reduce ? { opacity: 0.16, scale: 1 } : { opacity: [0, 0.18, 0.12, 0.18], scale: [0.8, 1, 1.03, 1] }}
-        transition={reduce ? { duration: 0.3 } : { delay: 1.2, duration: 4, times: [0, 0.3, 0.65, 1], repeat: Infinity, repeatType: 'reverse' }}
+        transition={reduce ? { duration: 0.3 } : { delay: 0.4, duration: 4, times: [0, 0.3, 0.65, 1], repeat: Infinity, repeatType: 'reverse' }}
       >
         <path
           d="M50 88 C 18 66, 2 46, 2 27 C 2 12, 14 2, 28 2 C 38 2, 46 8, 50 16 C 54 8, 62 2, 72 2 C 86 2, 98 12, 98 27 C 98 46, 82 66, 50 88 Z"
@@ -1265,7 +1265,7 @@ function PhonesStage({ index }: { index: number }) {
                       reduce
                       initialTab="messages"
                       liveThread={sent ? ISHA_SENDS : ISHA_HELLO}
-                      liveDelay={sent ? SEND_DELAY * k : reduce ? 300 : 1500}
+                      liveDelay={sent ? SEND_DELAY * k : reduce ? 300 : 800}
                       contactName="Rohan"
                       contactPhoto="/media/profile-demo/profile-3.jpg"
                       className="relative isolate"
@@ -2239,7 +2239,7 @@ const SCENES: Scene[] = [
 
 
 /** How long each screen's own animation runs (s) — drives the progress bar under the counter. */
-const SCENE_SECONDS = [4.6, 8.9, 6.1, 5.4, 2.6, 3.2, 1.9, 1.8];
+const SCENE_SECONDS = [3.9, 8.9, 6.1, 5.4, 2.6, 3.2, 1.9, 1.8];
 
 /** A thin bar under the counter that fills while the current screen's animation plays. */
 function SceneProgress({ index, reduce }: { index: number; reduce: boolean }) {
@@ -2320,8 +2320,44 @@ export function Messenger() {
         if (window.scrollY > limitY(d + 1)) hold(limitY(d + 1));
       }
     };
+    // While a scene is still playing, swallow any input that would scroll past it, so the page never
+    // moves and gets snapped back (that snap-back juddered, worst on the zooming finale). Scrolling up
+    // is always allowed, and the scroll-event hold above remains as a fallback (scrollbar drags etc).
+    const blocking = (dy: number) =>
+      dy > 0 && performance.now() < doneAtRef.current && window.scrollY + dy > limitY(shownRef.current);
+    const onWheel = (e: WheelEvent) => {
+      if (blocking(e.deltaY)) {
+        e.preventDefault();
+        if (window.scrollY < limitY(shownRef.current)) hold(limitY(shownRef.current));
+      }
+    };
+    let touchY = 0;
+    const onTouchStart = (e: TouchEvent) => {
+      touchY = e.touches[0]?.clientY ?? 0;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const y = e.touches[0]?.clientY ?? touchY;
+      if (blocking(touchY - y)) e.preventDefault();
+      touchY = y;
+    };
+    const KEYS: Record<string, number> = { ArrowDown: 40, PageDown: 600, ' ': 600, End: 1e6 };
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (!e.shiftKey && KEYS[e.key] && blocking(KEYS[e.key])) e.preventDefault();
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('keydown', onKey);
+    };
   }, [n, reduce]);
   const scene = SCENES[index];
   const headerH = useHeaderHeight();
