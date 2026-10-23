@@ -1658,9 +1658,19 @@ export function Landing() {
       if (atBottom && last && last.getBoundingClientRect().top < window.innerHeight) current = ids[ids.length - 1];
       setActiveSection((prev) => (prev === current ? prev : current));
     };
+    // A click lock ends once the smooth scroll has actually stopped (no scroll for 180ms) — browsers'
+    // smooth-scroll durations differ (Safari's is longer than Chrome's) — or at the latest when it expires.
+    let idle = 0;
     const onScroll = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(compute);
+      if (navLockUntilRef.current) {
+        window.clearTimeout(idle);
+        idle = window.setTimeout(() => {
+          navLockUntilRef.current = 0;
+          compute();
+        }, 180);
+      }
     };
     compute();
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -1669,6 +1679,7 @@ export function Landing() {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onScroll);
       cancelAnimationFrame(raf);
+      window.clearTimeout(idle);
     };
   }, []);
 
@@ -1995,7 +2006,7 @@ export function Landing() {
     // One highlight at a time: the clicked item takes it immediately, and the scroll-spy waits for
     // the smooth scroll to finish before taking over again.
     setActiveSection(id);
-    navLockUntilRef.current = Date.now() + 1200;
+    navLockUntilRef.current = Date.now() + 3000;
     element?.scrollIntoView({ behavior: 'smooth' });
     setIsMobileNavOpen(false);
     setExploreOpen(false);
@@ -2004,14 +2015,17 @@ export function Landing() {
   };
 
   // Nav link styling with an active-section underline (scroll-spy driven).
+  // The underline is a real 2px bar (::after) faded in/out, not text-decoration: WebKit/Safari can
+  // fail to repaint a removed text-decoration while other properties transition, which left the
+  // previous item looking underlined there.
   const deskNav = (id: string) =>
-    `text-xs font-bold uppercase tracking-[0.2em] whitespace-nowrap transition-all ${
+    `relative text-xs font-bold uppercase tracking-[0.2em] whitespace-nowrap transition-opacity after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-[7px] after:h-[2px] after:rounded-full after:bg-accent after:transition-opacity after:content-[''] ${
       activeSection === id
-        ? 'opacity-100 underline underline-offset-[6px] decoration-2 decoration-accent'
-        : 'opacity-60 [@media(hover:hover)]:hover:opacity-100'
+        ? 'opacity-100 after:opacity-100'
+        : 'opacity-60 after:opacity-0 [@media(hover:hover)]:hover:opacity-100'
     }`;
   const mobNav = (id: string, topBorder = true) =>
-    `block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] transition-all ${
+    `block w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-[0.2em] transition-opacity ${
       topBorder ? 'border-t border-border ' : ''
     }${
       activeSection === id

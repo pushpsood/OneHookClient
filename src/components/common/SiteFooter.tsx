@@ -82,13 +82,8 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
 
         {/* two groups: explore OneHook, then the company / legal links */}
         <nav aria-label="Footer" className="flex flex-col items-center gap-4">
+          {/* the two product pages · the landing sections · pricing */}
           <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-3 md:gap-x-8">
-            <button onClick={() => goToSection('philosophy')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'philosophy' })} className="hover:opacity-100 transition-opacity">
-              Philosophy
-            </button>
-            <button onClick={() => goToSection('features')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'how_it_works' })} className="hover:opacity-100 transition-opacity">
-              How it works
-            </button>
             <Link to="/science"
               {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
               className="hover:opacity-100 transition-opacity"
@@ -98,6 +93,14 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
             <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })} className="hover:opacity-100 transition-opacity">
               Messenger
             </Link>
+            <span aria-hidden="true" className="h-4 w-px bg-current opacity-30" />
+            <button onClick={() => goToSection('philosophy')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'philosophy' })} className="hover:opacity-100 transition-opacity">
+              Philosophy
+            </button>
+            <button onClick={() => goToSection('features')} {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'how_it_works' })} className="hover:opacity-100 transition-opacity">
+              How it works
+            </button>
+            <span aria-hidden="true" className="h-4 w-px bg-current opacity-30" />
             <Link to="/pricing" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'pricing' })} className="hover:opacity-100 transition-opacity">
               Pricing
             </Link>
