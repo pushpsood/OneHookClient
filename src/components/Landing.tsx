@@ -2419,11 +2419,17 @@ export function Landing() {
           <p className="relative mx-auto mb-10 max-w-2xl text-lg md:text-2xl font-light leading-relaxed text-white/85 drop-shadow-md">
             {/* Invisible sizer reserves the final space so buttons below don't
                 shift while the line types out. */}
+            {/* phones get the first sentence only; the encryption line shows from sm up */}
             <span className="invisible" aria-hidden="true">
-              Talk to someone ready to prioritise you. Locked end-to-end, so only the two of you can
-              read it.
+              Talk to someone ready to prioritise you.
+              <span className="hidden sm:inline">
+                {' '}Locked end-to-end, so only the two of you can read it.
+              </span>
             </span>
-            <span className="absolute inset-0">
+            <span className="absolute inset-0 sm:hidden">
+              <Typewriter text="Talk to someone ready to prioritise you." />
+            </span>
+            <span className="absolute inset-0 hidden sm:block">
               <Typewriter text="Talk to someone ready to prioritise you. Locked end-to-end, so only the two of you can read it." />
             </span>
           </p>
