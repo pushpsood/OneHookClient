@@ -120,7 +120,7 @@ function FitCanvas({
    *  content. The canvas zooms so that band fills the space — on a phone the full 1300-unit canvas
    *  would otherwise make everything tiny. Changes glide, like a camera. */
   portView?: { y: number; h: number };
-  children: (layout: 'land' | 'port') => ReactNode;
+  children: (layout: 'land' | 'port', width: number) => ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -138,7 +138,10 @@ function FitCanvas({
   const layout = box.h > 0 && box.w / box.h >= 1.05 && !phone ? 'land' : 'port';
   const dim = layout === 'land' ? land : port;
   const view = layout === 'port' && portView ? portView : { y: 0, h: dim.h };
-  const scale = box.w && box.h ? Math.min(box.w / dim.w, box.h / view.h, 1.3) : 0;
+  // Portrait: the canvas is as wide as the space's shape allows (never narrower than the design), and
+  // the scene spreads out to it — so the side space is used instead of left empty.
+  const width = layout === 'port' && box.w && box.h ? Math.round(Math.min(720, Math.max(dim.w, (box.w / box.h) * view.h))) : dim.w;
+  const scale = box.w && box.h ? Math.min(box.w / width, box.h / view.h, 1.3) : 0;
   // shift so the view band's centre sits in the middle of the space
   const shiftY = (dim.h / 2 - (view.y + view.h / 2)) * scale;
   return (
@@ -149,14 +152,14 @@ function FitCanvas({
         <div
           className="absolute left-1/2 top-1/2"
           style={{
-            width: dim.w,
+            width,
             height: dim.h,
             transform: `translate(-50%, -50%) translateY(${shiftY}px) scale(${scale})`,
             transformOrigin: 'center',
             transition: 'transform 0.9s cubic-bezier(0.22, 1, 0.36, 1)',
           }}
         >
-          {children(layout)}
+          {children(layout, width)}
         </div>
       )}
     </div>
@@ -335,7 +338,7 @@ function DeviceLabel({ icon, title, sub }: { icon: ReactNode; title: string; sub
       <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-text/80">
         {icon} {title}
       </span>
-      <span className="mt-0.5 text-[9px] text-black/45">{sub}</span>
+      <span className="mt-0.5 max-w-[150px] text-balance text-[9px] leading-snug text-black/45">{sub}</span>
     </div>
   );
 }
@@ -471,7 +474,7 @@ const DEV = {
 };
 const SYNC_LAYOUT = {
   land: { cloud: { x: 590, y: 70 }, xL: 205, xR: 975, rowTop: 300, rowBot: 540, gutterL: 36, gutterR: 1144 },
-  port: { cloud: { x: 210, y: 112 }, xL: 100, xR: 330, rowTop: 372, rowBot: 905, gutterL: 2, gutterR: 418 },
+  port: { cloud: { x: 210, y: 112 }, xL: 116, xR: 318, rowTop: 372, rowBot: 925, gutterL: 0, gutterR: 420 },
 } as const;
 
 /** A device standing on its row baseline (so a row lines up exactly), with its label just below. */
@@ -499,7 +502,7 @@ function Stand({ x, base, delay, children, label, into }: { x: number; base: num
   );
 }
 
-function SyncDevices({ layout, phone, k }: { layout: 'land' | 'port'; phone: Pose; k: number }) {
+function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: Pose; k: number; W: number }) {
   const [synced, setSynced] = useState({ ipad: false, android: false, laptop: false });
   const [newOn, setNewOn] = useState(false);
   useEffect(() => {
@@ -514,7 +517,19 @@ function SyncDevices({ layout, phone, k }: { layout: 'land' | 'port'; phone: Pos
   }, [k]);
 
   const land = layout === 'land';
-  const G = SYNC_LAYOUT[layout];
+  const G0 = SYNC_LAYOUT[layout];
+  // portrait: spread across the widened canvas, keeping the lines a clear margin from every device
+  const G =
+    layout === 'port'
+      ? {
+          ...G0,
+          cloud: { ...G0.cloud, x: W / 2 },
+          xL: spreadX(G0.xL, W),
+          xR: spreadX(G0.xR, W),
+          gutterL: spreadX(G0.xL, W) - DEV.laptop.w / 2 - 18,
+          gutterR: spreadX(G0.xR, W) + DEV.phone.w / 2 + 52,
+        }
+      : G0;
   const { cloud, xL, xR, rowTop, rowBot, gutterL, gutterR } = G;
 
   // device edges (rows share a baseline: top row stands on rowTop, bottom row on rowBot)
@@ -569,7 +584,7 @@ function SyncDevices({ layout, phone, k }: { layout: 'land' | 'port'; phone: Pos
     ? failRoute([{ x: phone.cx + pw, y: qrY }], { x: (phone.cx + pw + campLeft) / 2, y: qrY }, [{ x: campLeft, y: qrY }])
     : failRoute([{ x: phone.cx + pw, y: qrY }, { x: xR, y: qrY }], { x: xR, y: (qrY + campTop) / 2 }, [{ x: xR, y: campTop }]);
   // Android → camping phone: out of its side, straight down the inner gap, into the camping phone's side
-  const aGap = land ? androidLeft - 40 : androidRight + 22;
+  const aGap = land ? androidLeft - 40 : androidRight + 26;
   const aOut = land ? androidLeft : androidRight;
   const aY = rowTop - DEV.phone.h / 2;
   const cIn = land ? campLeft : campRight;
@@ -589,7 +604,7 @@ function SyncDevices({ layout, phone, k }: { layout: 'land' | 'port'; phone: Pos
       {/* the cloud can't reach the laptop or the camping phone; no device's QR reaches the camping phone */}
       <FailLine {...cloudToLaptop} start={SYNC.cloudFail} k={k} label="Cloud not reachable" labelSide="right" />
       <FailLine {...cloudToCamp} start={SYNC.cloudFail} k={k} label="Cloud not reachable" labelSide="left" />
-      <FailLine {...phoneToCamp} start={SYNC.phoneTry} k={k} label="Out of reach" labelSide={land ? 'above' : 'left'} />
+      <FailLine {...phoneToCamp} start={SYNC.phoneTry} k={k} label="Out of reach" labelSide={land ? 'above' : 'right'} />
       <FailLine {...androidToCamp} start={SYNC.androidTry} k={k} label="Out of reach" labelSide={land ? 'left' : 'right'} />
 
       {/* a key on each line leaving the cloud — it pulses as that device's key arrives */}
@@ -821,11 +836,11 @@ function PreviewCard({ p, reduce }: { p: (typeof PREVIEWS)[number]; reduce: bool
  * Screen 1 extras: six preview cards (one per later screen) mirrored three-and-three around the phone,
  * joined to it by faint lines, and the "free forever" heart glowing softly behind it.
  */
-function ScreenPreviews({ layout, k }: { layout: 'land' | 'port'; k: number }) {
+function ScreenPreviews({ layout, k, W }: { layout: 'land' | 'port'; k: number; W: number }) {
   const lite = useLite();
   const reduce = useReducedMotion() ?? false;
   const land = layout === 'land';
-  const L = LAYOUTS[layout];
+  const L = layout === 'port' ? portLayout(W) : LAYOUTS.land;
   const { cx, cy, s } = L.solo;
   const pw = (PW / 2) * s;
   const spots = land
@@ -845,7 +860,7 @@ function ScreenPreviews({ layout, k }: { layout: 'land' | 'port'; k: number }) {
         { x: 71, y: 955 },
         { x: 210, y: 955 },
         { x: 349, y: 955 },
-      ];
+      ].map((q) => ({ ...q, x: spreadX(q.x, W) }));
   // where each card's line meets the phone
   const meet = (i: number) =>
     land ? { x: i < 3 ? cx - pw : cx + pw, y: spots[i].y } : { x: spots[i].x, y: spots[i].y < cy ? cy - PH * s * 0.5 : cy + PH * s * 0.5 };
@@ -962,12 +977,31 @@ const LAYOUTS = {
     broken: { cx: 106, cy: 700, s: 0.8 },
     fresh: { cx: 314, cy: 700, s: 0.8 },
     cloud: { x: 210, y: 345 },
-    center: { cx: 210, cy: 612, s: 0.6 },
+    center: { cx: 210, cy: 612, s: 0.56 },
     aside: { cx: -900, cy: 1040, s: 0.8 },
     cloud4: { x: 210, y: 112 },
   },
 } as const;
 const at = (p: Pose) => ({ left: p.cx - PW / 2, top: p.cy - PH / 2, scale: p.s });
+/** Portrait x → x on a canvas widened to W: the centre stays put, everything else moves out evenly. */
+const spreadX = (x: number, W: number) => W / 2 + (x - 210) * (W / 420);
+function portLayout(W: number) {
+  const P = LAYOUTS.port;
+  const pose = (q: Pose): Pose => ({ ...q, cx: q.cx < -100 ? q.cx : spreadX(q.cx, W) });
+  return {
+    ...P,
+    w: W,
+    solo: pose(P.solo),
+    left: pose(P.left),
+    right: pose(P.right),
+    broken: pose(P.broken),
+    fresh: pose(P.fresh),
+    center: pose(P.center),
+    aside: P.aside,
+    cloud: { ...P.cloud, x: W / 2 },
+    cloud4: { ...P.cloud4, x: W / 2 },
+  };
+}
 /** Portrait (phone) camera per screen 1–5: the vertical band of the 420×1300 canvas each scene uses. */
 const PORT_VIEWS: { y: number; h: number }[] = [
   { y: 285, h: 730 }, // 1 · phone + preview cards
@@ -1094,14 +1128,14 @@ function PhonesStage({ index }: { index: number }) {
 
   return (
     <FitCanvas land={LAYOUTS.land} port={LAYOUTS.port} portView={PORT_VIEWS[index]}>
-      {(layout) => {
-        const L = LAYOUTS[layout];
+      {(layout, W) => {
+        const L = layout === 'port' ? portLayout(W) : LAYOUTS.land;
         const ishaPose = syncing ? L.aside : broken ? L.broken : journey ? L.left : L.solo;
         const isha = at(ishaPose);
         const rohan = at(L.right);
         const fresh = at(syncing ? L.center : L.fresh);
         const tilt = layout === 'port' ? 0 : TILT; // phones: the two phones sit upright, side by side
-        const ishaRotate = broken ? tilt : journey ? (layout === 'port' ? -6 : 0) : -6;
+        const ishaRotate = broken ? tilt : journey ? (layout === 'port' ? 6 : 0) : -6;
         // key path: broken phone → cloud → new phone
         const keyPath = {
           left: [L.broken.cx, L.cloud.x, L.cloud.x, L.fresh.cx],
@@ -1114,7 +1148,7 @@ function PhonesStage({ index }: { index: number }) {
             <AnimatePresence>
               {index === 0 && (
                 <Fragment key="previews">
-                  <ScreenPreviews layout={layout} k={k} />
+                  <ScreenPreviews layout={layout} k={k} W={L.w} />
                 </Fragment>
               )}
             </AnimatePresence>
@@ -1180,7 +1214,7 @@ function PhonesStage({ index }: { index: number }) {
                         { x: 323, y: 138 }, // attackers
                         { x: 323, y: 330 }, // OneHook database
                         { x: 98, y: 645 }, // friends & family
-                      ];
+                      ].map((q) => ({ ...q, x: spreadX(q.x, L.w) }));
                       const p = (stage / 4) as number;
                       const head = along(Math.min(1, p));
                       return (
@@ -1246,7 +1280,7 @@ function PhonesStage({ index }: { index: number }) {
             <AnimatePresence>
               {syncing && !lang && (
                 <Fragment key="sync">
-                  <SyncDevices layout={layout} phone={L.center} k={k} />
+                  <SyncDevices layout={layout} phone={L.center} k={k} W={L.w} />
                 </Fragment>
               )}
             </AnimatePresence>
@@ -1277,9 +1311,13 @@ function PhonesStage({ index }: { index: number }) {
                         <Plus className="h-5 w-5" />
                       </span>
                     </span>
-                    <span className="w-max max-w-[400px] text-center text-[10px] font-semibold uppercase leading-relaxed tracking-[0.22em] text-black/40">
+                    <motion.span
+                      className="w-max max-w-[300px] text-balance text-center text-[10px] font-semibold uppercase leading-relaxed tracking-[0.22em] text-black/40"
+                      animate={{ opacity: syncing && layout === 'port' ? 0 : 1 }}
+                      transition={{ duration: 0.3 }}
+                    >
                       Your key, sealed in your cloud account — Apple, Google and more
-                    </span>
+                    </motion.span>
                   </motion.div>
                   {index === 2 && (
                     <motion.span
@@ -1430,7 +1468,7 @@ function PhonesStage({ index }: { index: number }) {
                   className="absolute z-20"
                   style={{ width: PW, height: PH, transformStyle: 'preserve-3d' }}
                   initial={reduce ? { ...rohan, opacity: 0 } : { left: rohan.left, top: -PH - 260, scale: rohan.scale * 0.88, rotate: 18, rotateX: 34, opacity: 0 }}
-                  animate={{ ...rohan, rotate: layout === 'port' ? -6 : 0, rotateX: 0, opacity: 1 }}
+                  animate={{ ...rohan, rotate: layout === 'port' ? 6 : 0, rotateX: 0, opacity: 1 }}
                   exit={reduce ? { opacity: 0 } : { top: -PH - 260, rotate: 12, opacity: 0, transition: { duration: 0.5, ease: 'easeIn' } }}
                   transition={
                     reduce
@@ -1461,7 +1499,9 @@ function PhonesStage({ index }: { index: number }) {
             <AnimatePresence>
               {lang && (
                 <Fragment key="burst">
-                  <TranslationBurst layout={layout} k={k} />
+                  <div className="absolute inset-y-0" style={{ left: (L.w - (layout === 'port' ? LAYOUTS.port.w : L.w)) / 2, width: layout === 'port' ? LAYOUTS.port.w : L.w }}>
+                    <TranslationBurst layout={layout} k={k} />
+                  </div>
                 </Fragment>
               )}
             </AnimatePresence>
@@ -2000,10 +2040,6 @@ const PEEKS: PeekDef[] = [
   { kind: 'edge', edge: 'bottom', at: '13%', size: 280, delay: 0.95, tilt: 3 },
   { kind: 'float', x: '86%', y: '18%', size: 96, delay: 1.25, tilt: 8 },
   { kind: 'float', x: '11%', y: '70%', size: 116, delay: 1.5, tilt: -8 },
-  { kind: 'edge', edge: 'right', at: '22%', size: 160, delay: 1.1, tilt: -6 },
-  { kind: 'edge', edge: 'left', at: '84%', size: 170, delay: 1.35, tilt: 6 },
-  { kind: 'float', x: '54%', y: '7%', size: 82, delay: 1.7, tilt: -6 },
-  { kind: 'float', x: '90%', y: '62%', size: 88, delay: 1.9, tilt: 10 },
 ];
 
 function MascotPeeks() {
@@ -2025,7 +2061,7 @@ function MascotPeeks() {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0, transition: { duration: 0.3 } }}
     >
-      {(lite ? PEEKS.filter((_, i) => [1, 3, 4, 5, 6, 8].includes(i)) : PEEKS).map((p, i) => {
+      {(lite ? PEEKS.filter((_, i) => i === 1 || i === 3 || i === 4) : PEEKS).map((p, i) => {
         const size = Math.round(Math.max(70, p.size * (0.6 + 0.4 * scale)));
 
         if (p.kind === 'float') {
