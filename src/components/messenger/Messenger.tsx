@@ -32,7 +32,7 @@ import { ROUTE_SEO } from '../../config/seo-routes';
 import { AlienScanner } from '../mascot';
 import { QRCodeSVG } from 'qrcode.react';
 import { ManifestoPhone } from '../Landing';
-import { Finale, ProgressBar, useFullScreenEnding } from '../science/Science';
+import { Finale, ProgressBar, useFullScreenEnding, useViewportHeight } from '../science/Science';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { APP_DOWNLOAD_URL } from '../../config/membership.config';
@@ -2471,6 +2471,8 @@ export function Messenger() {
   }, [n, reduce]);
   const scene = SCENES[index];
   const headerH = useHeaderHeight();
+  // the screen the visitor actually sees (not CSS svh), so the stage reaches the bottom on every phone
+  const viewH = useViewportHeight();
   const ending = useFullScreenEnding();
   // Last screen ("Free forever"): the heart blurs and fades into the background, and the words take
   // over the whole stage — large and centred — with the buttons staying in their usual place.
@@ -2529,8 +2531,8 @@ export function Messenger() {
         {/* One tall scroll track; the stage inside stays pinned while the story plays. */}
         <div ref={storyRef} className="relative" style={{ height: `${n * 95}vh` }}>
           <div
-            className="sticky flex flex-col items-center overflow-hidden px-4 pb-3 pt-1 sm:px-6 sm:pb-8 sm:pt-6"
-            style={{ top: headerH, height: `calc(100svh - ${headerH}px)` }}
+            className="sticky flex flex-col items-center overflow-hidden px-4 pb-[calc(env(safe-area-inset-bottom)+28px)] pt-1 sm:px-6 sm:pb-8 sm:pt-6"
+            style={{ top: headerH, height: `${viewH - headerH}px` }}
           >
             {/* screen 6: Mr OneHook peeking in from the edges */}
             <AnimatePresence>
