@@ -151,16 +151,45 @@ export class FrontendStack extends Stack {
       ? [props.domainName, `www.${props.domainName}`]
       : [props.domainName];
 
-    // Clean URLs for the pre-built marketing pages: /messenger → /messenger/index.html (and
-    // /messenger/ → /messenger/index.html). The build writes one HTML file per public route with its
-    // own title, description and canonical in the raw <head>, so crawlers and link previews that don't
-    // run JavaScript see the right page. Paths with a file extension are untouched, and app routes that
-    // have no pre-built file (e.g. /app, /login) still fall back to /index.html via the error responses.
+    // One viewer-request function (CloudFront allows one per event type) doing two things:
+    // 1. www → apex: a permanent 301 from www.<domain> to <domain>, keeping the path and query string,
+    //    so search engines see one copy of every page instead of two.
+    // 2. Clean URLs for the pre-built marketing pages: /messenger → /messenger/index.html (and
+    //    /messenger/ → /messenger/index.html). The build writes one HTML file per public route with its
+    //    own title, description and canonical in the raw <head>, so crawlers and link previews that
+    //    don't run JavaScript see the right page. Paths with a file extension are untouched, and app
+    //    routes with no pre-built file (e.g. /app, /login) still fall back to /index.html via the
+    //    error responses.
+    const wwwHost = props.includeWww ? `www.${props.domainName}` : '';
     const cleanUrlFunction = new CloudFrontFunction(this, 'CleanUrlFunction', {
-      comment: 'Maps /<route> and /<route>/ to /<route>/index.html for the pre-built pages',
+      comment: 'Redirects www to the apex and maps /<route> to /<route>/index.html',
       code: FunctionCode.fromInline(`
+var WWW_HOST = '${wwwHost}';
+var APEX = '${props.domainName}';
+function queryString(qs) {
+  var parts = [];
+  for (var key in qs) {
+    var item = qs[key];
+    var values = item.multiValue ? item.multiValue : [item];
+    for (var i = 0; i < values.length; i++) {
+      parts.push(values[i].value === '' ? key : key + '=' + values[i].value);
+    }
+  }
+  return parts.length ? '?' + parts.join('&') : '';
+}
 function handler(event) {
   var request = event.request;
+  var host = request.headers.host ? request.headers.host.value.toLowerCase() : '';
+  if (WWW_HOST && host === WWW_HOST) {
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        location: { value: 'https://' + APEX + request.uri + queryString(request.querystring) },
+        'cache-control': { value: 'max-age=86400' },
+      },
+    };
+  }
   var uri = request.uri;
   if (uri === '/' || uri === '') return request;
   if (uri.charAt(uri.length - 1) === '/') {
