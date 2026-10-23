@@ -2095,10 +2095,10 @@ export function Landing() {
                 fits — level 0 everything inline, level 1 sections in Explore, level 2 all in Explore. */}
             <div aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 flex flex-col">
               <div ref={measureFullRef} className="flex w-max items-center gap-4 whitespace-nowrap 2xl:gap-7">
-                <span className="inline-flex items-center rounded-full border p-1">
-                  <span className={`${deskNav('')} px-3.5 py-1.5`}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Dating</span>Science</span></span>
-                  <span className="mx-0.5 h-6 w-px" />
-                  <span className={`${deskNav('')} px-3.5 py-1.5`}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Private</span>Messenger</span></span>
+                <span className="inline-flex items-stretch rounded-full border">
+                  <span className={`${deskNav('')} pl-5 pr-4 py-2.5`}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Dating</span>Science</span></span>
+                  <span className="w-px" />
+                  <span className={`${deskNav('')} pl-4 pr-5 py-2.5`}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Private</span>Messenger</span></span>
                 </span>
                 <span className="h-4 w-px" />
                 <span className={deskNav('')}>Philosophy</span>
@@ -2109,10 +2109,10 @@ export function Landing() {
                 <span className={deskNav('')}>Pricing</span>
               </div>
               <div ref={measureSectionsRef} className="flex w-max items-center gap-4 whitespace-nowrap 2xl:gap-7">
-                <span className="inline-flex items-center rounded-full border p-1">
-                  <span className={`${deskNav('')} px-3.5 py-1.5`}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Dating</span>Science</span></span>
-                  <span className="mx-0.5 h-6 w-px" />
-                  <span className={`${deskNav('')} px-3.5 py-1.5`}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Private</span>Messenger</span></span>
+                <span className="inline-flex items-stretch rounded-full border">
+                  <span className={`${deskNav('')} pl-5 pr-4 py-2.5`}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Dating</span>Science</span></span>
+                  <span className="w-px" />
+                  <span className={`${deskNav('')} pl-4 pr-5 py-2.5`}><span className="flex flex-col items-center leading-none"><span className="text-[8px]">Private</span>Messenger</span></span>
                 </span>
                 <span className="h-4 w-px" />
                 <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-[0.2em]">Explore<ChevronDown className="h-3.5 w-3.5" /></span>
@@ -2125,16 +2125,16 @@ export function Landing() {
               <>
                 {/* the two product pages, in one polished-chrome capsule with a light sweep, so they read
                     as the things worth opening */}
-                <span className="oh-chrome-pill relative inline-flex items-center overflow-hidden rounded-full border p-1">
+                <span className="oh-chrome-pill relative inline-flex items-stretch overflow-hidden rounded-full border">
                   <span aria-hidden="true" className="oh-chrome-shine pointer-events-none absolute inset-y-0 -left-1/2 w-1/3" />
                   <Link to="/science" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'science' })}
-                    className="relative z-[1] whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.2em] text-[#0A0B10] transition-colors hover:bg-white/70"
+                    className="oh-chrome-seg relative z-[1] flex items-center whitespace-nowrap pl-5 pr-4 py-2.5 text-xs font-bold uppercase tracking-[0.2em] text-[#0A0B10]"
                   >
                     <span className="flex flex-col items-center leading-none"><span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-[#1F3A6B]/70">Dating</span>Science</span>
                   </Link>
-                  <span aria-hidden="true" className="relative z-[1] mx-0.5 h-6 w-px bg-gradient-to-b from-transparent via-[#9AA1AB] to-transparent" />
+                  <span aria-hidden="true" className="relative z-[1] w-px bg-gradient-to-b from-transparent via-[#9AA1AB] to-transparent" />
                   <Link to="/messenger" {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
-                    className="relative z-[1] whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.2em] text-[#0A0B10] transition-colors hover:bg-white/70"
+                    className="oh-chrome-seg relative z-[1] flex items-center whitespace-nowrap pl-4 pr-5 py-2.5 text-xs font-bold uppercase tracking-[0.2em] text-[#0A0B10]"
                   >
                     <span className="flex flex-col items-center leading-none"><span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-[#1F3A6B]/70">Private</span>Messenger</span>
                   </Link>

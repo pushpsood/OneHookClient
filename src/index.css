@@ -245,7 +245,18 @@ body {
   transform: skewX(-20deg);
   animation: oh-chrome-sweep 4.8s ease-in-out infinite;
 }
-.oh-chrome-pill:hover .oh-chrome-shine { animation-duration: 1.6s; }
+/* Each half fills its side edge to edge; the capsule's rounded border clips it, so a hovered half
+   is rounded on the outside and straight at the divider. Hover = a brighter, deeper chrome band. */
+.oh-chrome-seg {
+  transition: background 200ms ease, color 200ms ease;
+}
+.oh-chrome-seg:hover,
+.oh-chrome-seg:focus-visible {
+  /* edgeless navy glow rising from the bottom of the half — no hard lines, follows the capsule */
+  background: radial-gradient(85% 120% at 50% 110%, rgba(31, 58, 107, 0.18) 0%, rgba(31, 58, 107, 0.06) 55%, transparent 80%);
+  color: #1F3A6B;
+  outline: none;
+}
 @keyframes oh-chrome-sweep {
   0%, 62% { left: -50%; }
   100% { left: 130%; }
