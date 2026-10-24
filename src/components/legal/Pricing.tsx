@@ -210,15 +210,20 @@ export function Pricing() {
           <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-accent/25 bg-accent/5 px-5 py-3 text-sm text-accent">
             <p className="font-semibold">
               Every feature of the{' '}
-              <span className="underline decoration-1 underline-offset-4">OneHook Messenger is free, forever</span>, on every plan.
+              <Link
+                to="/messenger"
+                {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
+                aria-label="OneHook Messenger is free, forever. Know more about OneHook Messenger"
+                className="underline decoration-1 underline-offset-4 hover:decoration-2"
+              >
+                OneHook Messenger is free, forever
+              </Link>
+              , on every plan.
             </p>
-            <Link
-              to="/messenger"
-              {...trackProps(UiElement.LANDING_NAV_LINK, { value: 'messenger' })}
-              className="mt-1.5 inline-block text-[11px] font-bold uppercase tracking-[0.14em] underline-offset-4 hover:underline sm:text-xs sm:tracking-[0.2em]"
-            >
-              Know more about OneHook Messenger&nbsp;<ArrowRight className="inline h-3.5 w-3.5 align-[-2px]" aria-hidden="true" />
-            </Link>
+            <p className="mt-1.5 text-[11px] font-light opacity-75">
+              Tap the underlined text to know more about OneHook Messenger&nbsp;
+              <ArrowRight className="inline h-3 w-3 align-[-2px]" aria-hidden="true" />
+            </p>
           </div>
           <p className="mt-2 text-[11px] opacity-50">Mr OneHook, the AI helper, gives 10 messages a day on the free plan.</p>
           <p className="text-base opacity-60 max-w-2xl mx-auto mt-5">

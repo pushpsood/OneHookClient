@@ -526,25 +526,30 @@ const MR_TOPICS = [
     id: 'want',
     label: 'What I’m looking for',
     ask: 'I want someone calm, who reads and actually plans weekends.',
-    reply: 'Calm, a reader, a planner. Then look past “chill vibes” and for prompts about books and real plans.',
+    reply: [
+      'Calm, a reader, a planner. Then look past “chill vibes” and for prompts about books and real plans.',
+      'I sense your preference. I’ll try to find you matches who lean more towards this.',
+    ],
   },
   {
     id: 'liked',
     label: 'Who I liked',
     ask: 'I really liked the guy who loves filter coffee and old Delhi walks.',
-    reply: 'Nice pick. Slow mornings and curiosity seem to matter to you. Look for that in the next profiles too.',
+    reply: ['Nice pick. Slow mornings and curiosity seem to matter to you. Look for that in the next profiles too.'],
   },
   {
     id: 'suggest',
     label: 'Ask for a suggestion',
-    ask: 'Between the two I liked, who should I reply to first?',
-    reply: 'The one who asked you a question back. Replies that ask tend to keep going.',
+    ask: 'I got likes from Sunil and Sharan, and I like them both. Whom should I talk to?',
+    reply: [
+      'You talk to one person at a time here. Pick the one whose profile made you want to ask a question. Sharan’s weekend treks are a great opener.',
+    ],
   },
   {
     id: 'date',
     label: 'Plan a first date',
     ask: 'He likes coffee. Where should we meet?',
-    reply: 'A quiet café in Khan Market on a weekend morning. Easy to talk, easy to leave.',
+    reply: ['A quiet café in Khan Market on a weekend morning. Easy to talk, easy to leave.'],
   },
 ] as const;
 
@@ -597,14 +602,17 @@ export function MrOneHookLab() {
             className="flex flex-col gap-3"
           >
             <p className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-white px-4 py-2.5 text-sm font-light text-black">{topic.ask}</p>
-            <motion.p
-              initial={reduce ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: reduce ? 0 : 0.55, duration: 0.3 }}
-              className="mr-auto max-w-[85%] rounded-2xl rounded-bl-md bg-white/10 px-4 py-2.5 text-sm font-light text-white/90"
-            >
-              {topic.reply}
-            </motion.p>
+            {topic.reply.map((line, i) => (
+              <motion.p
+                key={line}
+                initial={reduce ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: reduce ? 0 : 0.55 + i * 0.7, duration: 0.3 }}
+                className="mr-auto max-w-[85%] rounded-2xl rounded-bl-md bg-white/10 px-4 py-2.5 text-sm font-light text-white/90"
+              >
+                {line}
+              </motion.p>
+            ))}
           </motion.div>
         </AnimatePresence>
         <p className="mt-auto pt-6 text-center text-[11px] font-light text-white/40">You choose what to share. Your match chats stay encrypted.</p>

@@ -2449,7 +2449,7 @@ export function Landing() {
           preload="metadata"
           poster={heroVideoPoster}
           crossOrigin="anonymous"
-          className="absolute inset-x-0 top-0 z-0 h-[44vh] w-full object-cover object-top md:inset-0 md:h-full md:translate-x-[7%]"
+          className="absolute inset-x-0 top-0 z-0 h-[44vh] w-full object-cover object-top md:inset-0 md:h-full md:translate-x-[12%] md:[mask-image:linear-gradient(to_right,transparent_0%,black_30%)] md:[-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_30%)]"
         >
           <source src={heroVideoSource} type="video/mp4" />
         </video>
@@ -2542,14 +2542,6 @@ export function Landing() {
             </span>
             Made in India, for the world
           </p>
-
-          <motion.div
-            animate={{ y: [0, 10, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="mt-14 opacity-50 text-white"
-          >
-            <ChevronDown className="w-6 h-6 mx-auto" />
-          </motion.div>
         </motion.div>
       </section>
 
