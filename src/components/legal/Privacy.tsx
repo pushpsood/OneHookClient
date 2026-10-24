@@ -171,6 +171,11 @@ export function Privacy() {
                     Quality measurements taken from the video file and transcript: length, speaking
                     time and pace, transcription confidence, filler words, resolution and bitrate.
                   </li>
+                  <li>
+                    Three everyday words we show you, chosen at random for each application, that we
+                    ask you to say somewhere in your video.
+                  </li>
+                  <li>The results of the automated checks described below.</li>
                   <li>Our reviewers&rsquo; decision and scores for your application.</li>
                   <li>
                     A record of your consent: the wording version you agreed to, when, and your app
@@ -183,6 +188,39 @@ export function Privacy() {
                 <p className="opacity-70">
                   No face recognition, no facial or appearance analysis, and no emotion detection.
                   We never sell or share your application with third parties.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Automated checks</h4>
+                <p className="opacity-70">
+                  We run a few automated checks to help our reviewers. They only mark an application
+                  for a closer look by a person: they never approve or reject anyone, and their
+                  results are not shown to you.
+                </p>
+                <ul className="list-disc list-inside space-y-1 opacity-70 mt-2">
+                  <li>
+                    <strong>Check words:</strong> we check that the three words we showed you are said
+                    in your video, so we know the video was made for this application.
+                  </li>
+                  <li>
+                    <strong>Video content:</strong> Amazon Rekognition looks at the video frames for
+                    prohibited content such as nudity, violence, weapons or drugs. It looks only for
+                    those kinds of content; it does not recognise your face or identity and does not
+                    analyse your appearance, age, emotions or where you are looking.
+                  </li>
+                  <li>
+                    <strong>Spoken content:</strong> we look for scam, money-request or
+                    &ldquo;move off the app&rdquo; phrases in the transcript.
+                  </li>
+                  <li>
+                    <strong>Speaking time and upload timing:</strong> we check there is enough speech
+                    in the video and that it was recorded around the time you applied.
+                  </li>
+                </ul>
+                <p className="opacity-70 mt-2">
+                  The results are kept with your application for the admissions team only, are
+                  deleted with it, and are never used to train Admissions Assist. If a check cannot
+                  run, your application simply goes to a person to review.
                 </p>
               </div>
               <div>
@@ -271,8 +309,8 @@ export function Privacy() {
                 <h4 className="font-bold mb-2">Where it is stored</h4>
                 <p className="opacity-70">
                   Applications, transcripts and training data are encrypted and stored on Amazon Web
-                  Services in India (Mumbai region). Transcription, SMS and model training also run
-                  on AWS in that region.
+                  Services in India (Mumbai region). Transcription, the automated video content
+                  check, SMS and model training also run on AWS in that region.
                 </p>
               </div>
             </div>
@@ -523,7 +561,8 @@ export function Privacy() {
                 <strong>Email Service:</strong> SNS
               </li>
               <li>
-                <strong>Video Applications:</strong> Amazon Transcribe and Amazon SageMaker, hosted
+                <strong>Video Applications:</strong> Amazon Transcribe, Amazon Rekognition and Amazon
+                SageMaker, hosted
                 in AWS (India region)
               </li>
               <li>
