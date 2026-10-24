@@ -242,26 +242,28 @@ export function Privacy() {
                     Approved: the video and transcript are deleted 30 days after you use your invite.
                   </li>
                   <li>
-                    Deleting your OneHook account deletes your application, video and transcript.
+                    Deleting your OneHook account deletes your application, video, transcript and
+                    the training records made from your application.
                   </li>
                   <li>
                     The training records derived from your application (transcript text,
                     measurements and decision) are kept while Admissions Assist is in use, unless
-                    you ask us to delete them.
+                    you withdraw your consent or ask us to delete them.
                   </li>
                 </ul>
               </div>
               <div>
                 <h4 className="font-bold mb-2">Withdrawing</h4>
                 <p className="opacity-70">
-                  You can withdraw your application in the app at any time. To withdraw your consent
-                  for Admissions Assist, or to have your training records deleted, email{' '}
+                  You can withdraw your application in the app at any time. To stop your video being
+                  used for Admissions Assist, tap &ldquo;Stop using my video for Admissions
+                  Assist&rdquo; on your application screen: we exclude your data from all future
+                  training and delete the training records made from your application straight
+                  away. Your application itself stays as it is. You can also email{' '}
                   <a href="mailto:privacy@onehook.club" className="text-accent font-mono">
                     privacy@onehook.club
                   </a>{' '}
-                  with the phone number you applied with. We will exclude
-                  your data from all future training and delete your training records within 30
-                  days. A model trained before your request is not changed retroactively, but your
+                  with the phone number you applied with, and we will do the same within 30 days. A model trained before your request is not changed retroactively, but your
                   data is not used in any later training.
                 </p>
               </div>
