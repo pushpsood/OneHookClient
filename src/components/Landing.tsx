@@ -1534,6 +1534,8 @@ export function Landing() {
   // Auto-advancing "spotlight" couple in the stories accordion; pauses while the visitor interacts.
   const [spotlight, setSpotlight] = useState(0);
   const [storyPaused, setStoryPaused] = useState(false);
+  /** Where a touch on the couple stories began, to recognise a horizontal swipe on phones. */
+  const storySwipeRef = useRef<{ x: number; y: number } | null>(null);
   // width of the hero headline's "Zero distractions." line — caps the hero buttons
   const [heroLineW, setHeroLineW] = useState<number>();
   // Hero redeem button: "Redeem your invite" when it fits with breathing room, otherwise the
@@ -2243,7 +2245,26 @@ export function Landing() {
             <div
               onMouseEnter={() => setStoryPaused(true)}
               onMouseLeave={() => setStoryPaused(false)}
-              className="flex h-[300px] gap-2 sm:h-[340px] md:h-[380px] md:gap-3"
+              // Phones: swipe left / right to move between couples. Only a clearly horizontal swipe
+              // counts, so the page still scrolls normally (vertical panning stays the browser's).
+              onTouchStart={(e) => {
+                const t = e.touches[0];
+                storySwipeRef.current = t ? { x: t.clientX, y: t.clientY } : null;
+              }}
+              onTouchEnd={(e) => {
+                const start = storySwipeRef.current;
+                storySwipeRef.current = null;
+                const t = e.changedTouches[0];
+                if (!start || !t) return;
+                const dx = t.clientX - start.x;
+                const dy = t.clientY - start.y;
+                if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+                const n = COUPLE_STORIES.length;
+                setSpotlight((prev) => (prev + (dx < 0 ? 1 : -1) + n) % n);
+                setStoryPaused(true);
+              }}
+              data-track-exempt="gesture: horizontal swipe between couple stories; the discrete choice is also available and tracked via the dots (couple_story)."
+              className="flex h-[300px] touch-pan-y gap-2 sm:h-[340px] md:h-[380px] md:gap-3"
             >
               {COUPLE_STORIES.map((s, i) => (
                 <React.Fragment key={s.id}>
