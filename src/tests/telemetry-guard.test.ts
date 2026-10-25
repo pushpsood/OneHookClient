@@ -26,14 +26,7 @@ const SRC_ROOT = new URL('../', import.meta.url).pathname;
  * Provably-unreachable `.tsx` under src: dead code the shipped entry can never import, so it carries
  * no live user press. Pinned here so making a file reachable (or orphaning a new one) trips the guard.
  */
-const EXPECTED_UNREACHABLE = [
-  'app/RightSidebar.tsx',
-  'app/StoriesTray.tsx',
-  'app/StoryViewerModal.tsx',
-  'components/brand/OneHookLogo.tsx',
-  'components/profile/PreferencesPanel.tsx',
-  'features/matches/MatchesView.tsx',
-];
+const EXPECTED_UNREACHABLE: string[] = [];
 
 describe('web no-untracked-control guard', () => {
   it('every interaction site is tracked or explicitly exempt', () => {

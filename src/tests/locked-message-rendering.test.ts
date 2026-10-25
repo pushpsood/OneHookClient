@@ -10,7 +10,7 @@ import { join } from 'node:path';
  * but it means any surface that renders `ciphertext` WITHOUT branching on `undecryptable` shows a
  * silent blank bubble — no explanation and no way to reach history recovery.
  *
- * That is not hypothetical: the inline conversation panel in MatchesView shipped exactly that bug
+ * That is not hypothetical: the inline conversation panel in the (since removed) MatchesView shipped that bug
  * while the full-page ChatView handled it correctly, because the two render paths were copies that
  * drifted. This test fails if a new (or reverted) surface renders a message body without the branch.
  */
