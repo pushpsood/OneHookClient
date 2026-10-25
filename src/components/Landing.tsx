@@ -3176,7 +3176,7 @@ export function Landing() {
           className="max-w-4xl mx-auto text-center relative z-10"
         >
           <Kicker className="mb-8 text-text/50">
-            <ShieldCheck className="w-3.5 h-3.5" /> Invite-only · Limited spots
+            Invite-only <ShieldCheck className="w-3.5 h-3.5" /> Limited spots
           </Kicker>
 
           <h2 className={`${SECTION_TITLE} mb-8`}>
