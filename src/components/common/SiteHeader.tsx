@@ -2,12 +2,8 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Smartphone, X } from 'lucide-react';
 import { BrandWordmark } from './BrandWordmark';
+import { GetAppLink } from './GetAppLink';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
-
-// The platform-aware install smart link: app.onehook.club answers with a 302 to the App Store or
-// Play Store based on the visitor's device (see infra/stacks/frontend-stack.ts), so one URL works
-// everywhere — including in the QR code, which is scanned by an unknown device by definition.
-const APP_DOWNLOAD_URL = 'https://app.onehook.club';
 
 function isMobileDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -110,16 +106,12 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
 
         {mobile ? (
           <div ref={actionsRef} className="flex shrink-0 items-center gap-3">
-            {/* Mobile menu: Open-in-app */}
-            <a
-              href={APP_DOWNLOAD_URL}
-              target="_blank"
-              rel="noreferrer"
-              {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
+            {/* Mobile menu: Open-in-app (store when live, else the homepage get-app section) */}
+            <GetAppLink
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-full hover:opacity-90 transition-opacity"
             >
               <Smartphone className="w-3.5 h-3.5" /> <span className="max-[359px]:hidden">Open in app</span><span className="hidden max-[359px]:inline">App</span>
-            </a>
+            </GetAppLink>
             {/* once the name has collapsed to the logo, also offer a plain way back home */}
             {compact && (
               <button

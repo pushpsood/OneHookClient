@@ -35,9 +35,6 @@ import {
   type SubscriptionTierDisplayName,
 } from 'onehook-api-client/membership';
 
-/** App-download smart link (302s to the right store by device). Primary + only CTA. */
-export const APP_DOWNLOAD_URL = 'https://app.onehook.club';
-
 export type BillingPeriod = 'monthly' | 'annual';
 
 export interface TierPricing {

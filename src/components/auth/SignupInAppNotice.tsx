@@ -37,7 +37,8 @@ export function SignupInAppNotice() {
   const secondaryClass =
     'w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors flex items-center justify-center gap-2';
 
-  const iosLink = (
+  // A store link is null until that listing is published: show "coming soon" instead of a store 404.
+  const iosLink = APP_STORE_LINKS.ios ? (
     <a
       key="ios"
       href={APP_STORE_LINKS.ios}
@@ -46,9 +47,13 @@ export function SignupInAppNotice() {
     >
       <AppleIcon className="w-4 h-4" /> Download for iPhone
     </a>
+  ) : (
+    <span key="ios" aria-disabled="true" className={`${secondaryClass} opacity-50 cursor-default`}>
+      <AppleIcon className="w-4 h-4" /> iPhone app coming soon
+    </span>
   );
 
-  const androidLink = (
+  const androidLink = APP_STORE_LINKS.android ? (
     <a
       key="android"
       href={APP_STORE_LINKS.android}
@@ -57,6 +62,10 @@ export function SignupInAppNotice() {
     >
       <AndroidIcon className="w-4 h-4" /> Download for Android
     </a>
+  ) : (
+    <span key="android" aria-disabled="true" className={`${secondaryClass} opacity-50 cursor-default`}>
+      <AndroidIcon className="w-4 h-4" /> Android app coming soon
+    </span>
   );
 
   return (
@@ -69,6 +78,7 @@ export function SignupInAppNotice() {
           className="w-full max-w-md"
         >
           <div className="text-center mb-12 space-y-4">
+            <h1 className="sr-only">Redeem your OneHook invite</h1>
             <p className="text-sm opacity-60 italic">
               New accounts are created in the OneHook app
             </p>
