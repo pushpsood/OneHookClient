@@ -7,6 +7,12 @@ import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 type SocialIcon = ComponentType<{ className?: string }>;
 
+/** OneHook is a brand of Saha Equation Technologies (OPC) Private Limited. */
+export const PARENT_COMPANY = {
+  name: 'Saha Equation Technologies',
+  url: 'https://sahaequation.com',
+} as const;
+
 /** Map a social label to the catalog's landing.social_link value set. */
 function socialValue(label: string): string {
   const v = label.toLowerCase();
@@ -132,6 +138,22 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
           <p>
             <span className="whitespace-nowrap">© 2026 OneHook.</span>{' '}
             <span className="whitespace-nowrap">All rights reserved.</span>
+          </p>
+          {/* Parent company. A followed link (no rel="nofollow") so search engines connect the
+              brand to sahaequation.com. Tracked as an outbound "other" link until the catalog has a
+              dedicated id. */}
+          <p className="mt-1 text-xs">
+            A{' '}
+            <a
+              href={PARENT_COMPANY.url}
+              target="_blank"
+              rel="noopener"
+              {...trackProps(UiElement.LANDING_SOCIAL_LINK, { value: 'other' })}
+              className="underline underline-offset-2 hover:opacity-100 transition-opacity"
+            >
+              {PARENT_COMPANY.name}
+            </a>{' '}
+            company
           </p>
         </div>
       </div>
