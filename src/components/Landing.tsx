@@ -814,8 +814,6 @@ const PHONE_PROFILE = {
   interests: ['Travel', 'Film', 'Coffee', 'Yoga', 'Art', 'Live music'],
 } as const;
 
-/** The next card peeking under the active one, to hint at the single-focus Discover stack. */
-const PHONE_NEXT = { name: 'Aarav', age: 29, img: '/media/profile-demo/profile-male-1.jpg', meta: '6 km away · Gurugram' } as const;
 
 const OH_INK = '#1A1A1A';
 const OH_BORDER = '#EBEBEB';
@@ -1060,17 +1058,6 @@ export function ManifestoPhone({
                       <span className="absolute bottom-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-md">
                         <Heart className="h-4 w-4" style={{ color: OH_INK }} />
                       </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-2.5 flex items-center gap-2.5 border bg-white p-2.5 opacity-70" style={{ borderColor: OH_BORDER }}>
-                    <img src={PHONE_NEXT.img} alt="" loading="lazy" decoding="async" className="h-11 w-11 shrink-0 object-cover" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[14px] font-black leading-none">{PHONE_NEXT.name}, {PHONE_NEXT.age}</span>
-                        <PhoneVerified className="h-3 w-3" />
-                      </div>
-                      <p className={`mt-1 ${label}`} style={{ color: muted }}>Next in your stack</p>
                     </div>
                   </div>
                 </div>
