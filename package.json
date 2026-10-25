@@ -23,7 +23,6 @@
     "lint": "tsc --noEmit",
     "lint:fix": "tsc --noEmit && prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "generate": "graphql-codegen",
     "validate": "npm run lint && npm test",
     "cdk:synth": "npx tsx infra/stacks/frontend-app.ts",
     "synth:prod": "npx cdk synth --context env=prod",
@@ -58,8 +57,6 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
-    "@graphql-codegen/cli": "^7.2.0",
-    "@graphql-codegen/client-preset": "^6.1.0",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "aws-cdk": "^2.1121.0",

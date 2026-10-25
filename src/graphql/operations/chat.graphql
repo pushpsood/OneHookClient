@@ -1,6 +1,0 @@
-subscription OnNewMessage($matchId: ID!) {
-  onNewMessage(matchId: $matchId) {
-    senderId
-    ciphertext
-  }
-}

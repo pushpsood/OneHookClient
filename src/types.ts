@@ -116,7 +116,7 @@ export type Match = MatchRecord;
 
 
 // ── Canonical GraphQL type re-exports ────────────────────────────────────────
-// Chat message types come from the generated GraphQL codegen.
+// Chat message types come from the backend's generated GraphQL SDK (onehook-api-client).
 export {
   MessageStatus,
   type Message,
