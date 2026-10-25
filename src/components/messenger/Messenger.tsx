@@ -1481,7 +1481,7 @@ function PhonesStage({ index }: { index: number }) {
                       liveThread={sent ? ISHA_SENDS : ISHA_HELLO}
                       liveDelay={sent ? 0 : reduce ? 300 : 800}
                       contactName="Rohan"
-                      contactPhoto="/media/profile-demo/profile-3.jpg"
+                      contactPhoto="/media/profile-demo/profile-male-1.jpg"
                       className="relative isolate"
                     />
                   </motion.div>
@@ -1664,7 +1664,7 @@ function PhonesStage({ index }: { index: number }) {
                       liveDelay={0}
                       liveSpeed={freshDirect ? 0.01 : 0.28}
                       contactName="Rohan"
-                      contactPhoto="/media/profile-demo/profile-3.jpg"
+                      contactPhoto="/media/profile-demo/profile-male-1.jpg"
                       className="relative isolate"
                     />
                     {/* the key lands: a soft pulse of light on the glass */}

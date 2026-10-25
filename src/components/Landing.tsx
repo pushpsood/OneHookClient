@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { UiElement, trackProps } from '../lib/analytics/analytics';
 import { MOST_POPULAR_TIER, PAID_TIER_NAMES } from '../config/membership.config';
-import { motion, AnimatePresence, useMotionValue, useSpring, useScroll, useTransform, useReducedMotion, type MotionValue } from 'motion/react';
+import { motion, useMotionValue, useSpring, useScroll, useTransform, useReducedMotion, type MotionValue } from 'motion/react';
 import {
   Heart,
   Focus,
@@ -20,7 +20,6 @@ import {
   Check,
   Shuffle,
   ShieldCheck,
-  Smartphone,
   QrCode,
   X,
   MapPin,
@@ -39,6 +38,7 @@ import { Seo } from './common/Seo';
 import { ROUTE_SEO } from '../config/seo-routes';
 import { AppleIcon, AndroidIcon } from './common/BrandIcons';
 import { SiteFooter } from './common/SiteFooter';
+import { StickyCta } from './common/StickyCta';
 import { AlienScanner } from './mascot';
 import { hideMrOneHook } from './Chatbot/ChatbotWidget';
 import { ScienceOrbitBackdrop } from './science/ScienceOrbitBackdrop';
@@ -759,10 +759,10 @@ function PrincipleValues() {
             onMouseEnter={() => canFocus && setHovered(idx)}
             // min-w-0 lets a column narrow below its content's preferred width; the dividers are the
             // cells' own left edge, so they move with the columns and never overlap.
-            className={`relative min-w-0 p-8 lg:px-10 lg:py-12 ${idx > 0 ? 'lg:border-l lg:border-border' : ''}`}
+            className={`relative min-w-0 p-8 text-center lg:px-10 lg:py-12 ${idx > 0 ? 'lg:border-l lg:border-border' : ''}`}
           >
             <value.icon
-              className={`mb-6 h-6 w-6 text-accent transition-transform duration-500 ${active ? 'scale-110' : ''}`}
+              className={`mx-auto mb-6 h-6 w-6 text-accent transition-transform duration-500 ${active ? 'scale-110' : ''}`}
             />
             <h4 className="mb-3 text-lg font-bold uppercase tracking-[0.15em]">{value.title}</h4>
             <p
@@ -811,7 +811,7 @@ const PHONE_PROFILE = {
 } as const;
 
 /** The next card peeking under the active one, to hint at the single-focus Discover stack. */
-const PHONE_NEXT = { name: 'Aarav', age: 29, img: '/media/profile-demo/profile-4.jpg', meta: '6 km away · Gurugram' } as const;
+const PHONE_NEXT = { name: 'Aarav', age: 29, img: '/media/profile-demo/profile-male-1.jpg', meta: '6 km away · Gurugram' } as const;
 
 const OH_INK = '#1A1A1A';
 const OH_BORDER = '#EBEBEB';
@@ -1535,7 +1535,6 @@ export function Landing() {
     document.fonts?.ready.then(check).catch(() => undefined);
     return () => ro.disconnect();
   }, []);
-  const [showStickyCta, setShowStickyCta] = useState(false);
 
   // Mascot explainer video shown inside the "Under the hood" section.
   const [showMascotVideo, setShowMascotVideo] = useState(false);
@@ -1573,29 +1572,6 @@ export function Landing() {
     };
   }, [showMascotVideo]);
 
-  // Sticky CTA: hide the redeem button when the "Get the app" label wraps to
-  // more than one line. Measured on an invisible mirror that always renders
-  // BOTH buttons, so the decision doesn't oscillate once the redeem is removed.
-  const [hideStickyRedeem, setHideStickyRedeem] = useState(false);
-  const ctaAppTextRef = useRef<HTMLSpanElement>(null);
-  const ctaMirrorRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showStickyCta) return;
-    const measure = () => {
-      const el = ctaAppTextRef.current;
-      if (!el) return;
-      setHideStickyRedeem(el.getClientRects().length > 1);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    if (ctaMirrorRef.current) ro.observe(ctaMirrorRef.current);
-    window.addEventListener('resize', measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-    };
-  }, [showStickyCta]);
 
   type RelationshipMode = 'single' | 'taken';
   const [relationshipMode, setRelationshipMode] = useState<RelationshipMode>('single');
@@ -1670,45 +1646,6 @@ export function Landing() {
     return () => window.clearInterval(id);
   }, [storyPaused]);
 
-  // Show the persistent CTA only while scrolling DOWN (past the hero), and hide
-  // it once the footer scrolls into view so it never sits over the footer.
-  useEffect(() => {
-    let lastY = window.scrollY;
-    const onScroll = () => {
-      const y = window.scrollY;
-      const goingDown = y > lastY + 2; // small threshold to ignore jitter
-      const goingUp = y < lastY - 2;
-      lastY = y;
-
-      const pastHero = y > window.innerHeight * 0.7;
-      const footer = document.querySelector('footer');
-      const footerVisible = footer
-        ? footer.getBoundingClientRect().top < window.innerHeight
-        : false;
-
-      const chatbotOpen = !!document.querySelector('.chatbot-window');
-
-      if (chatbotOpen || footerVisible || !pastHero) {
-        setShowStickyCta(false);
-      } else if (goingDown) {
-        setShowStickyCta(true);
-      } else if (goingUp) {
-        setShowStickyCta(false);
-      }
-    };
-    onScroll();
-
-    const onChatbotToggle = (e: Event) => {
-      onScroll();
-    };
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('chatbotToggle', onChatbotToggle);
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('chatbotToggle', onChatbotToggle);
-    };
-  }, []);
 
   // Fold the nav into Explore only when it would overlap: first the four section links, then — if it
   // still doesn't fit — everything else too. Decided from the natural widths of two hidden measuring
@@ -2536,7 +2473,7 @@ export function Landing() {
                     single:
                       'OneHook is designed to feel focused and intentional, never rushed. Here is how it keeps your attention on one promising connection at a time.',
                     taken:
-                      'Already together? Keep OneHook as your private, end-to-end encrypted messenger — the one person who matters reaches you first, with no feeds, no ads and no audience. Just the two of you.',
+                      'Already together? Keep OneHook as your private, encrypted messenger: the one person who matters reaches you first. No feeds, no ads, no audience.',
                   }}
                 />
               </p>
@@ -2583,7 +2520,7 @@ export function Landing() {
                 versions={{
                   single: 'Endless swiping, a hundred half-conversations, and no one you actually remember.',
                   taken:
-                    'No priority notifications, no end-to-end encrypted chats, no platform independence, and no AI dedicated to the one person who matters.',
+                    'Buried notifications, scattered chats, and nothing built for the one person who matters.',
                 }}
               />
             </p>
@@ -2630,28 +2567,49 @@ export function Landing() {
                       <h3 className={`mt-3 text-2xl font-semibold tracking-tight transition-opacity duration-500 ${done ? 'opacity-45' : ''}`}>
                         {step.label}
                       </h3>
-                      <p className="mt-4 flex-1 text-sm leading-relaxed opacity-70">
-                        <SwapText
-                          active={done ? 'done' : 'live'}
-                          versions={{
-                            live: step.summary,
-                            done: 'You\u2019ve already found your person, so there\u2019s no dating profile to create and no one to discover. Just add your partner directly and start at step 2.',
-                          }}
-                        />
-                      </p>
-                      <ul
-                        aria-hidden={done}
-                        className={`mt-6 space-y-2.5 border-t border-border/70 pt-5 transition-opacity duration-500 ${done ? 'opacity-0' : ''}`}
-                      >
-                        {step.bullets.map((bullet) => (
-                          <li key={bullet} className="flex items-center gap-3 text-sm font-medium">
-                            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
-                              <Check className="h-3 w-3" />
-                            </span>
-                            {bullet}
-                          </li>
-                        ))}
-                      </ul>
+                      {/* Steps that can be "done" (discovery, for people already together) carry an
+                          equally long done version of the text and bullets in the same grid cell, so
+                          the card is the same size in both modes and neither leaves empty space.
+                          Steps that always apply carry only their own text. */}
+                      {(() => {
+                        const canBeDone = !step.modes.includes('taken');
+                        const bulletList = (items: readonly string[], hidden: boolean) => (
+                          <ul
+                            aria-hidden={hidden}
+                            className={`[grid-area:1/1] space-y-2.5 transition-opacity duration-500 ${hidden ? 'opacity-0' : ''}`}
+                          >
+                            {items.map((bullet) => (
+                              <li key={bullet} className="flex items-center gap-3 text-sm font-medium">
+                                <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+                                  <Check className="h-3 w-3" />
+                                </span>
+                                {bullet}
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                        return (
+                          <>
+                            <p className="mt-4 flex-1 text-sm leading-relaxed opacity-70">
+                              {canBeDone ? (
+                                <SwapText
+                                  active={done ? 'done' : 'live'}
+                                  versions={{
+                                    live: step.summary,
+                                    done: 'You\u2019ve already found your person, so there\u2019s no dating profile to create and no one to discover. Add your partner directly.',
+                                  }}
+                                />
+                              ) : (
+                                step.summary
+                              )}
+                            </p>
+                            <div className="mt-6 grid border-t border-border/70 pt-5">
+                              {bulletList(step.bullets, done)}
+                              {canBeDone && bulletList(['No dating profile needed', 'Nothing to discover', 'Add your partner directly'], !done)}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </motion.li>
                 );
@@ -2832,7 +2790,7 @@ export function Landing() {
       {/* Mr.OneHook himself: the sign-off of chapter 03, not a chapter of its own. It starts inside
           the dark section's fade (no top padding gap, no heading), so the science and the mascot
           read as one continuous section. */}
-      <section id="mascot" aria-label="Mr.OneHook" className="pt-6 sm:pt-8 lg:pt-10 pb-24 px-6 bg-white relative">
+      <section id="mascot" aria-label="Mr.OneHook" className="pt-6 sm:pt-8 lg:pt-10 pb-24 px-6 bg-[#EEF0F3] relative">
         <div className="max-w-6xl mx-auto">
           {showMascotVideo ? (
             <motion.div
@@ -3051,8 +3009,9 @@ export function Landing() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-28 px-6 bg-bg relative overflow-hidden">
+      {/* CTA Section — on the same silver ground as everything from How it works down (only the dark
+          sections and the footer differ) */}
+      <section className="py-28 px-6 bg-[#EEF0F3] relative overflow-hidden">
         <div className="absolute inset-0 bg-linear-to-b from-accent/5 to-transparent" />
 
         <motion.div
@@ -3100,64 +3059,8 @@ export function Landing() {
       {/* Footer */}
       <SiteFooter />
 
-      {/* Persistent conversion CTA — appears after the hero (sticky-CTA best practice) */}
-      <AnimatePresence>
-        {showStickyCta && (
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 24 }}
-            transition={{ duration: 0.3 }}
-            id="sticky-cta"
-            className="fixed bottom-4 inset-x-0 mx-auto z-[70] w-[calc(100%-2rem)] sm:w-max sm:max-w-[calc(100%-2rem)]"
-          >
-            {/* Invisible mirror (always both buttons) — measures whether the
-                "Get the app" label wraps to > 1 line at the current width. */}
-            <div
-              ref={ctaMirrorRef}
-              aria-hidden="true"
-              className="pointer-events-none invisible absolute inset-0 flex items-center gap-2 sm:gap-3 p-2 sm:p-3 rounded-full border border-white/10"
-            >
-              <span className="hidden md:block portrait:hidden whitespace-nowrap pl-4 pr-2 text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
-                One connection. Zero distractions.
-              </span>
-              <span className="flex-1 sm:flex-none block text-center px-4 py-2.5 sm:px-6 sm:py-3.5 border border-white/30 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] rounded-full">
-                <Smartphone className="inline w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 align-middle" />
-                <span ref={ctaAppTextRef} className="align-middle">
-                  Get the app
-                </span>
-              </span>
-              <span className="flex-1 sm:flex-none px-4 py-2.5 sm:px-6 sm:py-3.5 text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] rounded-full inline-flex items-center justify-center gap-1.5 sm:gap-2">
-                <span className="hidden sm:inline">Redeem invite</span>
-                <span className="sm:hidden">Redeem</span>
-                <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 sm:gap-3 bg-accent text-white p-2 sm:p-3 rounded-full shadow-2xl border border-white/10">
-              <span className="hidden md:block portrait:hidden whitespace-nowrap pl-4 pr-2 text-[11px] font-bold uppercase tracking-[0.22em] text-white/80">
-                One connection. Zero distractions.
-              </span>
-              <button
-                onClick={() => scrollToSection('get-app')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'get_app' })}
-                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 py-2.5 sm:px-6 sm:py-3.5 border border-white/30 text-white text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] rounded-full hover:bg-white/10 transition-colors"
-              >
-                <Smartphone className="w-3 h-3 sm:w-4 sm:h-4" /> Get the app
-              </button>
-              {!hideStickyRedeem && (
-                <button
-                  onClick={goRedeemInvite} {...trackProps(UiElement.LANDING_GET_STARTED)}
-                  className="flex-1 sm:flex-none px-4 py-2.5 sm:px-6 sm:py-3.5 bg-white text-accent text-[10px] sm:text-[11px] font-black uppercase tracking-wider sm:tracking-[0.2em] rounded-full hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-1.5 sm:gap-2"
-                >
-                  <span className="hidden sm:inline">Redeem invite</span>
-                  <span className="sm:hidden">Redeem</span>
-                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-                </button>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Persistent conversion CTA — appears after the hero (shared with the science page) */}
+      <StickyCta onGetApp={() => scrollToSection('get-app')} onRedeem={goRedeemInvite} />
 
     </div>
   );

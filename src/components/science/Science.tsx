@@ -4,6 +4,7 @@ import { motion, useInView, useReducedMotion, useScroll, useSpring, useTransform
 import { ArrowRight, Send, Smartphone } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { StickyCta } from '../common/StickyCta';
 import { Seo } from '../common/Seo';
 import { ROUTE_SEO } from '../../config/seo-routes';
 import { Accent, BRAND, Chapter, ENGINE_META, Kicker, Panel, labelClass, pillClass, type ChapterDef } from './ScienceUi';
@@ -513,6 +514,7 @@ export function Finale({
 
 export function Science() {
   const ending = useFullScreenEnding();
+  const navigateTo = useNavigate();
 
   return (
     <div className="min-h-screen" style={{ background: BRAND.paper }}>
@@ -614,6 +616,9 @@ export function Science() {
       <div ref={ending.footerRef}>
         <SiteFooter />
       </div>
+
+      {/* the same floating bar as the landing page: the app section lives there */}
+      <StickyCta onGetApp={() => navigateTo('/#get-app')} onRedeem={() => navigateTo('/redeem')} />
 
     </div>
   );
