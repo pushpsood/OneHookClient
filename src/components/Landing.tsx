@@ -882,6 +882,7 @@ export function ManifestoPhone({
   ownerName = PHONE_OWNER.name,
   ownerAge = PHONE_OWNER.age,
   ownerPhoto = PHONE_OWNER.photo,
+  messagesOnly = false,
 }: {
   progress: MotionValue<number>;
   reduce: boolean | null;
@@ -902,8 +903,12 @@ export function ManifestoPhone({
   ownerName?: string;
   ownerAge?: number;
   ownerPhoto?: string;
+  /** Messenger route: only the chat exists (Discover and Profile are never loaded), with a compact,
+   *  bottom-anchored thread so the newest message always sits just above the text field. */
+  messagesOnly?: boolean;
 }) {
-  const [tab, setTab] = useState<PhoneTab>(initialTab);
+  const [tabState, setTab] = useState<PhoneTab>(messagesOnly ? 'messages' : initialTab);
+  const tab: PhoneTab = messagesOnly ? 'messages' : tabState;
   // Live conversation playback: how many bubbles are revealed, and whether "typing…" is showing.
   const [revealed, setRevealed] = useState(liveThread ? 0 : Number.POSITIVE_INFINITY);
   const revealedRef = useRef(0);
@@ -1104,7 +1109,11 @@ export function ManifestoPhone({
               </div>
 
               {/* thread */}
-              <div className="absolute inset-x-0 top-[92px] bottom-[112px] flex flex-col gap-2 overflow-hidden px-3 py-2">
+              <div
+                className={`absolute inset-x-0 top-[92px] bottom-[112px] flex flex-col overflow-hidden px-3 py-2 ${
+                  messagesOnly ? 'justify-end gap-1.5' : 'gap-2'
+                }`}
+              >
                 <div className="flex justify-center">
                   <span className="rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider" style={{ background: 'rgba(26,26,26,0.06)', color: muted }}>Today</span>
                 </div>
@@ -1122,7 +1131,7 @@ export function ManifestoPhone({
                     className={`flex ${m.me ? 'justify-end' : 'justify-start'}`}
                   >
                     <span
-                      className={`max-w-[78%] rounded-2xl px-3 py-2 text-[11px] leading-snug ${m.me ? 'rounded-br-sm text-white' : 'rounded-bl-sm border'}`}
+                      className={`max-w-[78%] rounded-2xl leading-snug ${messagesOnly ? 'px-2.5 py-1.5 text-[9.5px]' : 'px-3 py-2 text-[11px]'} ${m.me ? 'rounded-br-sm text-white' : 'rounded-bl-sm border'}`}
                       style={m.me ? { background: OH_INK } : { background: '#fff', borderColor: OH_BORDER, color: OH_INK }}
                     >
                       {m.t}
@@ -1223,15 +1232,21 @@ export function ManifestoPhone({
 
           {/* interactive bottom tab bar */}
           <div className="absolute inset-x-0 bottom-0 z-50 flex h-16 items-stretch border-t bg-[#FDFDFD] px-2 pb-3" style={{ borderColor: OH_BORDER }}>
-            <button
-              type="button"
-              onClick={() => setTab('discover')}
-              aria-label="Discover"
-              {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'preview_discover' })}
-              className="flex flex-1 cursor-pointer items-center justify-center"
-            >
-              <Layers className="h-[22px] w-[22px]" style={{ color: tab === 'discover' ? OH_INK : 'rgba(26,26,26,0.4)' }} strokeWidth={tab === 'discover' ? 2.4 : 2} />
-            </button>
+            {messagesOnly ? (
+              <span aria-hidden="true" className="flex flex-1 items-center justify-center">
+                <Layers className="h-[22px] w-[22px]" style={{ color: 'rgba(26,26,26,0.4)' }} strokeWidth={2} />
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setTab('discover')}
+                aria-label="Discover"
+                {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'preview_discover' })}
+                className="flex flex-1 cursor-pointer items-center justify-center"
+              >
+                <Layers className="h-[22px] w-[22px]" style={{ color: tab === 'discover' ? OH_INK : 'rgba(26,26,26,0.4)' }} strokeWidth={tab === 'discover' ? 2.4 : 2} />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setTab('messages')}
@@ -1241,15 +1256,21 @@ export function ManifestoPhone({
             >
               <MessageCircle className="h-[22px] w-[22px]" style={{ color: tab === 'messages' ? OH_INK : 'rgba(26,26,26,0.4)' }} strokeWidth={tab === 'messages' ? 2.4 : 2} />
             </button>
-            <button
-              type="button"
-              onClick={() => setTab('profile')}
-              aria-label="Profile"
-              {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'preview_profile' })}
-              className="flex flex-1 cursor-pointer items-center justify-center"
-            >
-              <User className="h-[22px] w-[22px]" style={{ color: tab === 'profile' ? OH_INK : 'rgba(26,26,26,0.4)' }} strokeWidth={tab === 'profile' ? 2.4 : 2} />
-            </button>
+            {messagesOnly ? (
+              <span aria-hidden="true" className="flex flex-1 items-center justify-center">
+                <User className="h-[22px] w-[22px]" style={{ color: 'rgba(26,26,26,0.4)' }} strokeWidth={2} />
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setTab('profile')}
+                aria-label="Profile"
+                {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'preview_profile' })}
+                className="flex flex-1 cursor-pointer items-center justify-center"
+              >
+                <User className="h-[22px] w-[22px]" style={{ color: tab === 'profile' ? OH_INK : 'rgba(26,26,26,0.4)' }} strokeWidth={tab === 'profile' ? 2.4 : 2} />
+              </button>
+            )}
           </div>
           {/* home indicator */}
           <div aria-hidden="true" className="pointer-events-none absolute bottom-1 left-1/2 z-40 h-1 w-24 -translate-x-1/2 rounded-full" style={{ background: 'rgba(26,26,26,0.3)' }} />

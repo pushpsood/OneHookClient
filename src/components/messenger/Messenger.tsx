@@ -1478,6 +1478,7 @@ function PhonesStage({ index }: { index: number }) {
                       progress={still}
                       reduce
                       initialTab="messages"
+                      messagesOnly
                       liveThread={sent ? ISHA_SENDS : ISHA_HELLO}
                       liveDelay={sent ? 0 : reduce ? 300 : 800}
                       contactName="Rohan"
@@ -1581,6 +1582,7 @@ function PhonesStage({ index }: { index: number }) {
                     progress={still}
                     reduce
                     initialTab="messages"
+                      messagesOnly
                     liveThread={rohanGot ? ROHAN_RECEIVES : NOTHING_YET}
                     liveDelay={0}
                     ownerName="Rohan"
@@ -1666,6 +1668,7 @@ function PhonesStage({ index }: { index: number }) {
                       progress={still}
                       reduce
                       initialTab="messages"
+                      messagesOnly
                       liveThread={newMsg ? ISHA_WITH_NEW : restoring ? ISHA_SENDS : NOTHING_YET}
                       liveDelay={0}
                       liveSpeed={freshDirect ? 0.01 : 0.28}
