@@ -1482,6 +1482,9 @@ function PhonesStage({ index }: { index: number }) {
                       liveDelay={sent ? 0 : reduce ? 300 : 800}
                       contactName="Rohan"
                       contactPhoto="/media/profile-demo/profile-male-1.jpg"
+                      ownerName="Isha"
+                      ownerAge={27}
+                      ownerPhoto="/media/profile-demo/profile-1.jpg"
                       className="relative isolate"
                     />
                   </motion.div>
@@ -1580,6 +1583,9 @@ function PhonesStage({ index }: { index: number }) {
                     initialTab="messages"
                     liveThread={rohanGot ? ROHAN_RECEIVES : NOTHING_YET}
                     liveDelay={0}
+                    ownerName="Rohan"
+                    ownerAge={29}
+                    ownerPhoto="/media/profile-demo/profile-male-1.jpg"
                     className="relative isolate"
                   />
                   <span aria-hidden="true" className="absolute -bottom-8 left-1/2 h-6 w-[78%] -translate-x-1/2 rounded-[50%] bg-black/25 blur-xl" />
@@ -1665,6 +1671,9 @@ function PhonesStage({ index }: { index: number }) {
                       liveSpeed={freshDirect ? 0.01 : 0.28}
                       contactName="Rohan"
                       contactPhoto="/media/profile-demo/profile-male-1.jpg"
+                      ownerName="Isha"
+                      ownerAge={27}
+                      ownerPhoto="/media/profile-demo/profile-1.jpg"
                       className="relative isolate"
                     />
                     {/* the key lands: a soft pulse of light on the glass */}

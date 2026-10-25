@@ -836,6 +836,9 @@ function LikeDot() {
   );
 }
 
+/** Whose phone this is: the Profile tab shows the owner, not the match (Isha is Aarav's match). */
+const PHONE_OWNER = { name: 'Aarav', age: 29, photo: '/media/profile-demo/profile-male-1.jpg' } as const;
+
 /** A short one-connection thread for the Messages tab (mirrors the iOS chat detail). */
 const PHONE_THREAD = [
   { me: false, t: 'Your prompt about chai vs coffee... I need the full argument 😄' },
@@ -876,6 +879,9 @@ export function ManifestoPhone({
   liveSpeed = 1,
   contactName = PHONE_PROFILE.name,
   contactPhoto = PHONE_PROFILE.photos[0],
+  ownerName = PHONE_OWNER.name,
+  ownerAge = PHONE_OWNER.age,
+  ownerPhoto = PHONE_OWNER.photo,
 }: {
   progress: MotionValue<number>;
   reduce: boolean | null;
@@ -892,6 +898,10 @@ export function ManifestoPhone({
   /** Who the Messages screen is talking to (defaults to the demo profile). */
   contactName?: string;
   contactPhoto?: string;
+  /** Whose phone it is (shown on the Profile tab). Defaults to Aarav, Isha's match. */
+  ownerName?: string;
+  ownerAge?: number;
+  ownerPhoto?: string;
 }) {
   const [tab, setTab] = useState<PhoneTab>(initialTab);
   // Live conversation playback: how many bubbles are revealed, and whether "typing…" is showing.
@@ -1156,9 +1166,9 @@ export function ManifestoPhone({
 
               <div ref={scrollerRef} className={`absolute inset-x-0 bottom-16 top-[88px] z-0 overflow-y-auto overscroll-contain px-4 pb-4 pt-5 ${hideScroll}`} style={{ scrollbarWidth: 'none' }}>
                 <div className="flex flex-col items-center text-center">
-                  <img src={PHONE_PROFILE.photos[0]} alt="" className="h-20 w-20 rounded-full object-cover ring-2 ring-white shadow-md" />
+                  <img src={ownerPhoto} alt="" className="h-20 w-20 rounded-full object-cover ring-2 ring-white shadow-md" />
                   <div className="mt-2 flex items-center gap-1">
-                    <span className="text-[15px] font-black" style={{ color: OH_INK }}>{PHONE_PROFILE.name}, {PHONE_PROFILE.age}</span>
+                    <span className="text-[15px] font-black" style={{ color: OH_INK }}>{ownerName}, {ownerAge}</span>
                     <PhoneVerified className="h-3.5 w-3.5" />
                   </div>
                   <div className="mt-1.5 flex gap-1.5">
