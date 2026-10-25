@@ -365,11 +365,12 @@ function NewTag({ on }: { on: boolean }) {
   );
 }
 
-/** Small "synced" tick that pops onto a device. */
+/** Small "synced" tick that pops onto a device (top-left; the "New" tag owns the top-right). */
 function SyncedTick({ on, delay }: { on: boolean; delay: number }) {
   return (
     <motion.span
-      className="absolute -right-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-[#16a34a] text-white shadow"
+      // top-LEFT corner, so it never collides with the pink "New" tag on the top-right
+      className="absolute -left-2 -top-2 grid h-5 w-5 place-items-center rounded-full bg-[#16a34a] text-white shadow"
       initial={false}
       animate={{ scale: on ? 1 : 0, opacity: on ? 1 : 0 }}
       transition={{ delay: on ? delay : 0, type: 'spring', stiffness: 320, damping: 15 }}
