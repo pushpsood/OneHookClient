@@ -1940,9 +1940,63 @@ const MR_MESSAGES = [
 const SILVER_LINE_H = 'linear-gradient(90deg, #7F8792, #B9BFC8 50%, #7F8792)';
 const SILVER_LINE_V = 'linear-gradient(180deg, #7F8792, #B9BFC8 50%, #7F8792)';
 
+/** Scene index of the Mr OneHook screen (its choreography is scrubbed by scroll). */
+const SCENE_MR = 5;
+/** Length of the Mr OneHook choreography in seconds, mapped onto its scroll band. */
+const MR_SECONDS = 3.2;
+
+function MrMessage({ m, i, p, t }: { m: (typeof MR_MESSAGES)[number]; i: number; p: MotionValue<number>; t: (a: number, b: number) => [number, number] }) {
+  // the line arrives (was: delay i*0.12s), then picked lines get ticked and ringed in pink while the
+  // others fade back (was: 0.8 + i*0.25s)
+  const [a0, a1] = t(i * 0.12, i * 0.12 + 0.35);
+  const opacity = useTransform(p, [a0, a1], [0, 1]);
+  const y = useTransform(p, [a0, a1], [8, 0]);
+  const [b0, b1] = t(0.8 + i * 0.25, 0.8 + i * 0.25 + 0.3);
+  const tickBg = useTransform(p, [b0, b1], ['rgba(255,255,255,1)', m.pick ? 'rgba(31,58,107,1)' : 'rgba(255,255,255,1)']);
+  const tickBorder = useTransform(p, [b0, b1], ['rgba(10,11,16,0.25)', m.pick ? 'rgba(31,58,107,1)' : 'rgba(10,11,16,0.25)']);
+  const [c0, c1] = t(0.85 + i * 0.25, 0.85 + i * 0.25 + 0.3);
+  const checkScale = useTransform(p, [c0, c0 + (c1 - c0) * 0.7, c1], [0, 1.15, 1]);
+  const ring = useTransform(
+    p,
+    [b0, b1],
+    m.pick
+      ? ['0 0 0 0px rgba(255,255,255,0), 0 0 0 0px rgba(255,143,199,0)', '0 0 0 2px rgba(255,255,255,1), 0 0 0 3.5px rgba(255,143,199,1)']
+      : ['0 0 0 0px rgba(255,255,255,0), 0 0 0 0px rgba(255,143,199,0)', '0 0 0 0px rgba(255,255,255,0), 0 0 0 0px rgba(255,143,199,0)']
+  );
+  const bubbleOpacity = useTransform(p, [b0, b1], [1, m.pick ? 1 : 0.55]);
+  return (
+    <motion.li style={{ opacity, y }} className={`flex items-start gap-2.5 ${m.from === 'You' ? 'flex-row-reverse text-right' : ''}`}>
+      <motion.span
+        aria-hidden="true"
+        className="mt-2.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border"
+        style={{ backgroundColor: tickBg, borderColor: tickBorder }}
+      >
+        {m.pick && (
+          <motion.span style={{ scale: checkScale }}>
+            <Check className="h-2.5 w-2.5 text-white" />
+          </motion.span>
+        )}
+      </motion.span>
+      <motion.span
+        className={`rounded-2xl px-3.5 py-2 text-[13px] font-light leading-snug ${m.from === 'You' ? 'text-white' : 'bg-black/[0.04] text-text'}`}
+        style={{ ...(m.from === 'You' ? { background: '#1F3A6B' } : {}), boxShadow: ring, opacity: bubbleOpacity }}
+      >
+        {m.text}
+      </motion.span>
+    </motion.li>
+  );
+}
+
 function SceneMrOneHook() {
   const reduce = useReducedMotion() ?? false;
   const k = reduce ? 0.3 : 1;
+  const p = useSceneProgress(SCENE_MR);
+  const { t } = useTimeline(MR_SECONDS);
+  const [pay0, pay1] = t(1.4, 1.9);
+  const payloadOpacity = useTransform(p, [pay0, pay1], [0, 1]);
+  const [rep0, rep1] = t(2.6, 3.1);
+  const replyOpacity = useTransform(p, [rep0, rep1], [0, 1]);
+  const replyY = useTransform(p, [rep0, rep1], [14, 0]);
   const picked = MR_MESSAGES.filter((m) => m.pick);
   const payload = JSON.stringify(
     { excerpts: picked.map((m) => ({ from: m.from === 'You' ? 'you' : 'them', text: m.text })), stored: false },
@@ -1958,36 +2012,9 @@ function SceneMrOneHook() {
           <p className="text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-black/40">On your phone · decrypted</p>
           <ul className="mt-5 space-y-2.5">
             {MR_MESSAGES.map((m, i) => (
-              <motion.li
-                key={i}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.12 * k, duration: 0.35 }}
-                className={`flex items-start gap-2.5 ${m.from === 'You' ? 'flex-row-reverse text-right' : ''}`}
-              >
-                <motion.span
-                  aria-hidden="true"
-                  className="mt-2.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border"
-                  initial={{ backgroundColor: 'rgba(255,255,255,1)', borderColor: 'rgba(10,11,16,0.25)' }}
-                  animate={m.pick ? { backgroundColor: '#1F3A6B', borderColor: '#1F3A6B' } : {}}
-                  transition={{ delay: (0.8 + i * 0.25) * k, duration: 0.25 }}
-                >
-                  {m.pick && (
-                    <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: (0.85 + i * 0.25) * k, type: 'spring', stiffness: 320, damping: 15 }}>
-                      <Check className="h-2.5 w-2.5 text-white" />
-                    </motion.span>
-                  )}
-                </motion.span>
-                <motion.span
-                  className={`rounded-2xl px-3.5 py-2 text-[13px] font-light leading-snug ${m.from === 'You' ? 'text-white' : 'bg-black/[0.04] text-text'}`}
-                  style={m.from === 'You' ? { background: '#1F3A6B' } : undefined}
-                  initial={{ boxShadow: '0 0 0 0 rgba(255,143,199,0)' }}
-                  animate={m.pick ? { boxShadow: '0 0 0 2px #FFFFFF, 0 0 0 3.5px #ff8fc7' } : { opacity: 0.55 }}
-                  transition={{ delay: (0.8 + i * 0.25) * k, duration: 0.3 }}
-                >
-                  {m.text}
-                </motion.span>
-              </motion.li>
+              <Fragment key={i}>
+                <MrMessage m={m} i={i} p={p} t={t} />
+              </Fragment>
             ))}
           </ul>
           <p className="mt-auto flex items-center justify-center gap-1.5 pt-4 text-[10px] text-black/40">
@@ -2039,12 +2066,7 @@ function SceneMrOneHook() {
         {/* right · exactly what leaves your phone */}
         <div className="flex h-full flex-col rounded-[28px] p-4 font-mono text-[11px] text-white/80 sm:p-6 sm:text-[12px] lg:min-h-[300px]" style={{ background: INK }}>
           <p className="mb-4 text-center font-sans text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">What leaves your phone</p>
-          <motion.pre
-            className="whitespace-pre-wrap leading-relaxed"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.4 * k, duration: 0.5 }}
-          >
+          <motion.pre className="whitespace-pre-wrap leading-relaxed" style={{ opacity: payloadOpacity }}>
             {payload}
           </motion.pre>
           <p className="mt-auto pt-4 font-sans text-[10px] leading-relaxed text-white/45">Used for this one reply, then forgotten — never stored, never logged.</p>
@@ -2053,9 +2075,7 @@ function SceneMrOneHook() {
 
       {/* bottom · what Mr OneHook sends back */}
       <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 2.6 * k, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        style={{ opacity: replyOpacity, y: replyY }}
         className="mx-auto mt-3 flex max-w-3xl items-start gap-3 rounded-[24px] border border-[#ff8fc7]/40 bg-white p-4 text-left shadow-[0_24px_60px_-40px_rgba(255,105,180,0.6)] sm:mt-6 sm:gap-4 sm:p-5"
       >
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full" style={{ background: 'rgba(255,143,199,0.15)' }}>
@@ -2098,6 +2118,67 @@ const PEEKS: PeekDef[] = [
   { kind: 'float', x: '11%', y: '70%', size: 116, delay: 1.5, tilt: -8 },
 ];
 
+/** One peeking Mr OneHook's pop-in, scrubbed by the screen's scroll progress. */
+function usePeekIn(delay: number, duration = 0.6) {
+  const p = useSceneProgress(SCENE_MR);
+  const { t } = useTimeline(MR_SECONDS);
+  const [a, b] = t(delay, delay + duration);
+  return { p, a, b, mid: a + (b - a) * 0.7 };
+}
+
+function FloatPeek({ peek, size, i, reduce, lite }: { peek: Extract<PeekDef, { kind: 'float' }>; size: number; i: number; reduce: boolean; lite: boolean }) {
+  const { p, a, b, mid } = usePeekIn(peek.delay);
+  const scale = useTransform(p, [a, mid, b], [0, 1.08, 1]);
+  const opacity = useTransform(p, [a, a + (b - a) * 0.4], [0, 1]);
+  return (
+    <div className="absolute" style={{ left: peek.x, top: peek.y }}>
+      <motion.div className="-translate-x-1/2 -translate-y-1/2" style={{ scale, opacity }}>
+        {/* ambient sway keeps running on its own */}
+        <motion.div
+          animate={reduce || lite ? { rotate: peek.tilt } : { y: [0, -9, 0], rotate: [peek.tilt - 3, peek.tilt + 3, peek.tilt - 3] }}
+          transition={reduce || lite ? { duration: 0 } : { duration: 4.5 + (i % 2), repeat: Infinity, ease: 'easeInOut' }}
+        >
+          <AlienScanner size={size} hideTooltips bare />
+        </motion.div>
+      </motion.div>
+    </div>
+  );
+}
+
+function EdgePeek({ peek, size, i, reduce, lite }: { peek: Extract<PeekDef, { kind: 'edge' }>; size: number; i: number; reduce: boolean; lite: boolean }) {
+  const { p, a, b, mid } = usePeekIn(peek.delay, 0.8);
+  // In the mascot's own frame (head up), the screen edge sits `inside` below its centre: the head
+  // down to just under the smile shows, the body, arms and feet stay hidden.
+  const inside = size * 0.13;
+  const hidden = -size * 0.62;
+  const y = useTransform(p, [a, mid, b], [-hidden, -inside - size * 0.04, -inside]);
+  const turn = { top: 180, bottom: 0, left: 90, right: -90 } as const;
+  const anchor: CSSProperties =
+    peek.edge === 'top'
+      ? { left: peek.at, top: 0 }
+      : peek.edge === 'bottom'
+        ? { left: peek.at, top: '100%' }
+        : peek.edge === 'left'
+          ? { left: 0, top: peek.at }
+          : { left: '100%', top: peek.at };
+  return (
+    <div className="absolute h-0 w-0" style={anchor}>
+      {/* turn so "up" for the mascot points into the screen */}
+      <div style={{ transform: `rotate(${turn[peek.edge]}deg)` }}>
+        <motion.div className="absolute" style={{ width: size, height: size, left: -size / 2, top: -size / 2, y }}>
+          <motion.div
+            style={{ transformOrigin: '50% 100%' }}
+            animate={reduce || lite ? { rotate: peek.tilt } : { rotate: [peek.tilt - 3, peek.tilt + 3, peek.tilt - 3] }}
+            transition={reduce || lite ? { duration: 0 } : { duration: 5 + (i % 3), repeat: Infinity, ease: 'easeInOut', delay: peek.delay + 0.6 }}
+          >
+            <AlienScanner size={size} hideTooltips bare />
+          </motion.div>
+        </motion.div>
+      </div>
+    </div>
+  );
+}
+
 function MascotPeeks() {
   const lite = useLite();
   const reduce = useReducedMotion() ?? false;
@@ -2107,9 +2188,6 @@ function MascotPeeks() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  // head points into the screen from each edge
-  const turn = { top: 180, bottom: 0, left: 90, right: -90 } as const;
-
   return (
     <motion.div
       aria-hidden="true"
@@ -2120,60 +2198,14 @@ function MascotPeeks() {
       {/* lighter mode (phones): four of the seven — incl. the one peeking in from the left, just above centre */}
       {(lite ? PEEKS.filter((_, i) => i === 1 || i === 2 || i === 3 || i === 4) : PEEKS).map((p, i) => {
         const size = Math.round(Math.max(70, p.size * (0.6 + 0.4 * scale)));
-
-        if (p.kind === 'float') {
-          return (
-            <div key={i} className="absolute" style={{ left: p.x, top: p.y }}>
-              <motion.div
-                className="-translate-x-1/2 -translate-y-1/2"
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: p.delay, type: 'spring', stiffness: 260, damping: 14 }}
-              >
-                <motion.div
-                  animate={reduce || lite ? { rotate: p.tilt } : { y: [0, -9, 0], rotate: [p.tilt - 3, p.tilt + 3, p.tilt - 3] }}
-                  transition={reduce || lite ? { duration: 0 } : { duration: 4.5 + (i % 2), repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <AlienScanner size={size} hideTooltips bare />
-                </motion.div>
-              </motion.div>
-            </div>
-          );
-        }
-
-        // In the mascot's own frame (head up), the screen edge sits `inside` below its centre: the head
-        // down to just under the smile shows, the body, arms and feet stay hidden.
-        const inside = size * 0.13;
-        const hidden = -size * 0.62;
-        const anchor: CSSProperties =
-          p.edge === 'top'
-            ? { left: p.at, top: 0 }
-            : p.edge === 'bottom'
-              ? { left: p.at, top: '100%' }
-              : p.edge === 'left'
-                ? { left: 0, top: p.at }
-                : { left: '100%', top: p.at };
         return (
-          <div key={i} className="absolute h-0 w-0" style={anchor}>
-            {/* turn so "up" for the mascot points into the screen */}
-            <div style={{ transform: `rotate(${turn[p.edge]}deg)` }}>
-              <motion.div
-                className="absolute"
-                style={{ width: size, height: size, left: -size / 2, top: -size / 2 }}
-                initial={{ y: -hidden }}
-                animate={{ y: -inside }}
-                transition={reduce ? { duration: 0.3, delay: p.delay * 0.3 } : { delay: p.delay, type: 'spring', stiffness: 130, damping: 13, mass: 0.9 }}
-              >
-                <motion.div
-                  style={{ transformOrigin: '50% 100%' }}
-                  animate={reduce || lite ? { rotate: p.tilt } : { rotate: [p.tilt - 3, p.tilt + 3, p.tilt - 3] }}
-                  transition={reduce || lite ? { duration: 0 } : { duration: 5 + (i % 3), repeat: Infinity, ease: 'easeInOut', delay: p.delay + 0.6 }}
-                >
-                  <AlienScanner size={size} hideTooltips bare />
-                </motion.div>
-              </motion.div>
-            </div>
-          </div>
+          <Fragment key={i}>
+            {p.kind === 'float' ? (
+              <FloatPeek peek={p} size={size} i={i} reduce={reduce} lite={lite} />
+            ) : (
+              <EdgePeek peek={p} size={size} i={i} reduce={reduce} lite={lite} />
+            )}
+          </Fragment>
         );
       })}
     </motion.div>
@@ -2185,7 +2217,10 @@ function MascotPeeks() {
  * drawn as one S-curve sweeping across the screen behind screen 6.
  */
 function PinkStrokes() {
-  const reduce = useReducedMotion() ?? false;
+  const p = useSceneProgress(SCENE_MR);
+  const { t } = useTimeline(MR_SECONDS);
+  const [w0, w1] = t(0, 1.8);
+  const revealWidth = useTransform(p, [w0, w1], [0, 1600]);
   // One line: it draws in from off-screen left, sweeps across and leaves past the right edge — then
   // simply stays there, still.
   const PATH = 'M -90 420 C 240 470, 500 390, 440 280 C 380 170, 560 85, 740 170 C 880 235, 950 330, 1160 300';
@@ -2212,14 +2247,7 @@ function PinkStrokes() {
           pathLength dashes here breaks with vector-effect="non-scaling-stroke" and leaves a gap.) */}
       <defs>
         <clipPath id="msg-pink-reveal">
-          <motion.rect
-            x={-200}
-            y={-200}
-            height={1000}
-            initial={{ width: reduce ? 1600 : 0 }}
-            animate={{ width: 1600 }}
-            transition={reduce ? { duration: 0 } : { duration: 1.8, ease: [0.45, 0, 0.25, 1] }}
-          />
+          <motion.rect x={-200} y={-200} height={1000} style={{ width: revealWidth }} />
         </clipPath>
       </defs>
       <g opacity={0.55} clipPath="url(#msg-pink-reveal)">
