@@ -11,6 +11,7 @@ import { ApiError } from '../lib/api-client';
 import { StateApi } from '../api/state';
 import { getCognitoAuth } from '../lib/cognito-auth';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
+import { Seo } from '../components/common/Seo';
 import { useToast } from '../../src/components/common/Toast';
 import { DiscoveryView } from '../features/discovery/DiscoveryView';
 import { LikesYouView } from '../features/discovery/LikesYouView';
@@ -252,6 +253,14 @@ export function AppContent() {
   return (
     <CallProvider currentUserId={currentUser.id}>
     <div className={`app-container ${resolvedTheme === 'dark' ? 'app-theme-dark' : 'app-theme-light'} h-[100dvh] bg-bg text-text flex flex-col overflow-hidden`}>
+      {/* Signed-in tab title. The crawler-facing "/app" prerender says "Sign In Required" (see
+          seo-routes.ts); a logged-in member instead sees a clean title. Always noindex. */}
+      <Seo
+        title="OneHook"
+        description="Your private OneHook space — your match, end-to-end encrypted chats, calls and profile."
+        path="/app"
+        noindex
+      />
       {/* Common Full-Width Header expanding from left to right with OneHook logo in the centre */}
       <TopBar
         activeTab={appState}

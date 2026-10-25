@@ -8,6 +8,8 @@ import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { PhoneNumberInput } from '../common/PhoneNumberInput';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { Seo } from '../common/Seo';
+import { ROUTE_SEO } from '../../config/seo-routes';
 import { SOCIALS } from '../common/socials';
 import { useAppStore } from '../../store/app-store';
 import { UiElement, trackProps, trackScreenView, Screen } from '../../lib/analytics/analytics';
@@ -294,6 +296,7 @@ export function Login() {
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">
+      <Seo {...ROUTE_SEO['/login']} path="/login" />
       <SiteHeader />
       <main className="flex-1 flex items-center justify-center p-8">
         <motion.div
@@ -302,6 +305,9 @@ export function Login() {
           className="w-full max-w-md"
         >
           <div className="text-center mb-12 space-y-4">
+            {/* The first step has no visible heading by design; this names the page for screen
+                readers and search engines without changing the layout. */}
+            {step === 'IDENTIFIER' && <h1 className="sr-only">Sign in to OneHook</h1>}
             {step !== 'IDENTIFIER' && (
               <h1 className="text-4xl font-serif italic uppercase tracking-tighter">
                 {step === 'SET_PASSWORD' ? 'Set a Password' : 'Verify It\u2019s You'}

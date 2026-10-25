@@ -41,15 +41,24 @@ export function FinishSetupInAppNotice({ missing, onRetry, retrying = false, che
   const secondaryClass =
     'w-full py-3 border border-border text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-bg transition-colors flex items-center justify-center gap-2 disabled:opacity-50';
 
-  const iosLink = (
+  // A store link is null until that listing is published: show "coming soon" instead of a store 404.
+  const iosLink = APP_STORE_LINKS.ios ? (
     <a key="ios" href={APP_STORE_LINKS.ios} {...trackProps(UiElement.LANDING_OPEN_IN_APP)} className={androidFirst ? secondaryClass : primaryClass}>
       <AppleIcon className="w-4 h-4" /> Open on iPhone
     </a>
+  ) : (
+    <span key="ios" aria-disabled="true" className={`${secondaryClass} opacity-50 cursor-default`}>
+      <AppleIcon className="w-4 h-4" /> iPhone app coming soon
+    </span>
   );
-  const androidLink = (
+  const androidLink = APP_STORE_LINKS.android ? (
     <a key="android" href={APP_STORE_LINKS.android} {...trackProps(UiElement.LANDING_OPEN_IN_APP)} className={androidFirst ? primaryClass : secondaryClass}>
       <AndroidIcon className="w-4 h-4" /> Open on Android
     </a>
+  ) : (
+    <span key="android" aria-disabled="true" className={`${secondaryClass} opacity-50 cursor-default`}>
+      <AndroidIcon className="w-4 h-4" /> Android app coming soon
+    </span>
   );
 
   return (

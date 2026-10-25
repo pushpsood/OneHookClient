@@ -39,15 +39,14 @@ describe('infra ownership model', () => {
       expect(`${APP_LINK_SUBDOMAIN}.${DOMAINS.prod}`).toBe('app.onehook.club');
     });
 
-    it('keeps the infra store links identical to the ones the web UI links to', () => {
-      // Infra cannot import from `src` (separate tsconfig), so the two lists are duplicated on
-      // purpose. This test is what stops them drifting apart.
+    it('derives the infra store links from the shared source the web UI uses', () => {
+      // Both sides import src/config/app-store-links.ts, so there is one place to set a listing.
       expect(INFRA_STORE_LINKS.ios).toBe(CLIENT_STORE_LINKS.ios);
       expect(INFRA_STORE_LINKS.android).toBe(CLIENT_STORE_LINKS.android);
     });
 
-    it('sends devices that cannot install the app to the marketing page, not a store', () => {
-      expect(INFRA_STORE_LINKS.fallback).toBe('https://onehook.club/app');
+    it('sends desktops and unpublished platforms to web sign-in, never a store', () => {
+      expect(INFRA_STORE_LINKS.fallback).toBe('https://onehook.club/login');
       expect(INFRA_STORE_LINKS.fallback).not.toContain('apps.apple.com');
       expect(INFRA_STORE_LINKS.fallback).not.toContain('play.google.com');
     });

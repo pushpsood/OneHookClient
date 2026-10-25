@@ -1,3 +1,5 @@
+import { APP_STORE_LINKS } from './app-store-links';
+
 /**
  * Where an account can be CREATED, as distinct from where it can be used.
  *
@@ -18,11 +20,30 @@
  */
 export const WEB_SIGNUP_ENABLED = false;
 
-/** Where to send someone who tries to sign up on the web. */
-export const APP_STORE_LINKS = {
-  ios: 'https://apps.apple.com/app/onehook',
-  android: 'https://play.google.com/store/apps/details?id=club.onehook.android',
-} as const;
+/** Store listings are set in ./app-store-links (shared with the CDK smart-link redirect). */
+export { APP_STORE_LINKS };
+
+/**
+ * The platform-aware install smart link (see infra/stacks/frontend-stack.ts). Used for the QR code,
+ * posters and texts — anywhere the opening device is unknown.
+ */
+export const APP_DOWNLOAD_URL = 'https://app.onehook.club';
+
+/** The homepage "Get the app" section: store badges, plus a QR code on desktop. */
+export const GET_APP_SECTION_PATH = '/#get-app';
+
+/**
+ * Where an on-site "Get the app" button should go.
+ *
+ * Only a phone whose store listing is live goes straight to the store (one tap to install). Desktops
+ * cannot install the app, and a phone whose listing is not live yet would hit a dead end, so both land
+ * on the homepage get-app section instead.
+ */
+export function getAppHref(platform: 'ios' | 'android' | 'other' = guessPlatform()): string {
+  const store =
+    platform === 'ios' ? APP_STORE_LINKS.ios : platform === 'android' ? APP_STORE_LINKS.android : null;
+  return store ? APP_DOWNLOAD_URL : GET_APP_SECTION_PATH;
+}
 
 /** Best-effort guess so the page can lead with the right store, without hiding the other. */
 export function guessPlatform(): 'ios' | 'android' | 'other' {

@@ -137,6 +137,18 @@ body {
   @apply w-full rounded border border-border bg-white px-4 py-3 text-sm outline-none transition-all focus:outline-none focus:ring-2 focus:ring-accent;
 }
 
+/* iOS Safari zooms into any focused form field whose text is under 16px. The viewport used to block
+ * that with maximum-scale=1, which also disabled pinch-zoom for everyone (an accessibility failure).
+ * Instead, keep form text at 16px or more on phone-sized screens. Deliberately outside @layer so it
+ * wins over text-xs / text-sm utilities on inputs. */
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
 /* ── Hero accent glitch ───────────────────────────────────────────────────────
  * The Playfair accent arrives through a few horizontal slices with a faint red/cyan split, then
  * settles. Discrete steps read as "glitch" rather than "fade"; under 350 ms keeps it quick. The

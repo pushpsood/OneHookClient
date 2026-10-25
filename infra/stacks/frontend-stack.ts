@@ -157,9 +157,8 @@ export class FrontendStack extends Stack {
     // 2. Clean URLs for the pre-built marketing pages: /messenger → /messenger/index.html (and
     //    /messenger/ → /messenger/index.html). The build writes one HTML file per public route with its
     //    own title, description and canonical in the raw <head>, so crawlers and link previews that
-    //    don't run JavaScript see the right page. Paths with a file extension are untouched, and app
-    //    routes with no pre-built file (e.g. /app, /login) still fall back to /index.html via the
-    //    error responses.
+    //    don't run JavaScript see the right page. Paths with a file extension are untouched. A path
+    //    with no pre-built file is not a page, and gets the 404 page via the error responses below.
     const wwwHost = props.includeWww ? `www.${props.domainName}` : '';
     const cleanUrlFunction = new CloudFrontFunction(this, 'CleanUrlFunction', {
       comment: 'Redirects www to the apex and maps /<route> to /<route>/index.html',
@@ -215,17 +214,21 @@ function handler(event) {
         functionAssociations: [{ function: cleanUrlFunction, eventType: FunctionEventType.VIEWER_REQUEST }],
       },
       defaultRootObject: 'index.html',
+      // Every real page has its own pre-built file, so a missing object means the URL does not exist.
+      // Answer with a real 404 and the not-found page instead of a 200 with the homepage, which
+      // search engines treat as a "soft 404" duplicate of the homepage. S3 behind an OAI without
+      // ListBucket reports missing keys as 403, so 403 is mapped the same way.
       errorResponses: [
         {
           httpStatus: 404,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
+          responseHttpStatus: 404,
+          responsePagePath: '/404.html',
           ttl: Duration.minutes(5),
         },
         {
           httpStatus: 403,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
+          responseHttpStatus: 404,
+          responsePagePath: '/404.html',
           ttl: Duration.minutes(5),
         },
       ],
@@ -308,20 +311,28 @@ function handler(event) {
   var isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && /Mobile\\/|Touch/i.test(ua));
   var isAndroid = /Android/i.test(ua);
 
+  // A store link is null until that listing is published; that platform then uses the fallback
+  // (web sign-in) rather than a store 404.
+  var IOS = ${JSON.stringify(APP_STORE_LINKS.ios)};
+  var ANDROID = ${JSON.stringify(APP_STORE_LINKS.android)};
   var location = ${JSON.stringify(APP_STORE_LINKS.fallback)};
-  if (isIOS) {
-    location = ${JSON.stringify(APP_STORE_LINKS.ios)};
-  } else if (isAndroid) {
-    location = ${JSON.stringify(APP_STORE_LINKS.android)};
+  if (isIOS && IOS) {
+    location = IOS;
+  } else if (isAndroid && ANDROID) {
+    location = ANDROID;
   }
 
+  // 302 (not 301) on purpose: browsers cache a 301 indefinitely, which would pin early visitors to
+  // the fallback after a store listing goes live.
   return {
     statusCode: 302,
     statusDescription: 'Found',
     headers: {
       'location': { value: location },
       // Never let a browser or proxy reuse one platform's redirect for another device.
-      'cache-control': { value: 'no-cache, no-store, must-revalidate' }
+      'cache-control': { value: 'no-cache, no-store, must-revalidate' },
+      // Tells crawlers and caches the answer depends on the device.
+      'vary': { value: 'User-Agent' }
     }
   };
 }

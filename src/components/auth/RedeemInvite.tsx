@@ -6,6 +6,8 @@ import { IdentityApi } from '../../api/identity';
 import { useToast } from '../common/Toast';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { Seo } from '../common/Seo';
+import { ROUTE_SEO } from '../../config/seo-routes';
 import { SOCIALS } from '../common/socials';
 import { WEB_SIGNUP_ENABLED } from '../../config/signup.config';
 import { SignupInAppNotice } from './SignupInAppNotice';
@@ -28,9 +30,12 @@ export function RedeemInvite() {
   // Accounts are created in the app, so the first device can put the history key into platform
   // escrow. The flow below is retained because it is the same contract the native clients drive.
   // See config/signup.config.ts and OneHookBackend/docs/account-key-recovery.md §3.
-  if (!WEB_SIGNUP_ENABLED) return <SignupInAppNotice />;
-
-  return <RedeemInviteFlow />;
+  return (
+    <>
+      <Seo {...ROUTE_SEO['/redeem']} path="/redeem" />
+      {WEB_SIGNUP_ENABLED ? <RedeemInviteFlow /> : <SignupInAppNotice />}
+    </>
+  );
 }
 
 function RedeemInviteFlow() {
@@ -167,6 +172,7 @@ function RedeemInviteFlow() {
           className="w-full max-w-md"
         >
           <div className="text-center mb-12 space-y-4">
+            {step === 'invite' && <h1 className="sr-only">Redeem your OneHook invite</h1>}
             {step !== 'invite' && (
               <h1 className="text-4xl font-serif italic uppercase tracking-tighter">
                 {titles[step]}

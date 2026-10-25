@@ -15,6 +15,8 @@
  * been removed.
  */
 
+import { APP_STORE_LINKS as STORE_LISTINGS } from '../../src/config/app-store-links.ts';
+
 /** AWS accounts by role. */
 export const ACCOUNTS = {
   /** Owns the production frontend stack and the onehook.club hosted zone. */
@@ -47,19 +49,21 @@ export const APP_LINK_SUBDOMAIN = 'app';
 /**
  * Store destinations for the smart link.
  *
- * KEEP IN SYNC with `src/config/signup.config.ts` (`APP_STORE_LINKS`), which the web UI uses for its
- * own "get the app" buttons. Infra cannot import from `src` (separate tsconfig), so the values are
- * duplicated here deliberately; `deployment-pipeline.test.ts` asserts they match.
+ * The ios/android listings come from `src/config/app-store-links.ts`, the single place they are set
+ * (the web UI reads the same file). Only the infra-specific fallback is defined here.
  */
-export const APP_STORE_LINKS = {
-  ios: 'https://apps.apple.com/app/onehook',
-  android: 'https://play.google.com/store/apps/details?id=club.onehook.android',
+export const APP_STORE_LINKS: {
+  readonly ios: string | null;
+  readonly android: string | null;
+  readonly fallback: string;
+} = {
+  ...STORE_LISTINGS,
   /**
-   * Desktop / unknown devices cannot install the app, so they land on the marketing page rather
-   * than an App Store page that would immediately reject them.
+   * Desktops cannot install the app, and a phone whose store listing is not live yet must not be
+   * sent to a store 404, so both go to the web sign-in page, where the app is usable in a browser.
    */
-  fallback: 'https://onehook.club/app',
-} as const;
+  fallback: 'https://onehook.club/login',
+};
 
 /**
  * Mr OneHook AI chatbot custom domains (Azure App Service, OneHookUXEnhancement/infra).

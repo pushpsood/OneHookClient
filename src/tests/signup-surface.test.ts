@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { APP_STORE_LINKS, WEB_SIGNUP_ENABLED } from '../config/signup.config';
+import {
+  APP_DOWNLOAD_URL,
+  APP_STORE_LINKS,
+  GET_APP_SECTION_PATH,
+  WEB_SIGNUP_ENABLED,
+  getAppHref,
+} from '../config/signup.config';
 
 /**
  * Where an account may be CREATED.
@@ -22,9 +28,26 @@ describe('signup surface', () => {
     expect(WEB_SIGNUP_ENABLED).toBe(false);
   });
 
-  it('offers both stores, so neither platform is a dead end', () => {
-    expect(APP_STORE_LINKS.ios).toMatch(/^https:\/\//);
-    expect(APP_STORE_LINKS.android).toMatch(/^https:\/\//);
+  it('never links to a malformed store URL: each listing is unpublished (null) or a real listing', () => {
+    // iOS listings must use the numeric id form; a slug like /app/onehook 404s.
+    if (APP_STORE_LINKS.ios !== null) {
+      expect(APP_STORE_LINKS.ios).toMatch(/^https:\/\/apps\.apple\.com\/([a-z]{2}\/)?app\/([^/]+\/)?id\d+$/);
+    }
+    if (APP_STORE_LINKS.android !== null) {
+      expect(APP_STORE_LINKS.android).toBe('https://play.google.com/store/apps/details?id=club.onehook.android');
+    }
+  });
+
+  describe('getAppHref ("Get the app" destination)', () => {
+    it('sends desktops to the homepage get-app section', () => {
+      expect(getAppHref('other')).toBe(GET_APP_SECTION_PATH);
+      expect(GET_APP_SECTION_PATH).toBe('/#get-app');
+    });
+
+    it('sends a phone to the smart link only when its store listing is live', () => {
+      expect(getAppHref('ios')).toBe(APP_STORE_LINKS.ios ? APP_DOWNLOAD_URL : GET_APP_SECTION_PATH);
+      expect(getAppHref('android')).toBe(APP_STORE_LINKS.android ? APP_DOWNLOAD_URL : GET_APP_SECTION_PATH);
+    });
   });
 
   it('routes the web registration screen to the app notice while the gate is closed', () => {

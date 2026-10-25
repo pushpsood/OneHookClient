@@ -4,12 +4,12 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Check, Minus, Sparkles, Smartphone } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
+import { GetAppLink } from '../common/GetAppLink';
 import { Seo } from '../common/Seo';
 import { ROUTE_SEO } from '../../config/seo-routes';
 import { hideMrOneHook } from '../Chatbot/ChatbotWidget';
 import {
   ANNUAL_DISCOUNT_LABEL,
-  APP_DOWNLOAD_URL,
   FEATURE_GROUPS,
   MEMBERSHIP_TIERS,
   priceLabel,
@@ -75,11 +75,7 @@ function BillingToggle({
 function DownloadCta({ tier, className = '' }: { tier: MembershipTier; className?: string }) {
   const primary = tier.mostPopular;
   return (
-    <a
-      href={APP_DOWNLOAD_URL}
-      target="_blank"
-      rel="noreferrer"
-      {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
+    <GetAppLink
       className={`inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-full text-[11px] font-black uppercase tracking-[0.2em] transition-opacity hover:opacity-90 ${
         primary
           ? 'border border-accent bg-accent text-white'
@@ -87,7 +83,7 @@ function DownloadCta({ tier, className = '' }: { tier: MembershipTier; className
       } ${className}`}
     >
       <Smartphone className="w-3.5 h-3.5" /> Get the app
-    </a>
+    </GetAppLink>
   );
 }
 
@@ -309,15 +305,11 @@ export function Pricing() {
             manage your membership from inside the app. Prices are in Indian Rupees (₹).
           </p>
           <div className="mt-5 flex justify-center">
-            <a
-              href={APP_DOWNLOAD_URL}
-              target="_blank"
-              rel="noreferrer"
-              {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
+            <GetAppLink
               className="inline-flex items-center gap-2 px-6 py-3 bg-accent text-white rounded-full text-[11px] font-black uppercase tracking-[0.2em] hover:opacity-90 transition-opacity"
             >
               <Smartphone className="w-3.5 h-3.5" /> Get the app
-            </a>
+            </GetAppLink>
           </div>
         </div>
       </section>

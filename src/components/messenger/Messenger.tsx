@@ -35,7 +35,7 @@ import { Finale, ProgressBar, useFullScreenEnding } from '../science/Science';
 import { StoryTimelineProvider, bandIndex, makeBands, usePassed, useSceneClock, useSceneProgress, useTimeline, useVisualProgress } from './storyTimeline';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
-import { APP_DOWNLOAD_URL } from '../../config/membership.config';
+import { GetAppLink } from '../common/GetAppLink';
 
 /**
  * /messenger — one continuous, scroll-driven story on a light page.
@@ -2782,15 +2782,11 @@ export function Messenger() {
               initial={false}
               animate={{ opacity: 1 }}
             >
-              <a
-                href={APP_DOWNLOAD_URL}
-                target="_blank"
-                rel="noreferrer"
-                {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
+              <GetAppLink
                 className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-accent px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-white transition-opacity hover:opacity-90"
               >
                 <Smartphone className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Get the app
-              </a>
+              </GetAppLink>
               <button
                 type="button"
                 onClick={() => navigate('/redeem')}
