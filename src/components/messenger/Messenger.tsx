@@ -1,6 +1,6 @@
-import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion, useMotionValue, useMotionValueEvent, useReducedMotion, useScroll } from 'motion/react';
+import { AnimatePresence, motion, useMotionValue, useMotionValueEvent, useReducedMotion, useScroll, useTransform, type MotionValue } from 'motion/react';
 import {
   ArrowRight,
   Check,
@@ -33,6 +33,7 @@ import { AlienScanner } from '../mascot';
 import { QRCodeSVG } from 'qrcode.react';
 import { ManifestoPhone } from '../Landing';
 import { Finale, ProgressBar, useFullScreenEnding } from '../science/Science';
+import { StoryTimelineProvider, bandIndex, makeBands, useSceneProgress, useTimeline, useVisualProgress } from './storyTimeline';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { APP_DOWNLOAD_URL } from '../../config/membership.config';
@@ -2240,37 +2241,69 @@ function PinkStrokes() {
   );
 }
 
-/** Photo, video, voice note, file — each gets stamped with the same lock. */
+/** Scene indexes of the screens that drive their own choreography from scroll. */
+const SCENE_SEALED = 6;
+const SCENE_FREE = 7;
+
+/** Photo, video, voice note, file — each gets stamped with the same lock, scrubbed by scroll. */
 function SceneSealed() {
+  const p = useSceneProgress(SCENE_SEALED);
+  const { t } = useTimeline(1.9);
   const items = [ImageIcon, Video, Mic, FileText];
   return (
     <div className="grid w-full max-w-[420px] grid-cols-2 gap-4">
       {items.map((Icon, i) => (
-        <motion.div
-          key={i}
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.12 }}
-          className="relative grid aspect-square place-items-center rounded-3xl border border-black/10 bg-white shadow-sm"
-        >
-          <Icon className="h-10 w-10 text-accent/70" />
-          <motion.span
-            initial={{ scale: 2.2, opacity: 0, rotate: -20 }}
-            animate={{ scale: 1, opacity: 1, rotate: 0 }}
-            transition={{ delay: 0.6 + i * 0.25, type: 'spring', stiffness: 260, damping: 15 }}
-            className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-accent text-white shadow"
-          >
-            <Lock className="h-4 w-4" />
-          </motion.span>
-        </motion.div>
+        <Fragment key={i}>
+          <SealedItem Icon={Icon} i={i} p={p} t={t} />
+        </Fragment>
       ))}
     </div>
   );
 }
 
-/** A heart that fills up — free forever, kept alive by people who care. */
+function SealedItem({
+  Icon,
+  i,
+  p,
+  t,
+}: {
+  Icon: typeof ImageIcon;
+  i: number;
+  p: MotionValue<number>;
+  t: (start: number, end: number) => [number, number];
+}) {
+  // the tile rises in (was: delay i*0.12s), then its lock stamps down with a small overshoot (was: a
+  // spring at 0.6 + i*0.25s)
+  const [a0, a1] = t(i * 0.12, i * 0.12 + 0.35);
+  const opacity = useTransform(p, [a0, a1], [0, 1]);
+  const y = useTransform(p, [a0, a1], [16, 0]);
+  const [b0, b1] = t(0.6 + i * 0.25, 0.6 + i * 0.25 + 0.45);
+  const mid = b0 + (b1 - b0) * 0.65;
+  const lockScale = useTransform(p, [b0, mid, b1], [2.2, 0.92, 1]);
+  const lockRotate = useTransform(p, [b0, mid], [-20, 0]);
+  const lockOpacity = useTransform(p, [b0, b0 + (b1 - b0) * 0.4], [0, 1]);
+  return (
+    <motion.div
+      style={{ opacity, y }}
+      className="relative grid aspect-square place-items-center rounded-3xl border border-black/10 bg-white shadow-sm"
+    >
+      <Icon className="h-10 w-10 text-accent/70" />
+      <motion.span
+        style={{ scale: lockScale, rotate: lockRotate, opacity: lockOpacity }}
+        className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-full bg-accent text-white shadow"
+      >
+        <Lock className="h-4 w-4" />
+      </motion.span>
+    </motion.div>
+  );
+}
+
+/** A heart that fills up — free forever, kept alive by people who care. The fill follows scroll. */
 function SceneFree() {
   const reduce = useReducedMotion();
+  const p = useSceneProgress(SCENE_FREE);
+  // was: a 3.2 s fill to 30 with a small settle (times 0 / 0.7 / 0.85 / 1)
+  const fillY = useTransform(p, [0, 0.7, 0.85, 1], [92, 30, 38, 30]);
   return (
     <div className="relative grid h-72 w-72 place-items-center">
       <svg viewBox="0 0 100 92" className="h-64 w-64" aria-hidden="true">
@@ -2287,17 +2320,10 @@ function SceneFree() {
           strokeWidth="1.5"
         />
         <g clipPath="url(#msg-heart)">
-          <motion.rect
-            x="0"
-            width="100"
-            height="92"
-            fill={PINK}
-            initial={{ y: 92 }}
-            animate={{ y: reduce ? 30 : [92, 30, 38, 30] }}
-            transition={reduce ? undefined : { duration: 3.2, ease: 'easeOut', times: [0, 0.7, 0.85, 1] }}
-          />
+          <motion.rect x="0" width="100" height="92" fill={PINK} style={{ y: fillY }} />
         </g>
       </svg>
+      {/* ambient: hearts keep floating up on their own (not part of the story's timeline) */}
       {!reduce &&
         [0, 1, 2, 3, 4].map((i) => (
           <motion.span
@@ -2419,45 +2445,26 @@ const SCENES: Scene[] = [
 ];
 
 
-/** How long each screen's own animation runs (s) — drives the progress bar under the counter. */
+/** How long each screen's choreography runs (s). Screens map these timings onto their scroll band. */
 const SCENE_SECONDS = [3.9, 8.9, 6.1, 5.4, 2.6, 3.2, 1.9, 1.8];
+/** Scroll length per screen: proportional to its choreography, within limits so short screens still
+ *  get a comfortable stretch of scroll and the longest doesn't take forever. */
+const STORY_BANDS = makeBands(SCENE_SECONDS.map((s) => Math.min(6, Math.max(2.4, s))));
 
-/** A thin bar under the counter that fills while the current screen's animation plays. */
-function SceneProgress({ index, reduce }: { index: number; reduce: boolean }) {
-  const seconds = SCENE_SECONDS[index] ?? 3;
+/** A thin bar under the counter showing how far through the current screen the reader has scrolled. */
+function SceneProgress({ index }: { index: number }) {
+  const p = useSceneProgress(index);
   return (
     <div
       className="mx-auto mt-2 h-[3px] w-28 overflow-hidden rounded-full bg-black/10"
       role="progressbar"
-      aria-label="This screen’s animation"
+      aria-label="Progress through this screen"
       aria-valuemin={0}
       aria-valuemax={100}
     >
-      <motion.div
-        key={index}
-        className="h-full rounded-full"
-        style={{ background: PINK, transformOrigin: 'left center' }}
-        initial={{ scaleX: reduce ? 1 : 0 }}
-        animate={{ scaleX: 1 }}
-        transition={{ duration: reduce ? 0 : seconds, ease: 'linear' }}
-      />
+      <motion.div className="h-full rounded-full" style={{ background: PINK, transformOrigin: 'left center', scaleX: p }} />
     </div>
   );
-}
-
-/** Height of the largest viewport (100lvh), measured once per call from a probe element. Unlike
- *  innerHeight it doesn't change while a phone's toolbar shows or hides, so snap points stay put. */
-function stableViewportHeight() {
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:100lvh;visibility:hidden;pointer-events:none';
-  document.body.appendChild(probe);
-  const h = probe.offsetHeight || window.innerHeight;
-  probe.remove();
-  return h;
-}
-/** Scrollable length of the story track while its stage is pinned. */
-function trackSpan(el: HTMLElement, viewportH: number) {
-  return Math.max(1, el.offsetHeight - viewportH);
 }
 
 export function Messenger() {
@@ -2466,88 +2473,23 @@ export function Messenger() {
   const reduce = useReducedMotion();
   const storyRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: storyRef, offset: ['start start', 'end end'] });
-  const [progress, setProgress] = useState(0);
-  useMotionValueEvent(scrollYProgress, 'change', setProgress);
 
   const n = SCENES.length;
-  // Scrolling is never intercepted (no preventDefault, no scrollTo, no overflow freezing, no scroll
-  // snapping): those behave differently in every browser and made the wheel feel dead or sticky.
-  // The page always scrolls natively, with wheel, trackpad, touch, keyboard and scrollbar.
-  //
-  // The scene on screen FOLLOWS the scroll position: it steps one scene at a time toward wherever the
-  // reader has scrolled, showing each for at least SCENE_DWELL_MS. The stage is pinned for the whole
-  // track, so even a hard flick plays every screen in order while the page sits still.
+  // The page always scrolls natively: nothing intercepts the wheel, trackpad, touch, keyboard or
+  // scrollbar. The story is scrubbed by scroll instead (see storyTimeline.tsx): a visual progress
+  // follows the scroll position, rate-limited so even a hard flick plays every screen in order.
   //
   // A hard flick can't fly past the story either: the closer and footer below it only exist once
-  // the last screen is on stage (see `storyDone`), so until then the page simply ends at the bottom
-  // of the track and the browser stops there by itself.
-  // With reduced motion there is no dwell: the scene matches the scroll position directly.
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    const el = storyRef.current;
-    if (!el) return;
-    const SCENE_DWELL_MS = reduce ? 0 : 600;
-    // measured on mount and on resize only, never per scroll frame
-    let viewportH = stableViewportHeight();
-    let shown = -1;
-    let shownAt = 0;
-    let timer = 0;
-    let raf = 0;
-
-    const target = () => {
-      const rect = el.getBoundingClientRect();
-      const span = trackSpan(el, viewportH);
-      const p = Math.min(0.9999, Math.max(0, -rect.top / span));
-      return Math.min(n - 1, Math.floor(p * n));
-    };
-    // is any part of the stage on screen? (if not, there is nothing to play: match directly)
-    const onScreen = () => {
-      const rect = el.getBoundingClientRect();
-      return rect.bottom > 0 && rect.top < viewportH;
-    };
-    const show = (i: number) => {
-      shown = i;
-      shownAt = performance.now();
-      setIndex(i);
-    };
-    const step = () => {
-      timer = 0;
-      const t = target();
-      if (t === shown) return;
-      if (!onScreen() || SCENE_DWELL_MS === 0) {
-        show(t);
-        return;
-      }
-      const wait = shownAt + SCENE_DWELL_MS - performance.now();
-      if (wait > 0) {
-        timer = window.setTimeout(step, wait);
-        return;
-      }
-      show(shown + (t > shown ? 1 : -1));
-      if (shown !== t) timer = window.setTimeout(step, SCENE_DWELL_MS);
-    };
-    const onScroll = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        if (!timer) step();
-      });
-    };
-
-    show(target());
-    shownAt = 0; // the first scene on load is not "held"
-    const onResize = () => {
-      viewportH = stableViewportHeight();
-      onScroll();
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onResize);
-      cancelAnimationFrame(raf);
-      window.clearTimeout(timer);
-    };
-  }, [n, reduce]);
+  // the last screen is on stage (see `storyDone`), so until then the page ends at the bottom of the
+  // track and the browser stops there by itself.
+  const visual = useVisualProgress(scrollYProgress, STORY_BANDS, Boolean(reduce));
+  const [index, setIndex] = useState(() => bandIndex(STORY_BANDS, scrollYProgress.get()));
+  useMotionValueEvent(visual, 'change', (p) => {
+    const i = bandIndex(STORY_BANDS, p);
+    setIndex((prev) => (prev === i ? prev : i));
+  });
+  const threadHeight = useTransform(visual, (v) => `${Math.min(1, Math.max(0, v)) * 100}%`);
+  const story = useMemo(() => ({ progress: visual, bands: STORY_BANDS, reduce: Boolean(reduce) }), [visual, reduce]);
 
   // The closer + footer exist only once the story's last screen is on stage (see the scroll comment).
   // (With reduced motion the scene simply matches the scroll position, so nothing needs gating.)
@@ -2573,6 +2515,7 @@ export function Messenger() {
 
   return (
     <LiteContext.Provider value={lite}>
+    <StoryTimelineProvider value={story}>
     <div className={`min-h-screen bg-[#FAFAF8] text-text ${lite ? 'oh-lite' : ''}`}>
       <Seo {...ROUTE_SEO['/messenger']} path="/messenger" />
       <ProgressBar background={`linear-gradient(90deg, ${PINK}, #1F3A6B 50%, ${PINK})`} />
@@ -2713,7 +2656,7 @@ export function Messenger() {
                   <p className="font-mono text-[11px] text-black/30">
                     {String(index + 1).padStart(2, '0')} / {String(n).padStart(2, '0')}
                   </p>
-                  <SceneProgress index={index} reduce={Boolean(reduce)} />
+                  <SceneProgress index={index} />
                   <p className="mt-1.5 text-2xl font-light leading-[1.08] tracking-[-0.02em] sm:mt-2 sm:text-5xl">{scene.title}</p>
                   <p className="mt-2 text-sm font-light text-black/55 sm:mt-3 sm:text-lg">{scene.line}</p>
                 </motion.div>
@@ -2739,7 +2682,7 @@ export function Messenger() {
                   <p className="font-mono text-xs text-black/30 sm:text-sm">
                     {String(n).padStart(2, '0')} / {String(n).padStart(2, '0')}
                   </p>
-                  <SceneProgress index={index} reduce={Boolean(reduce)} />
+                  <SceneProgress index={index} />
                   <p className="mt-4 max-w-[16ch] font-light leading-[0.98] tracking-[-0.03em]" style={{ fontSize: 'clamp(3rem, 9vw, 8.5rem)' }}>
                     {scene.title}
                   </p>
@@ -2797,7 +2740,7 @@ export function Messenger() {
             {/* the continuous thread: one pink line that fills as the story unfolds */}
             <div aria-hidden="true" className="absolute right-6 top-1/2 hidden h-64 -translate-y-1/2 flex-col items-center sm:flex">
               <div className="relative h-full w-[2px] rounded-full bg-black/10">
-                <div className="absolute left-0 top-0 w-full rounded-full" style={{ height: `${progress * 100}%`, background: PINK }} />
+                <motion.div className="absolute left-0 top-0 w-full rounded-full" style={{ height: threadHeight, background: PINK }} />
               </div>
               <div className="absolute inset-0 flex flex-col justify-between">
                 {SCENES.map((s, i) => (
@@ -2827,6 +2770,7 @@ export function Messenger() {
         <SiteFooter />
       </div>
     </div>
+    </StoryTimelineProvider>
     </LiteContext.Provider>
   );
 }
