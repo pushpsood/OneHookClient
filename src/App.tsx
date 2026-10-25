@@ -18,6 +18,7 @@ import { Contact } from './components/legal/Contact';
 import { Careers } from './components/careers/Careers';
 import { Science } from './components/science/Science';
 import { Messenger } from './components/messenger/Messenger';
+import { NotFound } from './components/common/NotFound';
 import { MrOneHookDock } from './components/Chatbot/MrOneHookDock';
 import { getCognitoAuth, initializeCognitoAuth } from './lib/cognito-auth';
 import { config } from './utils/env.config';
@@ -225,7 +226,8 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Unknown URL: a real not-found page (CloudFront serves it with HTTP 404). */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Router>
       </ToastProvider>

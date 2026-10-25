@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { UiElement, trackProps } from '../lib/analytics/analytics';
 import { MOST_POPULAR_TIER, PAID_TIER_NAMES } from '../config/membership.config';
+import { APP_DOWNLOAD_URL, APP_STORE_LINKS } from '../config/signup.config';
 import { motion, useInView, useMotionValue, useSpring, useScroll, useTransform, useReducedMotion, type MotionValue } from 'motion/react';
 import {
   Heart,
@@ -59,11 +60,14 @@ const heroVideoPoster =
 const brandMarkImage = '/media/onehook-512.png';
 
 /**
- * Placeholder deep link for the mobile app. Swap this for the real smart-link
- * (a single URL that routes to the App Store / Google Play by platform) once
- * the apps are published — the QR code and store badges both read from here.
+ * The QR code encodes the platform-aware smart link (app.onehook.club), because whoever scans it is on
+ * an unknown device. The store badges link to their own store directly, or show "coming soon" while
+ * that listing is unpublished (`APP_STORE_LINKS` is null).
  */
-const APP_DOWNLOAD_URL = 'https://app.onehook.club';
+const STORE_BADGE_CLASS =
+  'group inline-flex items-center gap-3 px-5 py-3 rounded-xl border border-white/25 hover:bg-white hover:text-accent transition-colors';
+const STORE_BADGE_SOON_CLASS =
+  'inline-flex items-center gap-3 px-5 py-3 rounded-xl border border-dashed border-white/20 opacity-60 cursor-default select-none';
 
 /**
  * Mascot explainer video. Shown inside the "Under the hood" section when the
@@ -3055,43 +3059,79 @@ export function Landing() {
               </p>
 
               <div className="flex flex-wrap gap-4 justify-center lg:justify-start">
-                <a
-                  href={APP_DOWNLOAD_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
-                  className="group inline-flex items-center gap-3 px-5 py-3 rounded-xl border border-white/25 hover:bg-white hover:text-accent transition-colors"
-                >
-                  <AppleIcon className="w-6 h-6" />
-                  <span className="text-left leading-tight">
-                    <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
-                      Download on the
+                {APP_STORE_LINKS.ios ? (
+                  <a
+                    href={APP_STORE_LINKS.ios}
+                    target="_blank"
+                    rel="noreferrer"
+                    {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
+                    className={STORE_BADGE_CLASS}
+                  >
+                    <AppleIcon className="w-6 h-6" />
+                    <span className="text-left leading-tight">
+                      <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
+                        Download on the
+                      </span>
+                      <span className="block text-sm font-bold">App Store</span>
                     </span>
-                    <span className="block text-sm font-bold">App Store</span>
-                  </span>
-                </a>
-                <a
-                  href={APP_DOWNLOAD_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
-                  className="group inline-flex items-center gap-3 px-5 py-3 rounded-xl border border-white/25 hover:bg-white hover:text-accent transition-colors"
-                >
-                  <AndroidIcon className="w-6 h-6" />
-                  <span className="text-left leading-tight">
-                    <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
-                      Get it on
+                  </a>
+                ) : (
+                  <span aria-disabled="true" className={STORE_BADGE_SOON_CLASS}>
+                    <AppleIcon className="w-6 h-6" />
+                    <span className="text-left leading-tight">
+                      <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
+                        Coming soon to the
+                      </span>
+                      <span className="block text-sm font-bold">App Store</span>
                     </span>
-                    <span className="block text-sm font-bold">Google Play</span>
                   </span>
-                </a>
+                )}
+                {APP_STORE_LINKS.android ? (
+                  <a
+                    href={APP_STORE_LINKS.android}
+                    target="_blank"
+                    rel="noreferrer"
+                    {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
+                    className={STORE_BADGE_CLASS}
+                  >
+                    <AndroidIcon className="w-6 h-6" />
+                    <span className="text-left leading-tight">
+                      <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
+                        Get it on
+                      </span>
+                      <span className="block text-sm font-bold">Google Play</span>
+                    </span>
+                  </a>
+                ) : (
+                  <span aria-disabled="true" className={STORE_BADGE_SOON_CLASS}>
+                    <AndroidIcon className="w-6 h-6" />
+                    <span className="text-left leading-tight">
+                      <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
+                        Coming soon to
+                      </span>
+                      <span className="block text-sm font-bold">Google Play</span>
+                    </span>
+                  </span>
+                )}
               </div>
 
               <p className="mt-6 text-xs text-white/50">
-                <span className="hidden lg:inline">
-                  On your phone? Point your camera at the code.
-                </span>
-                <span className="lg:hidden">Tap a badge to download.</span>
+                {APP_STORE_LINKS.ios || APP_STORE_LINKS.android ? (
+                  <>
+                    <span className="hidden lg:inline">
+                      On your phone? Point your camera at the code.
+                    </span>
+                    <span className="lg:hidden">Tap a badge to download.</span>
+                  </>
+                ) : (
+                  <>
+                    Already a member?{' '}
+                    <Link to="/login" {...trackProps(UiElement.LANDING_LOGIN)} className="underline hover:text-white">
+                      Sign in on the web
+                    </Link>
+                    .
+                  </>
+                )}
               </p>
             </motion.div>
           </motion.div>

@@ -23,10 +23,14 @@ import { scanAll, scanSource, unreachableTsxFiles, type Offender } from './telem
 const SRC_ROOT = new URL('../', import.meta.url).pathname;
 
 /**
- * Provably-unreachable `.tsx` under src: dead code the shipped entry can never import, so it carries
- * no live user press. Pinned here so making a file reachable (or orphaning a new one) trips the guard.
+ * Provably-unreachable `.tsx` under src: files the shipped entry can never import, so they carry no
+ * live user press. Pinned here so making a file reachable (or orphaning a new one) trips the guard.
+ *
+ *  - prerender-entry.tsx: build-time renderer loaded by vite.config.ts in Node to write each page's
+ *    static HTML. It only composes page components (which ARE reachable and scanned) and is never in
+ *    the browser bundle.
  */
-const EXPECTED_UNREACHABLE: string[] = [];
+const EXPECTED_UNREACHABLE: string[] = ['prerender-entry.tsx'];
 
 describe('web no-untracked-control guard', () => {
   it('every interaction site is tracked or explicitly exempt', () => {

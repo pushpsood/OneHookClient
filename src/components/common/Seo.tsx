@@ -1,4 +1,10 @@
 import { useEffect } from 'react';
+import {
+  DEFAULT_SHARE_IMAGE,
+  DEFAULT_SHARE_IMAGE_ALT,
+  SHARE_IMAGE_HEIGHT,
+  SHARE_IMAGE_WIDTH,
+} from '../../config/seo-routes';
 
 /**
  * Lightweight, dependency-free SEO head manager for the client-rendered marketing pages.
@@ -17,7 +23,6 @@ import { useEffect } from 'react';
 
 export const SITE_NAME = 'OneHook';
 export const SITE_URL = 'https://onehook.club';
-const DEFAULT_OG_IMAGE = `${SITE_URL}/media/onehook_white_inside-512.png`;
 const INDEXABLE_ROBOTS = 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1';
 const NOINDEX_ROBOTS = 'noindex,nofollow';
 
@@ -26,10 +31,12 @@ export interface SeoProps {
   title: string;
   /** Meta description, ideally <=160 characters. */
   description: string;
-  /** Canonical path beginning with "/", e.g. "/pricing". */
-  path: string;
-  /** Absolute URL or site-root-relative path to the share image. Defaults to the OneHook logo. */
+  /** Canonical path beginning with "/", e.g. "/pricing". `null` removes the canonical (404 page). */
+  path: string | null;
+  /** Site-root path or absolute URL of a 1200×630 share image. Defaults to the OneHook share card. */
   image?: string;
+  /** Alt text for the share image. */
+  imageAlt?: string;
   /** Set true for thin/private pages that should not be indexed. */
   noindex?: boolean;
   /** Optional page-specific structured data (schema.org JSON-LD), removed again on unmount. */
@@ -56,7 +63,7 @@ function upsertLink(rel: string, href: string): void {
   el.setAttribute('href', href);
 }
 
-export function Seo({ title, description, path, image, noindex = false, jsonLd }: SeoProps): null {
+export function Seo({ title, description, path, image, imageAlt, noindex = false, jsonLd }: SeoProps): null {
   const jsonLdText = jsonLd ? JSON.stringify(jsonLd) : '';
   useEffect(() => {
     // The pre-built HTML for this route may already carry this page's JSON-LD; replace it so the
@@ -71,27 +78,34 @@ export function Seo({ title, description, path, image, noindex = false, jsonLd }
     return () => el.remove();
   }, [jsonLdText]);
   useEffect(() => {
-    const url = `${SITE_URL}${path}`;
-    const ogImage = image
-      ? image.startsWith('http')
-        ? image
-        : `${SITE_URL}${image}`
-      : DEFAULT_OG_IMAGE;
+    const url = path === null ? null : `${SITE_URL}${path}`;
+    const imagePath = image ?? DEFAULT_SHARE_IMAGE;
+    const ogImage = imagePath.startsWith('http') ? imagePath : `${SITE_URL}${imagePath}`;
+    const alt = imageAlt ?? DEFAULT_SHARE_IMAGE_ALT;
 
     document.title = title;
     upsertMeta('name', 'description', description);
     upsertMeta('name', 'robots', noindex ? NOINDEX_ROBOTS : INDEXABLE_ROBOTS);
-    upsertLink('canonical', url);
+    if (url) {
+      upsertLink('canonical', url);
+      upsertMeta('property', 'og:url', url);
+    } else {
+      document.head.querySelector('link[rel="canonical"]')?.remove();
+    }
 
     upsertMeta('property', 'og:title', title);
     upsertMeta('property', 'og:description', description);
-    upsertMeta('property', 'og:url', url);
     upsertMeta('property', 'og:image', ogImage);
+    upsertMeta('property', 'og:image:secure_url', ogImage);
+    upsertMeta('property', 'og:image:width', String(SHARE_IMAGE_WIDTH));
+    upsertMeta('property', 'og:image:height', String(SHARE_IMAGE_HEIGHT));
+    upsertMeta('property', 'og:image:alt', alt);
 
     upsertMeta('name', 'twitter:title', title);
     upsertMeta('name', 'twitter:description', description);
     upsertMeta('name', 'twitter:image', ogImage);
-  }, [title, description, path, image, noindex]);
+    upsertMeta('name', 'twitter:image:alt', alt);
+  }, [title, description, path, image, imageAlt, noindex]);
 
   return null;
 }

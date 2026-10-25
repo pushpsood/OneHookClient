@@ -1,10 +1,13 @@
 User-agent: *
 Allow: /
 
-# Private, signed-in and invite-only areas carry no public SEO value.
-Disallow: /app
+# /login and /redeem are indexable entry pages (listed in sitemap.xml). /app is a
+# signed-in shell kept out of search with a `noindex` meta tag in its own pre-built
+# HTML (see src/config/seo-routes.ts). It stays crawlable on purpose: Google can only
+# honor `noindex` on a page it is allowed to fetch, and a blocked URL can still be
+# indexed from external links. Onboarding and the post-sign-in auth setup are deep
+# internal steps with no entry value, so they remain fully disallowed.
 Disallow: /onboarding
 Disallow: /auth/
-Disallow: /redeem
 
 Sitemap: https://onehook.club/sitemap.xml
