@@ -986,6 +986,8 @@ const SCENE_JOURNEY = 1;
 /** Scene indexes of screens 3 (broken phone, recovery) and 4 (every screen, synced). */
 const SCENE_RECOVER = 2;
 const SCENE_SYNC = 3;
+/** Scene index of screen 5 (live, translated captions), scrubbed by scroll. */
+const SCENE_LANG = 4;
 
 const PW = 230; // phone width in canvas px
 const PH = 473; // phone height (230 wide, 9:19.5 screen + bezel)
@@ -1591,7 +1593,7 @@ function PhonesStage({ index }: { index: number }) {
               {lang && (
                 <Fragment key="burst">
                   <div className="absolute inset-y-0" style={{ left: (L.w - (layout === 'port' ? LAYOUTS.port.w : L.w)) / 2, width: layout === 'port' ? LAYOUTS.port.w : L.w }}>
-                    <TranslationBurst layout={layout} k={k} />
+                    <TranslationBurst layout={layout} />
                   </div>
                 </Fragment>
               )}
@@ -1824,8 +1826,34 @@ function CaptionMain() {
  * Screen 5 burst: the main caption window sits where the phone fell; translation boxes spring out of
  * it on widening rings and cover the whole space — big near the centre, smaller further out.
  */
-function TranslationBurst({ layout, k }: { layout: 'land' | 'port'; k: number }) {
+/** One translation box springing out of the main window, read off screen 5's scroll clock. */
+function BurstBox({ b, cx, cy, clock, reduce }: { b: { x: number; y: number; s: number; delay: number; blurred: boolean; pair: (typeof CAPTION_PAIRS)[number]; i: number }; cx: number; cy: number; clock: MotionValue<number>; reduce: boolean }) {
+  const d = b.delay - 0.6; // same 0.6 s pull-forward as the main window
+  const left = useTransform(clock, [d, d + 0.45, d + 0.65], [cx, b.x + (b.x - cx) * 0.04, b.x]);
+  const top = useTransform(clock, [d, d + 0.45, d + 0.65], [cy, b.y + (b.y - cy) * 0.04, b.y]);
+  const scale = useTransform(clock, [d, d + 0.45, d + 0.65], [0.2, b.s * 1.04, b.s]);
+  const opacity = useTransform(clock, [d, d + 0.3], [0, b.blurred ? 0.35 : 1]);
+  return (
+    <motion.div
+      className="absolute w-[230px] -translate-x-1/2 -translate-y-1/2"
+      style={{ left, top, scale, opacity, ...(b.blurred ? { filter: 'blur(6px)' } : {}) }}
+    >
+      <CaptionCard pair={b.pair} i={b.i} reduce={reduce} />
+    </motion.div>
+  );
+}
+
+function TranslationBurst({ layout }: { layout: 'land' | 'port' }) {
   const reduce = useReducedMotion() ?? false;
+  // Screen 5 is scrubbed by scroll: the old second marks (main window 0.85 s, boxes from 1.15 s)
+  // are read off the screen's scroll clock.
+  const clock = useSceneClock(SCENE_LANG, SCENE_SECONDS[SCENE_LANG]);
+  // (pulled ~0.6 s earlier than the old timings: the phone's shrink still plays on arrival, so the
+  // window must be there as soon as the reader starts scrolling into the screen, never an empty stage)
+  const mainOpacity = useTransform(clock, [0.2, 0.4], [0, 1]);
+  const mainScale = useTransform(clock, [0.2, 0.55, 0.75], [0.35, 1.04, 1]);
+  const mainY = useTransform(clock, [0.2, 0.65], [-50, 0]);
+  const mainRotate = useTransform(clock, [0.2, 0.65], [8, 0]);
   const land = layout === 'land';
   const W = land ? LAYOUTS.land.w : LAYOUTS.port.w;
   const H = land ? LAYOUTS.land.h : LAYOUTS.port.h;
@@ -1876,29 +1904,15 @@ function TranslationBurst({ layout, k }: { layout: 'land' | 'port'; k: number })
       {/* the copies, springing out of the main window (outer rings first in paint order, so nearer
           boxes sit on top) */}
       {[...visibleBoxes].reverse().map((b) => (
-        <motion.div
-          key={b.i}
-          className="absolute w-[230px] -translate-x-1/2 -translate-y-1/2"
-          style={b.blurred ? { filter: 'blur(6px)' } : undefined}
-          initial={{ left: cx, top: cy, scale: 0.2, opacity: 0 }}
-          animate={{ left: b.x, top: b.y, scale: b.s, opacity: b.blurred ? 0.35 : 1 }}
-          transition={
-            reduce
-              ? { duration: 0.3, delay: b.delay * k }
-              : { delay: b.delay, type: 'spring', stiffness: 70, damping: 15, mass: 0.9, opacity: { delay: b.delay, duration: 0.3 } }
-          }
-        >
-          <CaptionCard pair={b.pair} i={b.i} reduce={reduce} />
-        </motion.div>
+        <Fragment key={b.i}>
+          <BurstBox b={b} cx={cx} cy={cy} clock={clock} reduce={reduce} />
+        </Fragment>
       ))}
 
       {/* the main window — what the phone became */}
       <motion.div
         className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
-        style={{ left: cx, top: cy }}
-        initial={{ opacity: 0, scale: 0.35, y: -50, rotate: 8 }}
-        animate={{ opacity: 1, scale: 1, y: 0, rotate: 0 }}
-        transition={reduce ? { duration: 0.3 } : { delay: 0.85, type: 'spring', stiffness: 120, damping: 14 }}
+        style={{ left: cx, top: cy, opacity: mainOpacity, scale: mainScale, y: mainY, rotate: mainRotate }}
       >
         <CaptionMain />
       </motion.div>
@@ -1912,6 +1926,9 @@ function TranslationBurst({ layout, k }: { layout: 'land' | 'port'; k: number })
  */
 function LanguageRail() {
   const reduce = useReducedMotion() ?? false;
+  const clock = useSceneClock(SCENE_LANG, SCENE_SECONDS[SCENE_LANG]);
+  const railOpacity = useTransform(clock, [0.3, 0.9], [0, 1]);
+  const railX = useTransform(clock, [0.3, 0.9], [40, 0]);
   const list = [...CAPTION_LANGS, ...CAPTION_LANGS]; // doubled for a seamless loop
   return (
     <motion.div
@@ -1920,11 +1937,10 @@ function LanguageRail() {
       style={{
         WebkitMaskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
         maskImage: 'linear-gradient(to bottom, #000 0, #000 calc(100% - 300px), rgba(0,0,0,0.28) calc(100% - 220px), rgba(0,0,0,0.28) 100%)',
+        opacity: railOpacity,
+        x: railX,
       }}
-      initial={{ opacity: 0, x: 40 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 40, transition: { duration: 0.3 } }}
-      transition={{ delay: 0.9, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      exit={{ opacity: 0, transition: { duration: 0.3 } }}
     >
       <div className="px-5 pb-2 pt-5">
         <p className="text-[10px] font-black uppercase tracking-[0.24em] text-black/45">Supported languages ✱</p>
