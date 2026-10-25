@@ -33,7 +33,7 @@ import { AlienScanner } from '../mascot';
 import { QRCodeSVG } from 'qrcode.react';
 import { ManifestoPhone } from '../Landing';
 import { Finale, ProgressBar, useFullScreenEnding } from '../science/Science';
-import { StoryTimelineProvider, bandIndex, makeBands, usePassed, useSceneProgress, useTimeline, useVisualProgress } from './storyTimeline';
+import { StoryTimelineProvider, bandIndex, makeBands, usePassed, useSceneClock, useSceneProgress, useTimeline, useVisualProgress } from './storyTimeline';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { APP_DOWNLOAD_URL } from '../../config/membership.config';
@@ -306,7 +306,7 @@ function MiniThread({
  * The earlier conversation as it appears on a device that has NOT received the history key (no iCloud /
  * Google key and not synced by QR): the bubbles are there, but sealed and unreadable.
  */
-function HiddenThread({ on, delay = 0 }: { on: boolean; delay?: number }) {
+function HiddenThread({ clock, delay = 0 }: { clock: MotionValue<number>; delay?: number }) {
   const rows = [
     { me: false, w: '78%' },
     { me: true, w: '58%' },
@@ -315,21 +315,27 @@ function HiddenThread({ on, delay = 0 }: { on: boolean; delay?: number }) {
   return (
     <div className="flex flex-col gap-1" aria-hidden="true">
       {rows.map((r, i) => (
-        <motion.span
-          key={i}
-          initial={false}
-          animate={{ opacity: on ? 1 : 0, y: on ? 0 : 4 }}
-          transition={{ delay: on ? delay + i * 0.1 : 0, duration: 0.3 }}
-          style={{ width: r.w }}
-          className={`flex items-center gap-1 rounded-lg px-1.5 py-1 ${
-            r.me ? 'self-end bg-[#0A0B10]/75 text-white' : 'self-start bg-white text-text ring-1 ring-black/5'
-          }`}
-        >
-          <Lock className="h-2 w-2 shrink-0 opacity-70" />
-          <span className="h-[5px] flex-1 rounded-full bg-current opacity-30 blur-[1.5px]" />
-        </motion.span>
+        <Fragment key={i}>
+          <HiddenRow clock={clock} start={delay + i * 0.1} me={r.me} w={r.w} />
+        </Fragment>
       ))}
     </div>
+  );
+}
+
+function HiddenRow({ clock, start, me, w }: { clock: MotionValue<number>; start: number; me: boolean; w: string }) {
+  const opacity = useTransform(clock, [start, start + 0.3], [0, 1]);
+  const y = useTransform(clock, [start, start + 0.3], [4, 0]);
+  return (
+    <motion.span
+      style={{ width: w, opacity, y }}
+      className={`flex items-center gap-1 rounded-lg px-1.5 py-1 ${
+        me ? 'self-end bg-[#0A0B10]/75 text-white' : 'self-start bg-white text-text ring-1 ring-black/5'
+      }`}
+    >
+      <Lock className="h-2 w-2 shrink-0 opacity-70" />
+      <span className="h-[5px] flex-1 rounded-full bg-current opacity-30 blur-[1.5px]" />
+    </motion.span>
   );
 }
 
@@ -404,9 +410,15 @@ const failRoute = (before: readonly P[], cross: P, after: readonly P[]) => ({
 
 const FAIL = '#b42318';
 
-/** A solid line that reaches `at`, a cross mark there, then a dotted remainder: it cannot get through. */
-function FailLine({ first, rest, at, start, k, label, labelSide }: { first: string; rest: string; at: P; start: number; k: number; label: string; labelSide: 'left' | 'right' | 'above' }) {
-  const hit = (start + SYNC.draw) * k;
+/** A solid line that reaches `at`, a cross mark there, then a dotted remainder: it cannot get through.
+ *  Every part is read off the screen's scroll clock (seconds), so it draws and un-draws with scroll. */
+function FailLine({ first, rest, at, start, clock, label, labelSide }: { first: string; rest: string; at: P; start: number; clock: MotionValue<number>; label: string; labelSide: 'left' | 'right' | 'above' }) {
+  const hit = start + SYNC.draw;
+  const firstLen = useTransform(clock, [start, hit], [0, 1]);
+  const restOpacity = useTransform(clock, [hit + 0.05, hit + 0.45], [0, 1]);
+  const crossScale = useTransform(clock, [hit, hit + 0.23, hit + 0.35], [0, 1.25, 1]);
+  const crossOpacity = useTransform(clock, [hit, hit + 0.1], [0, 1]);
+  const labelOpacity = useTransform(clock, [hit + 0.1, hit + 0.4], [0, 1]);
   const labelStyle =
     labelSide === 'left'
       ? { right: `calc(100% - ${at.x - 12}px)`, top: at.y, transform: 'translateY(-50%)' }
@@ -423,9 +435,7 @@ function FailLine({ first, rest, at, start, k, label, labelSide }: { first: stri
           strokeWidth={1.6}
           strokeLinecap="round"
           strokeLinejoin="round"
-          initial={{ pathLength: 0 }}
-          animate={{ pathLength: 1 }}
-          transition={{ delay: start * k, duration: SYNC.draw * k, ease: 'easeOut' }}
+          style={{ pathLength: firstLen }}
         />
         <motion.path
           d={rest}
@@ -435,17 +445,12 @@ function FailLine({ first, rest, at, start, k, label, labelSide }: { first: stri
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeDasharray="1.5 6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: hit + 0.05, duration: 0.4 }}
+          style={{ opacity: restOpacity }}
         />
       </svg>
       <motion.span
         className="absolute z-20 grid h-5 w-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white text-[#b42318] shadow ring-1 ring-[#b42318]/30"
-        style={{ left: at.x, top: at.y }}
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: [0, 1.25, 1], opacity: 1 }}
-        transition={{ delay: hit, duration: 0.35 }}
+        style={{ left: at.x, top: at.y, scale: crossScale, opacity: crossOpacity }}
       >
         <svg viewBox="0 0 10 10" className="h-2.5 w-2.5" aria-hidden="true">
           <path d="M2 2 L8 8 M8 2 L2 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -453,10 +458,7 @@ function FailLine({ first, rest, at, start, k, label, labelSide }: { first: stri
       </motion.span>
       <motion.span
         className="absolute z-20 whitespace-nowrap rounded-full bg-white px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] shadow-sm ring-1 ring-[#b42318]/20"
-        style={{ ...labelStyle, color: FAIL }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: hit + 0.1, duration: 0.3 }}
+        style={{ ...labelStyle, color: FAIL, opacity: labelOpacity }}
       >
         {label}
       </motion.span>
@@ -465,7 +467,8 @@ function FailLine({ first, rest, at, start, k, label, labelSide }: { first: stri
 }
 
 /** A full (solid) straight line drawn when a sync succeeds. */
-function OkLine({ d, start, k, color = 'rgba(10,11,16,0.35)' }: { d: string; start: number; k: number; color?: string }) {
+function OkLine({ d, start, clock, color = 'rgba(10,11,16,0.35)' }: { d: string; start: number; clock: MotionValue<number>; color?: string }) {
+  const len = useTransform(clock, [start, start + SYNC.draw], [0, 1]);
   return (
     <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
       <motion.path
@@ -475,9 +478,7 @@ function OkLine({ d, start, k, color = 'rgba(10,11,16,0.35)' }: { d: string; sta
         strokeWidth={1.6}
         strokeLinecap="round"
         strokeLinejoin="round"
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={{ delay: start * k, duration: SYNC.draw * k, ease: 'easeOut' }}
+        style={{ pathLength: len }}
       />
     </svg>
   );
@@ -495,43 +496,46 @@ const SYNC_LAYOUT = {
 } as const;
 
 /** A device standing on its row baseline (so a row lines up exactly), with its label just below. */
-function Stand({ x, base, delay, children, label, into }: { x: number; base: number; delay: number; children: ReactNode; label: ReactNode; into: P }) {
-  const appear = {
-    initial: { opacity: 0, scale: 0.85, y: 12 },
-    animate: { opacity: 1, scale: 1, y: 0 },
-    transition: { delay, type: 'spring' as const, stiffness: 180, damping: 18 },
-  };
+function Stand({ x, base, delay, clock, children, label, into }: { x: number; base: number; delay: number; clock: MotionValue<number>; children: ReactNode; label: ReactNode; into: P }) {
+  const opacity = useTransform(clock, [delay, delay + 0.3], [0, 1]);
+  const scale = useTransform(clock, [delay, delay + 0.32, delay + 0.45], [0.85, 1.02, 1]);
+  const y = useTransform(clock, [delay, delay + 0.45], [12, 0]);
   return (
     <>
       {/* on the way out every device is gathered into the main phone */}
       <motion.div
         className="absolute -translate-x-1/2 -translate-y-full"
-        style={{ left: x, top: base, transformOrigin: 'bottom center' }}
-        {...appear}
+        style={{ left: x, top: base, transformOrigin: 'bottom center', opacity, scale, y }}
         exit={{ left: into.x, top: into.y + 60, scale: 0.15, opacity: 0, transition: { duration: 0.55, ease: [0.5, 0, 0.75, 0] } }}
       >
         {children}
       </motion.div>
-      <motion.div className="absolute -translate-x-1/2" style={{ left: x, top: base + 4 }} {...appear} exit={{ opacity: 0, transition: { duration: 0.2 } }}>
+      <motion.div className="absolute -translate-x-1/2" style={{ left: x, top: base + 4, opacity, y }} exit={{ opacity: 0, transition: { duration: 0.2 } }}>
         {label}
       </motion.div>
     </>
   );
 }
 
-function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: Pose; k: number; W: number }) {
-  const [synced, setSynced] = useState({ ipad: false, android: false, laptop: false });
-  const [newOn, setNewOn] = useState(false);
-  useEffect(() => {
-    const at = (s: number, fn: () => void) => window.setTimeout(fn, s * 1000 * k);
-    const timers = [
-      at(SYNC.ipad + SYNC.keyHop, () => setSynced((p) => ({ ...p, ipad: true }))),
-      at(SYNC.android + SYNC.keyHop, () => setSynced((p) => ({ ...p, android: true }))),
-      at(SYNC.laptopQr + 1.2, () => setSynced((p) => ({ ...p, laptop: true }))),
-      at(NEW_AT, () => setNewOn(true)),
-    ];
-    return () => timers.forEach((id) => window.clearTimeout(id));
-  }, [k]);
+function SyncDevices({ layout, phone, W }: { layout: 'land' | 'port'; phone: Pose; W: number }) {
+  // Screen 4 is scrubbed by scroll: the clock below is the screen's scroll progress in its old
+  // choreography seconds, so every SYNC timing still applies, forwards and backwards.
+  const clock = useSceneClock(SCENE_SYNC, SCENE_SECONDS[SCENE_SYNC]);
+  const synced = {
+    ipad: usePassed(clock, [SYNC.ipad + SYNC.keyHop]) > 0,
+    android: usePassed(clock, [SYNC.android + SYNC.keyHop]) > 0,
+    laptop: usePassed(clock, [SYNC.laptopQr + 1.2]) > 0,
+  };
+  const newOn = usePassed(clock, [NEW_AT]) > 0;
+  const keyIn = (SYNC.appear + 0.5);
+  const keyLen = (pulse: number) => pulse + SYNC.keyHop - SYNC.appear - 0.5;
+  const ipadKeyOpacity = useTransform(clock, [keyIn, keyIn + 0.15 * keyLen(SYNC.ipad)], [0, 1]);
+  const ipadKeyScale = useTransform(clock, [0, 0.15, 0.7, 0.85, 1].map((f) => keyIn + f * keyLen(SYNC.ipad)), [0.6, 1, 1, 1.25, 1]);
+  const androidKeyOpacity = useTransform(clock, [keyIn, keyIn + 0.15 * keyLen(SYNC.android)], [0, 1]);
+  const androidKeyScale = useTransform(clock, [0, 0.15, 0.7, 0.85, 1].map((f) => keyIn + f * keyLen(SYNC.android)), [0.6, 1, 1, 1.25, 1]);
+  const qrAt = SYNC.laptopQr + SYNC.draw * 0.5;
+  const qrOpacity = useTransform(clock, [qrAt, qrAt + 0.15], [0, 1]);
+  const qrScale = useTransform(clock, [qrAt, qrAt + 0.28, qrAt + 0.4], [0.6, 1.15, 1]);
 
   const land = layout === 'land';
   const G0 = SYNC_LAYOUT[layout];
@@ -614,28 +618,25 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
   return (
     <motion.div className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.6, ease: [0.7, 0, 1, 1] } }}>
       {/* full lines: cloud → iPad, cloud → Android, and the QR from the main phone to the laptop */}
-      <OkLine d={poly(toIpad)} start={SYNC.appear + 0.2} k={k} />
-      <OkLine d={poly(toAndroid)} start={SYNC.appear + 0.2} k={k} />
-      <OkLine d={poly(qrLaptop)} start={SYNC.laptopQr} k={k} color={PINK} />
+      <OkLine d={poly(toIpad)} start={SYNC.appear + 0.2} clock={clock} />
+      <OkLine d={poly(toAndroid)} start={SYNC.appear + 0.2} clock={clock} />
+      <OkLine d={poly(qrLaptop)} start={SYNC.laptopQr} clock={clock} color={PINK} />
 
       {/* the cloud can't reach the laptop or the camping phone; no device's QR reaches the camping phone */}
-      <FailLine {...cloudToLaptop} start={SYNC.cloudFail} k={k} label="Cloud not reachable" labelSide="right" />
-      <FailLine {...cloudToCamp} start={SYNC.cloudFail} k={k} label="Cloud not reachable" labelSide="left" />
-      <FailLine {...phoneToCamp} start={SYNC.phoneTry} k={k} label="Out of reach" labelSide={land ? 'above' : 'right'} />
-      <FailLine {...androidToCamp} start={SYNC.androidTry} k={k} label="Out of reach" labelSide="left" />
+      <FailLine {...cloudToLaptop} start={SYNC.cloudFail} clock={clock} label="Cloud not reachable" labelSide="right" />
+      <FailLine {...cloudToCamp} start={SYNC.cloudFail} clock={clock} label="Cloud not reachable" labelSide="left" />
+      <FailLine {...phoneToCamp} start={SYNC.phoneTry} clock={clock} label="Out of reach" labelSide={land ? 'above' : 'right'} />
+      <FailLine {...androidToCamp} start={SYNC.androidTry} clock={clock} label="Out of reach" labelSide="left" />
 
       {/* a key on each line leaving the cloud — it pulses as that device's key arrives */}
       {[
-        { at: { x: xL, y: (C.y + ipadTop) / 2 }, pulse: SYNC.ipad },
-        { at: { x: xR, y: (C.y + androidTop) / 2 }, pulse: SYNC.android },
+        { at: { x: xL, y: (C.y + ipadTop) / 2 }, opacity: ipadKeyOpacity, scale: ipadKeyScale },
+        { at: { x: xR, y: (C.y + androidTop) / 2 }, opacity: androidKeyOpacity, scale: androidKeyScale },
       ].map((b, i) => (
         <motion.span
           key={i}
           className="absolute z-30 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-white shadow-[0_8px_22px_-6px_rgba(255,143,199,0.9)]"
-          style={{ left: b.at.x, top: b.at.y, background: INK }}
-          initial={{ opacity: 0, scale: 0.6 }}
-          animate={{ opacity: 1, scale: [0.6, 1, 1, 1.25, 1] }}
-          transition={{ delay: (SYNC.appear + 0.5) * k, duration: (b.pulse + SYNC.keyHop - SYNC.appear - 0.5) * k, times: [0, 0.15, 0.7, 0.85, 1] }}
+          style={{ left: b.at.x, top: b.at.y, background: INK, opacity: b.opacity, scale: b.scale }}
         >
           <KeyRound className="h-3.5 w-3.5" style={{ color: PINK }} />
         </motion.span>
@@ -644,10 +645,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
       {/* the QR, sitting in the middle of the line from the main phone to the laptop */}
       <motion.span
         className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white p-1.5 shadow-lg ring-1 ring-black/10"
-        style={{ left: qrMid.x, top: qrMid.y }}
-        initial={{ opacity: 0, scale: 0.6 }}
-        animate={{ opacity: 1, scale: [0.6, 1.15, 1] }}
-        transition={{ delay: (SYNC.laptopQr + SYNC.draw * 0.5) * k, duration: 0.4 }}
+        style={{ left: qrMid.x, top: qrMid.y, opacity: qrOpacity, scale: qrScale }}
       >
         <QrCode className="h-6 w-6 text-text" />
       </motion.span>
@@ -667,7 +665,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
       </motion.div>
 
       {/* top-left · iPad — synced from the cloud */}
-      <Stand into={{ x: phone.cx, y: phone.cy }} x={xL} base={rowTop} delay={(SYNC.appear + 0 * 0.12) * k} label={<DeviceLabel icon={<AppleIcon className="h-3 w-3" />} title="iPad" sub="Synced from your cloud, automatically" />}>
+      <Stand into={{ x: phone.cx, y: phone.cy }} x={xL} base={rowTop} delay={SYNC.appear + 0 * 0.12} clock={clock} label={<DeviceLabel icon={<AppleIcon className="h-3 w-3" />} title="iPad" sub="Synced from your cloud, automatically" />}>
         <div className="relative rounded-[18px] bg-[#0A0B10] p-[7px] shadow-[0_24px_50px_-26px_rgba(10,11,16,0.6)]" style={{ width: DEV.ipad.w, height: DEV.ipad.h }}>
           <div className="h-full w-full overflow-hidden rounded-[12px] bg-[#F6F6F4]">
             <MiniThread on={synced.ipad} newOn={newOn} />
@@ -683,7 +681,8 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
         into={{ x: phone.cx, y: phone.cy }}
         x={xL}
         base={rowBot}
-        delay={(SYNC.appear + 2 * 0.12) * k}
+        delay={SYNC.appear + 2 * 0.12}
+        clock={clock}
         label={
           <DeviceLabel
             icon={
@@ -700,7 +699,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
           <div className="relative h-[120px] w-full rounded-t-[12px] bg-[#0A0B10] p-[6px]">
             <div className="relative h-full w-full overflow-hidden rounded-[7px] bg-[#F6F6F4]">
               <motion.div className="absolute inset-0 flex flex-col gap-1 p-2" initial={false} animate={{ opacity: synced.laptop ? 0 : 1 }} transition={{ duration: 0.25 }}>
-                <HiddenThread on delay={(SYNC.appear + 0.3) * k} />
+                <HiddenThread clock={clock} delay={SYNC.appear + 0.3} />
                 <span className="mt-auto flex items-center gap-1 self-center rounded-md bg-white px-1.5 py-1 text-[6.5px] text-black/55 ring-1 ring-black/5">
                   <QrCode className="h-2.5 w-2.5" /> Waiting for a QR from your phone
                 </span>
@@ -717,7 +716,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
       </Stand>
 
       {/* top-right · Android — synced from the cloud */}
-      <Stand into={{ x: phone.cx, y: phone.cy }} x={xR} base={rowTop} delay={(SYNC.appear + 1 * 0.12) * k} label={<DeviceLabel icon={<GoogleIcon className="h-3 w-3" />} title="Android" sub="Synced from your cloud, automatically" />}>
+      <Stand into={{ x: phone.cx, y: phone.cy }} x={xR} base={rowTop} delay={SYNC.appear + 1 * 0.12} clock={clock} label={<DeviceLabel icon={<GoogleIcon className="h-3 w-3" />} title="Android" sub="Synced from your cloud, automatically" />}>
         <div className="relative rounded-[18px] bg-[#0A0B10] p-[5px] shadow-[0_24px_50px_-26px_rgba(10,11,16,0.6)]" style={{ width: DEV.phone.w, height: DEV.phone.h }}>
           <span className="absolute left-1/2 top-[9px] z-10 h-[5px] w-[5px] -translate-x-1/2 rounded-full bg-black" />
           <div className="h-full w-full overflow-hidden rounded-[14px] bg-[#F6F6F4]">
@@ -730,7 +729,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
 
       {/* bottom-right · the camping phone: no cloud and no device in reach — earlier chat stays hidden,
           but every new message still lands */}
-      <Stand into={{ x: phone.cx, y: phone.cy }} x={xR} base={rowBot} delay={(SYNC.appear + 3 * 0.12) * k} label={<DeviceLabel icon={<Tent className="h-3 w-3" />} title="Camping phone" sub="Out of everyone’s reach — new messages still arrive" />}>
+      <Stand into={{ x: phone.cx, y: phone.cy }} x={xR} base={rowBot} delay={SYNC.appear + 3 * 0.12} clock={clock} label={<DeviceLabel icon={<Tent className="h-3 w-3" />} title="Camping phone" sub="Out of everyone’s reach — new messages still arrive" />}>
         <div className="relative">
           {/* the campsite, kept below the lines that come in at the phone's sides */}
           <TreePine aria-hidden="true" className="absolute -left-9 bottom-0 h-8 w-8 text-[#2b3647]/30" />
@@ -739,7 +738,7 @@ function SyncDevices({ layout, phone, k, W }: { layout: 'land' | 'port'; phone: 
           <Tent aria-hidden="true" className="absolute -right-14 -bottom-0.5 h-6 w-6 text-[#2b3647]/45" />
           <div className="relative rounded-[18px] bg-[#0A0B10] p-[5px] shadow-[0_24px_50px_-26px_rgba(10,11,16,0.6)]" style={{ width: DEV.phone.w, height: DEV.phone.h }}>
             <div className="flex h-full w-full flex-col gap-1 overflow-hidden rounded-[14px] bg-[#F6F6F4] p-1.5">
-              <HiddenThread on delay={(SYNC.appear + 0.3) * k} />
+              <HiddenThread clock={clock} delay={SYNC.appear + 0.3} />
               <span className="flex items-center gap-1 rounded-md bg-black/[0.05] px-1.5 py-1 text-[5.5px] leading-tight text-black/55">
                 <Lock className="h-2.5 w-2.5 shrink-0" /> Earlier chat hidden — not synced by QR yet
               </span>
@@ -984,6 +983,9 @@ const ROHAN_RECEIVES = [{ me: false, t: 'See you at 8? 💛' }] as const;
 const NOTHING_YET: readonly { me: boolean; t: string }[] = [];
 /** Scene index of the encryption journey (screen 2), scrubbed by scroll. */
 const SCENE_JOURNEY = 1;
+/** Scene indexes of screens 3 (broken phone, recovery) and 4 (every screen, synced). */
+const SCENE_RECOVER = 2;
+const SCENE_SYNC = 3;
 
 const PW = 230; // phone width in canvas px
 const PH = 473; // phone height (230 wide, 9:19.5 screen + bezel)
@@ -1102,6 +1104,25 @@ function Cracks({ delay }: { delay: number }) {
   );
 }
 
+/** Screen 3: the sealed key flies broken phone → cloud → new phone, scrubbed by the screen's clock. */
+function KeyFlight({ clock, path }: { clock: MotionValue<number>; path: { left: number[]; top: number[] } }) {
+  const t0 = 1.7;
+  const span = KEY_IN - t0;
+  const marks = [0, 0.32, 0.76, 1].map((f) => t0 + f * span);
+  const left = useTransform(clock, marks, path.left);
+  const top = useTransform(clock, marks, path.top);
+  const opacity = useTransform(clock, marks, [0, 1, 1, 0]);
+  const scale = useTransform(clock, marks, [0.6, 1, 1, 0.7]);
+  return (
+    <motion.span
+      className="absolute z-30 grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-white shadow-[0_10px_30px_-6px_rgba(255,143,199,0.9)]"
+      style={{ background: INK, left, top, opacity, scale }}
+    >
+      <KeyRound className="h-5 w-5" style={{ color: PINK }} />
+    </motion.span>
+  );
+}
+
 /**
  * Screens 1–3 share this stage, so the phone never leaves.
  *  1 · Isha's phone drops in and a conversation plays.
@@ -1122,7 +1143,6 @@ function PhonesStage({ index }: { index: number }) {
   // Arriving straight onto screen 4 (scrolling back up from screen 5): the new phone is simply there —
   // no slide-in, no unboxing, history already on it.
   const direct = useRef(index >= 3).current;
-  const [newMsg, setNewMsg] = useState(false);
   // The new phone (with its box) is rebuilt every time we arrive on screen 3, so the unboxing plays
   // again whichever way you scroll in. It only starts "already unboxed" when the stage itself first
   // mounts on screen 4/5 (scrolling back up from further down).
@@ -1136,14 +1156,30 @@ function PhonesStage({ index }: { index: number }) {
     }
     prevIndex.current = index;
   }, [index]);
-  useEffect(() => {
-    if (!syncing) {
-      setNewMsg(false);
-      return;
-    }
-    const id = window.setTimeout(() => setNewMsg(true), NEW_AT * 1000 * k);
-    return () => window.clearTimeout(id);
-  }, [syncing, k]);
+  // Screen 3 is scrubbed by scroll (the fall, impact, cracks and shards stay physical, played on
+  // arrival): the screen dims, the cloud appears, the key flies, the new phone's box slides in, its
+  // lid comes off, the key lands and the history comes back, each at its old second mark.
+  const recoverClock = useSceneClock(SCENE_RECOVER, SCENE_SECONDS[SCENE_RECOVER]);
+  const after3 = index > SCENE_RECOVER;
+  const [dimPassed, cloudPassed, restorePassed, badgePassed] = [
+    usePassed(recoverClock, [1.5]),
+    usePassed(recoverClock, [1.4]),
+    usePassed(recoverClock, [RESTORE_AT]),
+    usePassed(recoverClock, [RESTORE_AT + 1.5]),
+  ];
+  const dimmed = broken && (after3 || dimPassed > 0);
+  const cloudIn = after3 || cloudPassed > 0;
+  const restoring = after3 || restorePassed > 0;
+  const badgeOn = !syncing && badgePassed > 0;
+  const freshX = useTransform(recoverClock, [BOX_IN, BOX_IN + 0.85], [1100, 0]);
+  const lidY = useTransform(recoverClock, [LID_OFF, LID_OFF + 1.3], [0, LID_TRAVEL]);
+  const lidOpacity = useTransform(recoverClock, [LID_OFF, LID_OFF + 0.91, LID_OFF + 1.3], [1, 1, 0]);
+  const keyGlow = useTransform(recoverClock, [KEY_IN, KEY_IN + 0.45, KEY_IN + 0.9], [0, 1, 0]);
+
+  // screen 4: the new message lands at NEW_AT seconds into the screen's scroll band
+  const syncClock = useSceneClock(SCENE_SYNC, SCENE_SECONDS[SCENE_SYNC]);
+  const newMsgPassed = usePassed(syncClock, [NEW_AT]);
+  const newMsg = syncing && (index > SCENE_SYNC || newMsgPassed > 0);
 
   // Screen 2 (the journey) is scrubbed by scroll: its old second-based beats become points in the
   // screen's scroll band, so they play forward and rewind with the reader. The beats: Isha sends
@@ -1339,7 +1375,7 @@ function PhonesStage({ index }: { index: number }) {
             <AnimatePresence>
               {syncing && !lang && (
                 <Fragment key="sync">
-                  <SyncDevices layout={layout} phone={L.center} k={k} W={L.w} />
+                  <SyncDevices layout={layout} phone={L.center} W={L.w} />
                 </Fragment>
               )}
             </AnimatePresence>
@@ -1351,11 +1387,17 @@ function PhonesStage({ index }: { index: number }) {
                   <motion.div
                     className="absolute z-10 flex -translate-x-1/2 -translate-y-[40px] flex-col items-center gap-2"
                     initial={{ left: direct ? L.cloud4.x : L.cloud.x, top: direct ? L.cloud4.y : L.cloud.y, opacity: 0, y: 24, scale: 0.9 }}
-                    animate={{ left: syncing ? L.cloud4.x : L.cloud.x, top: syncing ? L.cloud4.y : L.cloud.y, opacity: 1, y: 0, scale: 1 }}
+                    animate={{
+                      left: syncing ? L.cloud4.x : L.cloud.x,
+                      top: syncing ? L.cloud4.y : L.cloud.y,
+                      opacity: cloudIn ? 1 : 0,
+                      y: cloudIn ? 0 : 24,
+                      scale: cloudIn ? 1 : 0.9,
+                    }}
                     transition={{
                       left: spring,
                       top: spring,
-                      default: { delay: syncing ? 0 : 1.4 * k, duration: direct ? 0.3 : 0.6, ease: [0.22, 1, 0.36, 1] },
+                      default: { duration: direct ? 0.3 : 0.6, ease: [0.22, 1, 0.36, 1] },
                     }}
                   >
                     <span className="flex h-20 w-48 items-center justify-center gap-3 rounded-full bg-white shadow-[0_24px_60px_-28px_rgba(10,11,16,0.5)] ring-1 ring-black/5">
@@ -1378,17 +1420,7 @@ function PhonesStage({ index }: { index: number }) {
                       Your key, sealed in your cloud account — Apple, Google and more
                     </motion.span>
                   </motion.div>
-                  {index === 2 && (
-                    <motion.span
-                      className="absolute z-30 grid h-11 w-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-white shadow-[0_10px_30px_-6px_rgba(255,143,199,0.9)]"
-                      style={{ background: INK }}
-                      initial={{ left: keyPath.left[0], top: keyPath.top[0], opacity: 0, scale: 0.6 }}
-                      animate={{ left: keyPath.left, top: keyPath.top, opacity: [0, 1, 1, 0], scale: [0.6, 1, 1, 0.7] }}
-                      transition={{ delay: 1.7 * k, duration: (KEY_IN - 1.7) * k, times: [0, 0.32, 0.76, 1], ease: 'easeInOut' }}
-                    >
-                      <KeyRound className="h-5 w-5" style={{ color: PINK }} />
-                    </motion.span>
-                  )}
+                  {index === SCENE_RECOVER && <KeyFlight clock={recoverClock} path={keyPath} />}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1438,8 +1470,8 @@ function PhonesStage({ index }: { index: number }) {
                   className="relative"
                 >
                   <motion.div
-                    animate={{ opacity: broken ? 0.42 : 1, filter: broken ? 'grayscale(1)' : 'grayscale(0)' }}
-                    transition={{ delay: broken ? 1.5 * k : 0, duration: 0.6 }}
+                    animate={{ opacity: dimmed ? 0.42 : 1, filter: dimmed ? 'grayscale(1)' : 'grayscale(0)' }}
+                    transition={{ duration: 0.6 }}
                   >
                     <ManifestoPhone
                       progress={still}
@@ -1580,7 +1612,7 @@ function PhonesStage({ index }: { index: number }) {
                       ? { ...fresh, rotate: 0, x: 0, opacity: lang ? 0 : 1 }
                       : reduce
                         ? { ...fresh, rotate: tilt, opacity: 0 }
-                        : { ...fresh, rotate: tilt, x: 1100, opacity: 1 }
+                        : { ...fresh, rotate: tilt, x: 0, opacity: 1 }
                   }
                   animate={
                     lang
@@ -1593,9 +1625,8 @@ function PhonesStage({ index }: { index: number }) {
                     lang
                       ? { delay: reduce ? 0 : 0.45, duration: reduce ? 0.2 : 0.55, ease: [0.55, 0, 1, 0.45], opacity: { delay: reduce ? 0 : 0.75, duration: 0.25 } }
                       : reduce
-                      ? { duration: 0.3, delay: BOX_IN * k }
+                      ? { duration: 0.3 }
                       : {
-                          x: { delay: BOX_IN, duration: 0.85, ease: [0.16, 1, 0.3, 1] },
                           left: spring,
                           top: spring,
                           scale: spring,
@@ -1604,6 +1635,8 @@ function PhonesStage({ index }: { index: number }) {
                         }
                   }
                 >
+                  {/* the box slides in from the right as the reader scrolls (screen 3's scroll clock) */}
+                  <motion.div className="absolute inset-0" style={{ x: freshX }}>
                   {/* soft contact shadow */}
                   <span aria-hidden="true" className="absolute -bottom-10 left-1/2 h-7 w-[86%] -translate-x-1/2 rounded-[50%] bg-black/20 blur-xl" />
 
@@ -1626,8 +1659,8 @@ function PhonesStage({ index }: { index: number }) {
                       progress={still}
                       reduce
                       initialTab="messages"
-                      liveThread={newMsg ? ISHA_WITH_NEW : ISHA_SENDS}
-                      liveDelay={newMsg || freshDirect ? 0 : RESTORE_AT * 1000 * k}
+                      liveThread={newMsg ? ISHA_WITH_NEW : restoring ? ISHA_SENDS : NOTHING_YET}
+                      liveDelay={0}
                       liveSpeed={freshDirect ? 0.01 : 0.28}
                       contactName="Rohan"
                       contactPhoto="/media/profile-demo/profile-3.jpg"
@@ -1637,10 +1670,7 @@ function PhonesStage({ index }: { index: number }) {
                     <motion.span
                       aria-hidden="true"
                       className="pointer-events-none absolute inset-[11px] rounded-[2.25rem]"
-                      style={{ boxShadow: `0 0 0 2px ${PINK}, 0 0 40px 6px rgba(255,143,199,0.55)` }}
-                      initial={{ opacity: 0 }}
-                      animate={freshDirect ? { opacity: 0 } : { opacity: [0, 1, 0] }}
-                      transition={{ delay: KEY_IN * k, duration: 0.9 * k }}
+                      style={{ boxShadow: `0 0 0 2px ${PINK}, 0 0 40px 6px rgba(255,143,199,0.55)`, opacity: keyGlow }}
                     />
                   </div>
 
@@ -1648,20 +1678,15 @@ function PhonesStage({ index }: { index: number }) {
                   <motion.div
                     aria-hidden="true"
                     className="absolute -inset-[18px] rounded-[3.1rem]"
-                    style={{
-                      background: 'linear-gradient(180deg, #FFFFFF 0%, #F6F6F4 55%, #EFEFEC 100%)',
-                      boxShadow: '0 30px 70px -34px rgba(10,11,16,0.4), 0 0 0 1px rgba(10,11,16,0.05), inset 0 1px 0 rgba(255,255,255,0.9)',
-                    }}
                     // Far enough to leave any window: the canvas is scaled down a lot on phones, so a short
                     // slide could stop mid-screen. It travels ~4000 canvas px (several screen heights at
                     // any scale) and fades out on the way, so it never lingers.
-                    initial={freshDirect ? { y: LID_TRAVEL, opacity: 0 } : { y: 0, opacity: 1 }}
-                    animate={freshDirect || reduce ? { y: LID_TRAVEL, opacity: 0 } : { y: [0, LID_TRAVEL], opacity: [1, 1, 0] }}
-                    transition={
-                      reduce
-                        ? { delay: LID_OFF * k, duration: 0.3 }
-                        : { delay: LID_OFF, duration: 1.3, ease: [0.55, 0, 0.75, 0.4], opacity: { delay: LID_OFF, duration: 1.3, times: [0, 0.7, 1] } }
-                    }
+                    style={{
+                      background: 'linear-gradient(180deg, #FFFFFF 0%, #F6F6F4 55%, #EFEFEC 100%)',
+                      boxShadow: '0 30px 70px -34px rgba(10,11,16,0.4), 0 0 0 1px rgba(10,11,16,0.05), inset 0 1px 0 rgba(255,255,255,0.9)',
+                      y: lidY,
+                      opacity: lidOpacity,
+                    }}
                   >
                     {/* a faint sheen across the lid, like a matte paper box */}
                     <span
@@ -1675,11 +1700,12 @@ function PhonesStage({ index }: { index: number }) {
                     className="absolute -bottom-12 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-[12px] font-semibold text-white shadow-lg"
                     style={{ background: '#16a34a' }}
                     initial={{ opacity: 0, scale: 0.6, y: -8 }}
-                    animate={syncing ? { opacity: 0, scale: 0.8, y: -8 } : { opacity: 1, scale: 1, y: 0 }}
-                    transition={syncing ? { duration: 0.3 } : { delay: (RESTORE_AT + 1.5) * k, type: 'spring', stiffness: 260, damping: 15 }}
+                    animate={badgeOn ? { opacity: 1, scale: 1, y: 0 } : syncing ? { opacity: 0, scale: 0.8, y: -8 } : { opacity: 0, scale: 0.6, y: -8 }}
+                    transition={badgeOn ? { type: 'spring', stiffness: 260, damping: 15 } : { duration: 0.3 }}
                   >
                     <Check className="h-3.5 w-3.5" /> Every message back
                   </motion.span>
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>

@@ -140,3 +140,13 @@ export function usePassed(p: MotionValue<number>, marks: readonly number[]) {
   useEffect(() => setPassed(count(p.get())), [p]); // eslint-disable-line react-hooks/exhaustive-deps
   return passed;
 }
+
+/**
+ * Scene `i`'s progress expressed in its old choreography seconds (0..totalSeconds), so components
+ * that were written with `delay: 1.4` style timings can keep those numbers and simply read them off
+ * the scroll instead of the clock.
+ */
+export function useSceneClock(i: number, totalSeconds: number): MotionValue<number> {
+  const p = useSceneProgress(i);
+  return useTransform(p, (v) => v * totalSeconds);
+}
