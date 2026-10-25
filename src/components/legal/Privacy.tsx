@@ -246,11 +246,25 @@ export function Privacy() {
                 <h4 className="font-bold mb-2">What Admissions Assist is</h4>
                 <p className="opacity-70">
                   Admissions Assist is a model that learns from our team&rsquo;s past review
-                  decisions to help reviewers work through applications. It is trained on transcript
-                  text, the quality measurements above, reviewers&rsquo; decisions, and whether an
-                  invite was later used. It is not trained on the images in your video. A person on
-                  our team makes every decision; Admissions Assist does not approve or reject anyone
-                  on its own.
+                  decisions to help reviewers work through applications. It learns from the
+                  transcript text and the automatic quality measurements above, and from what
+                  happened next: our reviewers&rsquo; decisions, whether an invite was used, and
+                  the membership signal described below. It is not trained on the images in your
+                  video, and it is not trained on the scores reviewers give while deciding. A
+                  person on our team makes every decision; Admissions Assist does not approve or
+                  reject anyone on its own.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Signals from your membership</h4>
+                <p className="opacity-70">
+                  If you join OneHook through an application, we also use one signal from your first
+                  90 days as a member to improve Admissions Assist: whether several different
+                  members blocked your account. A single block is never used on its own; it only
+                  counts when two or more different members block you. We never store who blocked
+                  you or why: we keep only an irreversible code for each blocker so we can count
+                  distinct members. This signal is deleted if you delete your account, and it stops
+                  being used if you withdraw from Admissions Assist as described below.
                 </p>
               </div>
               <div>
