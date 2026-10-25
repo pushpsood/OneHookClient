@@ -425,11 +425,11 @@ function ExpandingCouplePanel({
               <span className="mb-1 flex items-center gap-1 text-[8px] font-black uppercase tracking-[0.14em]" style={{ color: '#ff8fc7' }}>
                 <Heart className="h-2.5 w-2.5 shrink-0" fill="currentColor" /> the line that started it
               </span>
-              <p className="line-clamp-3 text-lg font-light leading-snug text-white md:line-clamp-2 md:text-base">
+              <p className="line-clamp-3 text-lg font-light leading-snug text-white md:line-clamp-2 md:text-lg lg:text-xl">
                 &ldquo;{story.opener}&rdquo;
               </p>
               {/* the fuller story only where there is room; on phones the hook itself gets the space */}
-              <p className="mt-1.5 hidden text-xs leading-relaxed text-white/75 md:line-clamp-3 md:block">
+              <p className="mt-2 hidden text-sm leading-relaxed text-white/80 md:line-clamp-3 lg:text-[15px]">
                 {story.story}
               </p>
               <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
