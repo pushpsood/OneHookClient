@@ -137,7 +137,7 @@ export function usePassed(p: MotionValue<number>, marks: readonly number[]) {
     setPassed((prev) => (prev === c ? prev : c));
   });
   // a new MotionValue (e.g. reduced motion switching) must be read once immediately
-  useEffect(() => setPassed(count(p.get())), [p]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setPassed(count(p.get())), [p]);
   return passed;
 }
 

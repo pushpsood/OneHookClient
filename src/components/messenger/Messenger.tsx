@@ -30,7 +30,6 @@ import { SiteFooter } from '../common/SiteFooter';
 import { Seo } from '../common/Seo';
 import { ROUTE_SEO } from '../../config/seo-routes';
 import { AlienScanner } from '../mascot';
-import { QRCodeSVG } from 'qrcode.react';
 import { ManifestoPhone } from '../Landing';
 import { Finale, ProgressBar, useFullScreenEnding } from '../science/Science';
 import { StoryTimelineProvider, bandIndex, makeBands, usePassed, useSceneClock, useSceneProgress, useTimeline, useVisualProgress } from './storyTimeline';
