@@ -49,98 +49,6 @@ const focusIntentionImage = '/media/aerial-view-of-the-city-in-the-fog-5ZBZNUT-1
 const discoverProfilesImage =
   '/media/man-with-backpack-walking-on-snow-covered-forest-b-JAJ77DS-1600.jpg';
 
-/**
- * Lays out a sequence of chips/separators horizontally, but automatically
- * switches to a centered vertical stack when the horizontal layout would wrap
- * onto more than two lines. Separators flagged with `rotateWhenStacked` (e.g.
- * arrows) are rotated 90° to point downward in the vertical layout.
- *
- * Wrapping is measured on an invisible horizontal "mirror" that always reflects
- * the horizontal layout at the current width, so the decision is two‑way
- * (re‑expands to a row when there's room again).
- */
-type FlowPart = { key: string; content: React.ReactNode; rotateWhenStacked?: boolean };
-
-function AdaptiveFlow({
-  parts,
-  className,
-  rowClass,
-  colClass,
-  centerHorizontal = false,
-  maxLines = 2,
-  overflowBehavior = 'stack',
-}: {
-  parts: FlowPart[];
-  className?: string;
-  rowClass: string;
-  colClass: string;
-  /** Center the horizontal (non-stacked) layout too. */
-  centerHorizontal?: boolean;
-  /** How many wrapped lines are allowed before the overflow behavior kicks in. */
-  maxLines?: number;
-  /** What to do when the horizontal layout exceeds `maxLines`. */
-  overflowBehavior?: 'stack' | 'hide';
-}) {
-  const [overflow, setOverflow] = useState(false);
-  const mirrorRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = mirrorRef.current;
-    if (!el) return;
-    const measure = () => {
-      const kids = Array.from(el.children) as HTMLElement[];
-      if (!kids.length) return;
-      // Count wrapped lines by clustering each child's VERTICAL CENTRE.
-      // Using offsetTop alone is wrong here: with `items-center`, short parts
-      // (the "+" and "Final rank =" text) sit at a different offsetTop than the
-      // taller pill chips, which made a single row look like several.
-      const centres = kids.map((k) => k.offsetTop + k.offsetHeight / 2).sort((a, b) => a - b);
-      let lines = 1;
-      for (let i = 1; i < centres.length; i += 1) {
-        if (centres[i] - centres[i - 1] > 6) lines += 1;
-      }
-      setOverflow(lines > maxLines);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [parts, maxLines]);
-
-  const renderParts = (isStacked: boolean) =>
-    parts.map((p) => (
-      <span
-        key={p.key}
-        className={`inline-flex items-center${isStacked && p.rotateWhenStacked ? ' rotate-90' : ''}`}
-      >
-        {p.content}
-      </span>
-    ));
-
-  const stacked = overflow && overflowBehavior === 'stack';
-  const hidden = overflow && overflowBehavior === 'hide';
-
-  return (
-    <div className={`relative ${className ?? ''}`}>
-      {/* Invisible horizontal mirror used only to count wrapped rows. */}
-      <div
-        ref={mirrorRef}
-        aria-hidden="true"
-        className={`${rowClass} invisible pointer-events-none absolute left-0 top-0 -z-10 w-full overflow-hidden`}
-      >
-        {renderParts(false)}
-      </div>
-
-      {!hidden && (
-        <div
-          className={stacked ? colClass : `${rowClass}${centerHorizontal ? ' justify-center' : ''}`}
-        >
-          {renderParts(stacked)}
-        </div>
-      )}
-    </div>
-  );
-}
 const connectWithPurposeImage = '/media/man-playing-guitar-close-up-1600.jpg';
 const getHookedImage =
   '/media/photodune-33277756-pleased-redhead-woman-student-watches-training-webinar-1600.jpg';
@@ -164,12 +72,6 @@ const APP_DOWNLOAD_URL = 'https://app.onehook.club';
  */
 const MASCOT_VIDEO_ID = 'Vphot1Wxvx8';
 const MASCOT_VIDEO_EMBED_URL = `https://www.youtube-nocookie.com/embed/${MASCOT_VIDEO_ID}?autoplay=1&rel=0&modestbranding=1&cc_load_policy=0`;
-
-/** Repeating text tile used as the conversation-starter background watermark.
- *  A tiled SVG guarantees full (corner-to-corner) coverage at any rotation. */
-const WATERMARK_BG = `url("data:image/svg+xml,${encodeURIComponent(
-  "<svg xmlns='http://www.w3.org/2000/svg' width='640' height='40'><text x='0' y='15' font-family='Inter,ui-sans-serif,sans-serif' font-size='15' font-weight='900' letter-spacing='4' fill='#ffffff'>ONE LINE CHANGED EVERYTHING</text></svg>"
-)}")`;
 
 /**
  * Interactive "conversation starters" — the literal first message you'd send
@@ -195,15 +97,52 @@ const OPENERS = [
  * landing and the science page share one editorial voice. Colour is inherited (`currentColor`) so it
  * works on both the dark hero and light sections.
  */
-function Kicker({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function Kicker({
+  children,
+  className = '',
+  chapter,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  /** Optional chapter number ("01"…): every section after the hero carries one, so the page reads
+   *  as one continuous story rather than a stack of unrelated blocks. */
+  chapter?: string;
+}) {
   return (
     <p
       className={`flex items-center justify-center gap-3 text-[10px] font-semibold uppercase tracking-[0.4em] ${className}`}
     >
       <span aria-hidden="true" className="h-px w-8 bg-current opacity-40" />
-      <span className="inline-flex items-center gap-2">{children}</span>
+      <span className="inline-flex items-center gap-2">
+        {chapter && <span className="tabular-nums opacity-60">{chapter}</span>}
+        {children}
+      </span>
       <span aria-hidden="true" className="h-px w-8 bg-current opacity-40" />
     </p>
+  );
+}
+
+/** One headline scale and one body scale for every chapter after the hero. */
+const SECTION_TITLE = 'text-4xl md:text-6xl font-light tracking-tight leading-[1.08]';
+const SECTION_LEAD = 'text-lg leading-relaxed max-w-2xl mx-auto';
+
+/**
+ * Text that swaps between versions without moving the layout: every version sits in the same grid
+ * cell, so the box is always as tall as the longest one and the switch is a short crossfade.
+ */
+function SwapText<K extends string>({ active, versions }: { active: K; versions: Record<K, React.ReactNode> }) {
+  return (
+    <span className="grid">
+      {(Object.keys(versions) as K[]).map((key) => (
+        <span
+          key={key}
+          aria-hidden={key !== active}
+          className={`[grid-area:1/1] transition-opacity duration-300 ${key === active ? 'opacity-100' : 'opacity-0'}`}
+        >
+          {versions[key]}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -325,10 +264,14 @@ const ART_PALETTES = [
 ] as const;
 
 /**
- * Anonymous couple illustration — two faceless silhouettes sharing a heart, with a small lock
- * badge. It depicts a real couple whose privacy is protected while their story is shared, so it
- * stands in for a photo without exposing anyone. Palette + mirroring vary by id so each couple
- * looks different.
+ * Anonymous couple illustration: two faceless head-and-shoulder busts leaning into each other under
+ * a small heart, with a privacy lock. It stands in for a photo without exposing anyone.
+ *
+ * Two layers, so nothing is ever stretched or cropped into giant shapes as the card widens:
+ * - the backdrop is plain CSS (a navy glow on near-black), so it fills any card size;
+ * - the figures are one SVG drawn with `meet`, so they keep their proportions and stay centred. They
+ *   sit in the card's upper half and dissolve toward the bottom, so the text sits on calm ground.
+ * Palette and mirroring vary by id so each couple still looks distinct.
  */
 function CoupleIllustration({ id }: { id: string }) {
   const seed = Array.from(id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
@@ -336,52 +279,66 @@ function CoupleIllustration({ id }: { id: string }) {
   const flip = seed % 2 === 1;
   const gid = `art-${id}`;
   return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 200 320"
-      preserveAspectRatio="xMidYMid slice"
-      className="absolute inset-0 h-full w-full"
-    >
-      <defs>
-        <radialGradient id={`${gid}-bg`} cx="30%" cy="16%" r="130%">
-          <stop offset="0%" stopColor={glow} />
-          <stop offset="58%" stopColor="#111C33" />
-          <stop offset="100%" stopColor="#0A0B10" />
-        </radialGradient>
-        {/* brushed silver */}
-        <linearGradient id={`${gid}-p`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#FFFFFF" />
-          <stop offset="45%" stopColor="#E6E9EE" />
-          <stop offset="100%" stopColor="#9AA1AB" />
-        </linearGradient>
-      </defs>
-      <rect width="200" height="320" fill={`url(#${gid}-bg)`} />
-      <g transform={flip ? 'translate(200,0) scale(-1,1)' : undefined}>
-        {/* partner behind */}
-        <g fill={back} opacity="0.55">
-          <circle cx="74" cy="122" r="30" />
-          <rect x="30" y="158" width="88" height="170" rx="44" />
-        </g>
-        {/* partner in front */}
-        <g fill={`url(#${gid}-p)`}>
-          <circle cx="124" cy="136" r="34" />
-          <rect x="78" y="174" width="96" height="154" rx="48" />
-        </g>
-      </g>
-      {/* heart above the pair */}
-      <path
-        transform="translate(100,54) scale(1.15)"
-        d="M0 8 C-8 -5 -26 1 -14 15 L0 28 L14 15 C26 1 8 -5 0 8 Z"
-        fill="#ff8fc7"
+    <>
+      <div
+        aria-hidden="true"
+        className="absolute inset-0"
+        style={{ background: `radial-gradient(90% 70% at 50% 30%, ${glow} 0%, #111C33 55%, #0A0B10 100%)` }}
       />
-      {/* privacy lock badge */}
-      <g transform="translate(100,250)">
-        <circle r="19" fill="#0A0B10" opacity="0.75" />
-        <circle r="19" fill="none" stroke="#E6E9EE" strokeOpacity="0.6" strokeWidth="1.5" />
-        <rect x="-7" y="-1" width="14" height="12" rx="2.5" fill="#E6E9EE" />
-        <path d="M-4 -1 V-5 a4 4 0 0 1 8 0 V-1" fill="none" stroke="#E6E9EE" strokeWidth="2" />
-      </g>
-    </svg>
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 200 220"
+        preserveAspectRatio="xMidYMid meet"
+        // Upper part of the card only: the opener, story and names below always sit on clear ground.
+        className="absolute inset-x-0 top-[12%] h-[48%] w-full"
+      >
+        <defs>
+          {/* brushed silver, lit from the top-left */}
+          <linearGradient id={`${gid}-p`} x1="0" y1="0" x2="0.8" y2="1">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="45%" stopColor="#E6E9EE" />
+            <stop offset="100%" stopColor="#9AA1AB" />
+          </linearGradient>
+          <linearGradient id={`${gid}-b`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={back} stopOpacity="0.85" />
+            <stop offset="100%" stopColor={back} stopOpacity="0.35" />
+          </linearGradient>
+          {/* the busts fade out toward the bottom instead of ending on a hard line */}
+          <linearGradient id={`${gid}-fade`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="55%" stopColor="#fff" stopOpacity="1" />
+            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+          </linearGradient>
+          <mask id={`${gid}-m`}>
+            <rect width="200" height="220" fill={`url(#${gid}-fade)`} />
+          </mask>
+        </defs>
+        <g mask={`url(#${gid}-m)`} transform={flip ? 'translate(200,0) scale(-1,1)' : undefined}>
+          {/* partner behind, leaning in */}
+          <g fill={`url(#${gid}-b)`}>
+            <circle cx="80" cy="102" r="25" />
+            <path d="M30 220 C30 168 54 146 80 146 C106 146 130 168 130 220 Z" />
+          </g>
+          {/* partner in front */}
+          <g fill={`url(#${gid}-p)`}>
+            <circle cx="120" cy="94" r="28" />
+            <path d="M64 220 C64 162 92 138 120 138 C148 138 176 162 176 220 Z" />
+          </g>
+        </g>
+        {/* small heart between them */}
+        <path
+          transform="translate(100,52) scale(0.62)"
+          d="M0 8 C-8 -5 -26 1 -14 15 L0 28 L14 15 C26 1 8 -5 0 8 Z"
+          fill="#ff8fc7"
+        />
+        {/* privacy lock, small, on the front partner's chest line */}
+        <g transform="translate(100,186) scale(0.7)" opacity="0.9">
+          <circle r="16" fill="#0A0B10" opacity="0.7" />
+          <circle r="16" fill="none" stroke="#E6E9EE" strokeOpacity="0.5" strokeWidth="1.2" />
+          <rect x="-6" y="-1" width="12" height="10" rx="2" fill="#E6E9EE" />
+          <path d="M-3.5 -1 V-4.5 a3.5 3.5 0 0 1 7 0 V-1" fill="none" stroke="#E6E9EE" strokeWidth="1.8" />
+        </g>
+      </svg>
+    </>
   );
 }
 
@@ -465,14 +422,14 @@ function ExpandingCouplePanel({
               <span className="mb-1 flex items-center gap-1 text-[8px] font-black uppercase tracking-[0.14em]" style={{ color: '#ff8fc7' }}>
                 <Heart className="h-2.5 w-2.5 shrink-0" fill="currentColor" /> the line that started it
               </span>
-              <p className="line-clamp-2 font-serif text-sm italic leading-snug text-white md:text-base">
+              <p className="line-clamp-2 text-sm font-light leading-snug text-white md:text-base">
                 &ldquo;{story.opener}&rdquo;
               </p>
               <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-white/75 md:line-clamp-3 md:text-xs">
                 {story.story}
               </p>
               <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="font-serif text-sm italic text-white md:text-base">{story.names}</span>
+                <span className="text-sm font-semibold text-white md:text-base">{story.names}</span>
                 <span className="inline-flex items-center gap-0.5 text-[10px] text-white/55">
                   <MapPin className="h-2.5 w-2.5 shrink-0" /> {story.location}
                 </span>
@@ -480,7 +437,7 @@ function ExpandingCouplePanel({
             </motion.div>
           ) : (
             <div className="min-w-0">
-              <span className="block truncate font-serif text-sm italic text-white">{story.names}</span>
+              <span className="block truncate text-sm font-semibold text-white">{story.names}</span>
               <span className="mt-0.5 hidden items-center gap-0.5 truncate text-[10px] text-white/50 sm:flex">
                 <MapPin className="h-2.5 w-2.5 shrink-0" /> {story.location}
               </span>
@@ -489,123 +446,6 @@ function ExpandingCouplePanel({
         </div>
       </div>
     </motion.button>
-  );
-}
-
-/**
- * Pine-forest silhouette band above the "OneHook Principles" divider. `preserveAspectRatio="none"`
- * lets the pointed tips show (the forest ends abruptly at the ground line), with varied heights.
- * Each pine is split into a lit left face and a shadowed right face across two depth layers (hazier
- * back, richer front) for a faceted 3D look. It overlaps the pink paint-stroke freely.
- */
-function ForestBackdrop({ className = '' }: { className?: string }) {
-  const BASE = 540;
-  const pineFaces = (x: number, w: number, h: number, tiers = 3): { left: string; right: string; trunk: string } => {
-    const L: string[] = [];
-    const R: string[] = [];
-    const tierH = h / tiers;
-    for (let i = 0; i < tiers; i++) {
-      const top = BASE - h + i * tierH * 0.8;
-      const halfW = (w / 2) * (1 - i / (tiers + 1));
-      const bottom = top + tierH * 1.4;
-      L.push(`M ${x},${top} L ${x - halfW},${bottom} L ${x},${bottom} Z`);
-      R.push(`M ${x},${top} L ${x + halfW},${bottom} L ${x},${bottom} Z`);
-    }
-    const trunk = `M ${x - w * 0.05},${BASE} L ${x - w * 0.05},${BASE - h * 0.1} L ${x + w * 0.05},${BASE - h * 0.1} L ${x + w * 0.05},${BASE} Z`;
-    return { left: L.join(' '), right: R.join(' '), trunk };
-  };
-  const back: [number, number, number][] = [
-    [80, 66, 74], [210, 56, 52], [330, 78, 88], [470, 60, 58], [600, 72, 82],
-    [740, 56, 50], [880, 80, 92], [1010, 62, 64], [1140, 68, 80],
-  ];
-  const front: [number, number, number][] = [
-    [40, 104, 140], [150, 88, 92], [275, 116, 128], [405, 94, 76], [540, 120, 148],
-    [690, 98, 100], [825, 116, 122], [965, 94, 84], [1095, 118, 136], [1180, 90, 88],
-  ];
-  // Three towering pines that rise high above the tree-line (past the caption). None in the
-  // centre third (x 400-800).
-  const tall: [number, number, number][] = [
-    [150, 150, 440], [330, 166, 500], [1035, 180, 540],
-  ];
-  // Farthest tree-line: many tiny pines, blurred + hazed so they read as a distant ridge.
-  const farthest: [number, number, number][] = [
-    [30, 34, 40], [110, 30, 34], [190, 36, 46], [270, 30, 36], [350, 34, 42], [430, 30, 32],
-    [510, 36, 48], [590, 30, 38], [670, 34, 44], [750, 30, 34], [830, 36, 46], [910, 30, 36],
-    [990, 34, 42], [1070, 30, 34], [1150, 36, 46],
-  ];
-  return (
-    <svg aria-hidden="true" viewBox="0 0 1200 560" preserveAspectRatio="none" className={className}>
-      <defs>
-        {/* Brushed-silver gradient matching the "Every hook starts with a sentence" section's Accent. */}
-        <linearGradient id="forestSilver" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#FFFFFF" />
-          <stop offset="45%" stopColor="#E6E9EE" />
-          <stop offset="100%" stopColor="#9AA1AB" />
-        </linearGradient>
-        {/* Soft blur for distant layers (depth of field). */}
-        <filter id="forestBlur" x="-10%" y="-10%" width="120%" height="120%">
-          <feGaussianBlur stdDeviation="3" />
-        </filter>
-        {/* Atmospheric haze: a pale veil that's strongest near the horizon, fading distance away. */}
-        <linearGradient id="forestHaze" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="35%" stopColor="#eef1f6" stopOpacity="0" />
-          <stop offset="100%" stopColor="#eef1f6" stopOpacity="0.55" />
-        </linearGradient>
-      </defs>
-      {/* farthest ridge — tiny, blurred, very faint */}
-      <g filter="url(#forestBlur)" opacity="0.14">
-        {farthest.map(([x, w, h], i) => {
-          const f = pineFaces(x, w, h, 2);
-          return (
-            <g key={`z-${i}`}>
-              <path d={f.left} fill="url(#forestSilver)" />
-              <path d={f.right} fill="#bcc3cd" />
-            </g>
-          );
-        })}
-      </g>
-      {/* far layer — blurred, hazy, lighter for depth */}
-      <g filter="url(#forestBlur)" opacity="0.18">
-        {back.map(([x, w, h], i) => {
-          const f = pineFaces(x, w, h);
-          return (
-            <g key={`b-${i}`}>
-              <path d={f.left} fill="url(#forestSilver)" />
-              <path d={f.right} fill="#aeb5c0" />
-            </g>
-          );
-        })}
-      </g>
-      {/* atmospheric haze veil — pushes the two distant layers back */}
-      <rect x="0" y="0" width="1200" height="560" fill="url(#forestHaze)" />
-      {/* near layer — richer, stronger light/shadow contrast */}
-      <g opacity="0.32">
-        {front.map(([x, w, h], i) => {
-          const f = pineFaces(x, w, h);
-          return (
-            <g key={`f-${i}`}>
-              <path d={f.trunk} fill="#26303d" />
-              <path d={f.left} fill="url(#forestSilver)" />
-              <path d={f.right} fill="#2b3647" />
-            </g>
-          );
-        })}
-      </g>
-      {/* three towering pines (slender, 5 tiers) */}
-      <g opacity="0.4">
-        {tall.map(([x, w, h], i) => {
-          const f = pineFaces(x, w, h, 5);
-          return (
-            <g key={`t-${i}`}>
-              <path d={f.trunk} fill="#26303d" />
-              <path d={f.left} fill="url(#forestSilver)" />
-              <path d={f.right} fill="#1e2733" />
-            </g>
-          );
-        })}
-      </g>
-      <rect x="0" y="540" width="1200" height="20" fill="#1e2733" opacity="0.28" />
-    </svg>
   );
 }
 
@@ -851,23 +691,22 @@ const PRINCIPLE_VALUES = [
   {
     icon: Focus,
     title: 'Intention',
-    description: 'Every action is deliberate. Every match is a statement of purpose. No mindless scrolling.',
+    description: 'Every match is a choice, never a reflex.',
   },
   {
     icon: Lock,
     title: 'Constraint',
-    description: 'Limits breed depth. One connection forces both people to actually show up and invest.',
+    description: 'One connection, so both of you show up.',
   },
   {
     icon: Heart,
     title: 'Authenticity',
-    description: 'Without a safety net of a thousand options, people finally show up as themselves.',
+    description: 'No backup options, so you can just be you.',
   },
   {
     icon: ShieldCheck,
     title: 'Privacy',
-    description:
-      'Your conversations are end-to-end encrypted. They stay between the two of you, not even we can read them.',
+    description: 'What you two say stays between you two.',
   },
 ] as const;
 
@@ -922,21 +761,14 @@ function PrincipleValues() {
             // cells' own left edge, so they move with the columns and never overlap.
             className={`relative min-w-0 p-8 lg:px-10 lg:py-12 ${idx > 0 ? 'lg:border-l lg:border-border' : ''}`}
           >
-            <div className="mb-6 flex items-center justify-between">
-              <value.icon
-                className={`h-6 w-6 text-accent transition-transform duration-500 ${active ? 'scale-110' : ''}`}
-              />
-              <span
-                className={`font-mono text-xs transition-opacity duration-500 ${active ? 'opacity-70' : 'opacity-30'}`}
-              >
-                0{idx + 1}
-              </span>
-            </div>
+            <value.icon
+              className={`mb-6 h-6 w-6 text-accent transition-transform duration-500 ${active ? 'scale-110' : ''}`}
+            />
             <h4 className="mb-3 text-lg font-bold uppercase tracking-[0.15em]">{value.title}</h4>
             <p
-              // Reserve four lines on desktop: narrowed columns may rewrap to one more line, and the
+              // Reserve two lines on desktop: narrowed columns may rewrap to one more line, and the
               // row must not grow (and shove the page down) when that happens.
-              className={`text-sm leading-relaxed transition-opacity duration-500 lg:min-h-[6.5em] ${active ? 'opacity-85' : 'opacity-60'}`}
+              className={`text-sm leading-relaxed transition-opacity duration-500 lg:min-h-[3.25em] ${active ? 'opacity-85' : 'opacity-60'}`}
             >
               {value.description}
             </p>
@@ -961,60 +793,6 @@ const UNDER_THE_HOOD_MASK = [
 ].join(', ');
 const UNDER_THE_HOOD_MASK_SIZE = '100% var(--cap), 100% calc(100% - var(--cap) - var(--fade) + 2px), 100% var(--fade)';
 const UNDER_THE_HOOD_MASK_POSITION = '0 0, 0 calc(var(--cap) - 1px), 0 100%';
-
-/**
- * Frosted, refracting glass behind a block of content.
- *
- * - Everywhere: backdrop blur + saturation + a faint tint and specular rim, so whatever passes behind
- *   (the pink paint stroke) is diffused into soft colour and the content in front reads clearly.
- * - Chromium: the backdrop also goes through an SVG displacement filter, which bends the colours
- *   behind it like an uneven lens. Safari and Firefox ignore `url()` in backdrop-filter (and would
- *   drop the whole declaration), so that layer is opted into by feature check, not assumed.
- * - The glass drifts a little against scroll, so the backdrop slides through the lens and the
- *   refraction visibly shifts. The content itself stays put; reduced-motion users get static glass.
- */
-function GlassPanel({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  const reduceMotion = useReducedMotion();
-  const ref = useRef<HTMLDivElement>(null);
-  const filterId = `oh-glass-${React.useId().replace(/:/g, '')}`;
-  const [refracts, setRefracts] = useState(false);
-
-  useEffect(() => {
-    const brands = (navigator as Navigator & { userAgentData?: { brands?: { brand: string }[] } }).userAgentData?.brands;
-    setRefracts(Boolean(brands?.some((b) => b.brand === 'Chromium')));
-  }, []);
-
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] });
-  const drift = useTransform(scrollYProgress, [0, 1], reduceMotion ? [0, 0] : [36, -36]);
-
-  const frost = 'blur(5px) saturate(190%)';
-  const backdrop = refracts ? `url(#${filterId}) ${frost}` : frost;
-
-  return (
-    <div ref={ref} className={`relative ${className}`}>
-      {refracts && (
-        <svg aria-hidden="true" className="absolute h-0 w-0" focusable="false">
-          <filter id={filterId} x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="0.006 0.011" numOctaves="2" seed="11" result="lens" />
-            <feGaussianBlur in="lens" stdDeviation="6" result="smoothLens" />
-            <feDisplacementMap in="SourceGraphic" in2="smoothLens" scale="64" xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </svg>
-      )}
-
-      <motion.div
-        aria-hidden="true"
-        style={{ y: drift, backdropFilter: backdrop, WebkitBackdropFilter: frost }}
-        className="pointer-events-none absolute -inset-x-4 -inset-y-6 rounded-[2.25rem] border border-white/70 bg-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),inset_0_-1px_0_rgba(0,0,0,0.04),0_30px_80px_-40px_rgba(17,17,17,0.25)] sm:-inset-x-8 md:-inset-x-14"
-      >
-        {/* Specular sheen across the top-left, like light catching curved glass. */}
-        <span className="absolute inset-0 rounded-[inherit] bg-[linear-gradient(135deg,rgba(255,255,255,0.55)_0%,rgba(255,255,255,0)_38%,rgba(255,255,255,0)_70%,rgba(255,255,255,0.25)_100%)]" />
-      </motion.div>
-
-      <div className="relative">{children}</div>
-    </div>
-  );
-}
 
 /** Dummy profile shown inside the manifesto phone — editorial, not a real member. */
 const PHONE_PROFILE = {
@@ -1257,7 +1035,7 @@ export function ManifestoPhone({
                     <div key={p.q} className="mt-2.5 flex items-start justify-between gap-2 border bg-white p-3" style={{ borderColor: OH_BORDER }}>
                       <div className="min-w-0">
                         <p className={label} style={{ color: muted }}>{p.q}</p>
-                        <p className="mt-1 font-serif text-[12.5px] italic" style={{ color: OH_INK }}>“{p.a}”</p>
+                        <p className="mt-1 text-[12.5px] font-semibold" style={{ color: OH_INK }}>“{p.a}”</p>
                       </div>
                       <LikeDot />
                     </div>
@@ -1497,7 +1275,6 @@ export function Landing() {
     storeLogout();
   };
   const videoRef = useRef<HTMLVideoElement>(null);
-  const stepsRailRef = useRef<HTMLDivElement>(null);
   const underTheHoodRef = useRef<HTMLDivElement>(null);
   const exploreScienceRef = useRef<HTMLButtonElement>(null);
   // Hovering / focusing "Explore the science" brings the science backdrop into focus.
@@ -1564,9 +1341,6 @@ export function Landing() {
   // "It's a match" pop-out: starts lower in the panel and ends lower (never rising above the phone's
   // upper edge), so it no longer travels too far up as the section scrolls into view.
   const popNearY = useSpring(useTransform(manifestoProgress, [0, 1], [110, 0]), { stiffness: 70, damping: 20 });
-  // A static progress value for the Get-the-app phone, which reuses the manifesto mock but stays put
-  // (reduce mode): no scroll-linked or floating animation, only user scroll + tab switching.
-  const staticProgress = useMotionValue(0);
   const popFarY = useSpring(useTransform(manifestoProgress, [0, 1], [-60, 90]), { stiffness: 70, damping: 20 });
   const popMidY = useSpring(useTransform(manifestoProgress, [0, 1], [40, -55]), { stiffness: 70, damping: 20 });
 
@@ -1576,7 +1350,6 @@ export function Landing() {
   // works reliably regardless of scroll-container quirks.
   const pageContainerRef = useRef<HTMLDivElement>(null);
   const convoRef = useRef<HTMLElement>(null);
-  const [watermarkSize, setWatermarkSize] = useState(0);
 
   const [strokeCoords, setStrokeCoords] = useState<{
     startY: number;
@@ -1635,55 +1408,18 @@ export function Landing() {
   }, []);
 
   const getAppRef = useRef<HTMLElement>(null);
-  const appLeftX = useMotionValue(0);
-  const appRightX = useMotionValue(0);
-  // Spring-smooth the raw scroll values so the convergence glides instead of stepping.
-  const appLeftXSpring = useSpring(appLeftX, { stiffness: 90, damping: 20, mass: 0.5 });
-  const appRightXSpring = useSpring(appRightX, { stiffness: 90, damping: 20, mass: 0.5 });
-
+  // "Get the app": side by side (lg+) a small QR sits on the left and the copy slides out from behind
+  // it toward the right when the section is reached. Below lg it's copy only plus the store badges
+  // (a QR is pointless on the phone that would have to scan it), with a simple fade-up.
+  const [appSideBySide, setAppSideBySide] = useState(false);
   useEffect(() => {
-    const el = getAppRef.current;
-    if (!el) return;
-
-    let maxConverge = 0;
-    let raf = 0;
-    const update = () => {
-      // Below md the two columns stack into rows: no sideways drift, both stay dead centre.
-      // Checked on every frame (not once at mount) so resizing into the stacked layout re-centres.
-      if (window.innerWidth < 768) {
-        maxConverge = 0;
-        appLeftX.set(0);
-        appRightX.set(0);
-        return;
-      }
-      const rect = el.getBoundingClientRect();
-      const viewportH = window.innerHeight || 1;
-      const sectionCenter = rect.top + rect.height / 2;
-      const distance = Math.abs(sectionCenter - viewportH / 2);
-      const maxDistance = viewportH / 2 + rect.height / 2;
-      const t = Math.min(distance / maxDistance, 1); // 0 = centered, 1 = far away
-
-      const converge = 56 * (1 - t);
-      if (converge > maxConverge) {
-        maxConverge = converge;
-      }
-
-      appLeftX.set(maxConverge); // text drifts toward center
-      appRightX.set(-maxConverge); // phone drifts toward center
-    };
-    const onScroll = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-      cancelAnimationFrame(raf);
-    };
-  }, [appLeftX, appRightX]);
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setAppSideBySide(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  const appReveal = !prefersReducedMotion && appSideBySide;
 
   // If navigated here with a hash (e.g. /#get-app from a legal page footer),
   // scroll to that section once it's laid out.
@@ -1743,23 +1479,6 @@ export function Landing() {
     };
   }, []);
 
-  // Size the conversation-starter watermark to the section's DIAGONAL so the
-  // rotated, tiled text always covers the whole background (no empty corners),
-  // recalculating on window resize / resolution changes.
-  useEffect(() => {
-    const el = convoRef.current;
-    if (!el) return;
-    const measure = () => setWatermarkSize(Math.ceil(Math.hypot(el.offsetWidth, el.offsetHeight)));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    window.addEventListener('resize', measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-    };
-  }, []);
-  const [activeStep, setActiveStep] = useState(0);
   const [activeSection, setActiveSection] = useState<string>('');
   /** Until this time (ms) the scroll-spy leaves the highlight alone — set by a nav click. */
   const navLockUntilRef = useRef(0);
@@ -1795,6 +1514,27 @@ export function Landing() {
   const [storyPaused, setStoryPaused] = useState(false);
   // width of the hero headline's "Zero distractions." line — caps the hero buttons
   const [heroLineW, setHeroLineW] = useState<number>();
+  // Hero redeem button: "Redeem your invite" when it fits with breathing room, otherwise the
+  // shorter "Redeem invite". Measured from a hidden copy of the full label, so it never oscillates.
+  const heroRedeemRef = useRef<HTMLButtonElement>(null);
+  const heroRedeemMeasureRef = useRef<HTMLSpanElement>(null);
+  const [heroRedeemShort, setHeroRedeemShort] = useState(false);
+  useLayoutEffect(() => {
+    const btn = heroRedeemRef.current;
+    const full = heroRedeemMeasureRef.current;
+    if (!btn || !full) return;
+    const check = () => {
+      const cs = getComputedStyle(btn);
+      const inner = btn.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      // keep at least ~12px of margin on each side of the label
+      setHeroRedeemShort(full.scrollWidth + 24 > inner);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(btn);
+    document.fonts?.ready.then(check).catch(() => undefined);
+    return () => ro.disconnect();
+  }, []);
   const [showStickyCta, setShowStickyCta] = useState(false);
 
   // Mascot explainer video shown inside the "Under the hood" section.
@@ -1905,13 +1645,9 @@ export function Landing() {
     []
   );
 
-  // Each step declares which audiences it applies to. Singles get the full
-  // flow; people already seeing someone use OneHook as a priority-notification
-  // messenger, so they see only the steps tagged for the "taken" mode.
-  const howItWorksSteps = useMemo(
-    () => allHowItWorksSteps.filter((step) => step.modes.includes(relationshipMode)),
-    [relationshipMode, allHowItWorksSteps]
-  );
+  // Each step declares which audiences it applies to. All three cards always stay on screen, so the
+  // Single / Seeing someone switch never reflows the row: a step that doesn't apply (discovery, for
+  // people already together) turns into a calm "already done" card in place.
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1973,71 +1709,6 @@ export function Landing() {
       window.removeEventListener('chatbotToggle', onChatbotToggle);
     };
   }, []);
-
-  useEffect(() => {
-    const rail = stepsRailRef.current;
-    if (!rail) return;
-
-    let raf = 0;
-
-    // Determine the active step by which card is closest to the rail's
-    // horizontal center. This mirrors the visually-centered (snapped) card, so
-    // the highlighted card and the progress timeline never drift apart. (A
-    // viewport IntersectionObserver can't do this for a horizontal scroller —
-    // every card intersects the viewport vertically at once.)
-    const computeActive = () => {
-      const cards = rail.querySelectorAll<HTMLElement>('[data-step-card]');
-      if (!cards.length) return;
-
-      const railRect = rail.getBoundingClientRect();
-      const railCenter = railRect.left + railRect.width / 2;
-
-      let bestIndex = 0;
-      let bestDistance = Infinity;
-      cards.forEach((card, index) => {
-        const rect = card.getBoundingClientRect();
-        const cardCenter = rect.left + rect.width / 2;
-        const distance = Math.abs(cardCenter - railCenter);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestIndex = index;
-        }
-      });
-
-      setActiveStep((prev) => (prev !== bestIndex ? bestIndex : prev));
-    };
-
-    const onScroll = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(computeActive);
-    };
-
-    computeActive();
-    rail.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-
-    return () => {
-      rail.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-      cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  const scrollToStep = (index: number) => {
-    const rail = stepsRailRef.current;
-    if (!rail || !howItWorksSteps[index]) return;
-    const cards = rail.querySelectorAll('[data-step-card]');
-    const card = cards.item(index) as HTMLElement | null;
-    card?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-  };
-
-  const handleRelationshipModeChange = (mode: RelationshipMode) => {
-    if (mode === relationshipMode) return;
-    setRelationshipMode(mode);
-    setActiveStep(0);
-    // Reset the carousel to the first (visible) card for the new mode.
-    stepsRailRef.current?.scrollTo({ left: 0, behavior: 'auto' });
-  };
 
   // Fold the nav into Explore only when it would overlap: first the four section links, then — if it
   // still doesn't fit — everything else too. Decided from the natural widths of two hidden measuring
@@ -2449,7 +2120,7 @@ export function Landing() {
           preload="metadata"
           poster={heroVideoPoster}
           crossOrigin="anonymous"
-          className="absolute inset-x-0 top-0 z-0 h-[44vh] w-full object-cover object-top md:inset-0 md:h-full md:translate-x-[12%] md:[mask-image:linear-gradient(to_right,transparent_0%,black_30%)] md:[-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_30%)]"
+          className="absolute inset-x-0 top-0 z-0 h-[44vh] w-full object-cover object-top md:inset-0 md:h-full md:translate-x-[22%] md:[mask-image:linear-gradient(to_right,transparent_0%,black_22%)] md:[-webkit-mask-image:linear-gradient(to_right,transparent_0%,black_22%)]"
         >
           <source src={heroVideoSource} type="video/mp4" />
         </video>
@@ -2460,7 +2131,29 @@ export function Landing() {
 
         {/* Desktop/landscape: the video is nudged right (right edge cropped); fade from black on the
             LEFT into the video so the left-sitting hero text stays legible. */}
-        <div className="absolute inset-0 z-[1] hidden bg-gradient-to-r from-black via-black/60 to-transparent md:block" />
+        {/* The black reaches in along a curve, not a straight vertical line: narrow at the top, as wide
+            as before at the bottom (an ellipse anchored at the bottom-left corner), so the video
+            meets the black on a soft arc. */}
+        <div
+          className="absolute inset-0 z-[1] hidden md:block"
+          style={{
+            background:
+              'radial-gradient(ellipse 95% 190% at 0% 100%, #000 0%, #000 36%, rgba(0,0,0,0.82) 50%, rgba(0,0,0,0.45) 64%, transparent 84%)',
+          }}
+        />
+
+        {/* Desktop: one faint, static navy glow behind the headline, so the black has depth and the
+            words read as lit. Same navy as the glow behind the story cards below, which ties the two
+            sections together. No shapes or texture: it should be felt, not noticed. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[1] hidden md:block"
+          style={{ background: 'radial-gradient(38% 48% at 31% 50%, rgba(31,58,107,0.32) 0%, rgba(31,58,107,0.1) 50%, transparent 80%)' }}
+        />
+
+        {/* Desktop: the video dissolves into black along the bottom too, so the hero hands over to the
+            black "Every hook starts with a sentence" section without a hard edge under the video. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] hidden h-56 bg-gradient-to-b from-transparent via-black/70 to-black md:block" />
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -2515,10 +2208,19 @@ export function Landing() {
               <span className="text-xs font-black uppercase tracking-[0.3em]">Science</span>
             </Link>
             <button
+              ref={heroRedeemRef}
               onClick={goRedeemInvite} {...trackProps(UiElement.LANDING_GET_STARTED)}
-              className="order-1 col-span-2 flex h-[52px] items-center justify-center gap-2 rounded bg-white px-8 text-xs font-black uppercase tracking-[0.3em] text-accent shadow-xl transition-opacity hover:opacity-90 whitespace-nowrap lg:order-none lg:min-w-0 lg:flex-1 lg:basis-0 lg:gap-1.5 lg:px-3 lg:tracking-[0.12em] xl:tracking-[0.18em]"
+              aria-label="Redeem your invite"
+              className="relative order-1 col-span-2 flex h-[52px] items-center justify-center gap-2 rounded bg-white px-8 text-xs font-black uppercase tracking-[0.3em] text-accent shadow-xl transition-opacity hover:opacity-90 whitespace-nowrap lg:order-none lg:min-w-0 lg:flex-1 lg:basis-0 lg:gap-1.5 lg:px-3 lg:tracking-[0.12em] xl:tracking-[0.18em]"
             >
-              Redeem your invite <ArrowRight className="w-4 h-4 shrink-0" />
+              <span
+                ref={heroRedeemMeasureRef}
+                aria-hidden="true"
+                className="pointer-events-none invisible absolute left-0 top-0 inline-flex items-center gap-2 lg:gap-1.5"
+              >
+                Redeem your invite <ArrowRight className="w-4 h-4 shrink-0" />
+              </span>
+              {heroRedeemShort ? 'Redeem invite' : 'Redeem your invite'} <ArrowRight className="w-4 h-4 shrink-0" />
             </button>
             <Link
               to="/messenger"
@@ -2551,63 +2253,31 @@ export function Landing() {
         {...hideMrOneHook}
         className="py-12 pb-16 px-6 text-white relative overflow-hidden z-40"
         style={{
-          background: 'radial-gradient(120% 90% at 50% 0%, #16264A 0%, #0D1428 55%, #0A0B10 100%)',
-          // Convex "parabola" bottom edge instead of a flat line, with a soft
-          // black shadow cast downward onto the section below for depth.
-          borderBottomLeftRadius: '50% 72px',
-          borderBottomRightRadius: '50% 72px',
-          boxShadow: '0 28px 44px -12px rgba(0, 0, 0, 0.45)',
+          // Continues the hero's black without a seam, then one quiet navy glow behind the headline and
+          // the stories (the couples' card tint), instead of stripes and a tiled watermark.
+          background:
+            'radial-gradient(60% 55% at 50% 38%, rgba(31,58,107,0.42) 0%, rgba(31,58,107,0.12) 45%, transparent 75%), linear-gradient(180deg, #000 0%, #07080C 40%, #0A0B10 100%)',
+          // A gentle convex bottom edge, echoing the other chapter curves; no heavy drop shadow.
+          borderBottomLeftRadius: '50% 48px',
+          borderBottomRightRadius: '50% 48px',
         }}
       >
-        {/* Repeating watermark — this placeholder section will be swapped for real success stories */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none select-none absolute inset-0 overflow-hidden"
-        >
-          <div
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-45 opacity-[0.025] blur-[1.5px]"
-            style={{
-              width: watermarkSize || '150%',
-              height: watermarkSize || '150%',
-              backgroundImage: WATERMARK_BG,
-              backgroundRepeat: 'repeat',
-              backgroundSize: '640px 40px',
-            }}
-          />
-        </div>
-
-        {/* Silver shimmer accent — a fixed-width band pinned to the top-left
-            corner. Diagonal silver lines are strongest at the left edge and
-            fade out towards the right (Zomato-Gold style, in silver). */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none select-none absolute top-0 left-0 h-64 w-[min(55%,460px)]"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(60deg, rgba(226,230,236,0.55) 0px, rgba(226,230,236,0.55) 1.5px, rgba(255,255,255,0.06) 1.5px, rgba(255,255,255,0.06) 4px, transparent 4px, transparent 14px)',
-            // Fade on BOTH axes (right + bottom) so no hard edges show. The two
-            // gradients are intersected, so a pixel is only visible where both
-            // the horizontal and vertical fades are still opaque.
-            WebkitMaskImage:
-              'linear-gradient(to right, #000 0%, rgba(0,0,0,0.3) 38%, transparent 80%), linear-gradient(to bottom, #000 0%, rgba(0,0,0,0.3) 38%, transparent 80%)',
-            WebkitMaskComposite: 'source-in',
-            maskImage:
-              'linear-gradient(to right, #000 0%, rgba(0,0,0,0.3) 38%, transparent 80%), linear-gradient(to bottom, #000 0%, rgba(0,0,0,0.3) 38%, transparent 80%)',
-            maskComposite: 'intersect',
-          }}
-        />
-
         <div className="relative mx-auto max-w-6xl">
           <div className="relative z-10 text-center">
-            <motion.p
+            <motion.div
               initial={{ opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.7 }}
-              className="mb-5 text-[11px] uppercase tracking-[1px] text-white/50"
+              className="mb-10 pt-4"
             >
-              Every hook starts with a sentence
-            </motion.p>
+              <h2 className={`${SECTION_TITLE} mb-4`}>
+                Every hook starts with a <Accent tone="silver">sentence</Accent>.
+              </h2>
+              <p className={`${SECTION_LEAD} text-white/65`}>
+                One honest line, sent to one person. The rest is theirs to tell.
+              </p>
+            </motion.div>
 
             {/* Auto-advancing accordion: all four couples stay visible; the spotlight expands,
                 the rest contract. Hover / focus pauses the loop and spotlights a couple. */}
@@ -2654,7 +2324,7 @@ export function Landing() {
       </section>
 
       {/* Philosophy Section */}
-      <section id="philosophy" className="pt-28 pb-0 px-6 bg-white relative">
+      <section id="philosophy" className="pt-28 pb-24 lg:pb-32 px-6 bg-white relative">
         <div className="max-w-6xl mx-auto relative z-10">
           {/* Header */}
           <motion.div
@@ -2664,23 +2334,25 @@ export function Landing() {
             transition={{ duration: 0.7 }}
             className="text-center mb-6"
           >
-            <p className="text-[11px] uppercase tracking-[0.4em] opacity-40 mb-4">The philosophy</p>
-            <h2 className="mb-6 text-4xl md:text-6xl font-light tracking-tight leading-[1.08]">
+            <Kicker chapter="01" className="mb-5 text-text/50">Philosophy</Kicker>
+            <h2 className={`${SECTION_TITLE} mb-6`}>
               Connection isn&rsquo;t a <Accent tone="ink">numbers</Accent> game.
             </h2>
-            <p className="text-lg opacity-70 leading-relaxed max-w-2xl mx-auto">
-              The future of dating isn&rsquo;t about more options. It&rsquo;s about intention.
+            <p className={`${SECTION_LEAD} opacity-70`}>
+              Every one of those stories began the same way: with one person, not a hundred. The
+              future of dating isn&rsquo;t about more options. It&rsquo;s about intention.
             </p>
           </motion.div>
 
-          {/* Manifesto + editorial image — full-bleed, fixed 2:3 (height:width) landscape stage */}
+          {/* Manifesto + editorial image — full-bleed; its height follows the content (no fixed ratio), so
+              there is no empty band above or below the words and the phone. */}
           <motion.div
             ref={manifestoRef}
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
-            className="group relative left-1/2 my-10 w-[calc(100vw-2.5rem)] max-w-[1500px] -translate-x-1/2 overflow-hidden rounded-[2rem] isolate sm:w-[calc(100vw-4rem)] lg:aspect-[3/2]"
+            className="group relative left-1/2 my-10 w-[calc(100vw-2.5rem)] max-w-[1500px] -translate-x-1/2 overflow-hidden rounded-[2rem] isolate sm:w-[calc(100vw-4rem)]"
           >
             {/* Image as the canvas for the manifesto — slow Ken-Burns push-in, clipped by the card */}
             <motion.img
@@ -2706,11 +2378,11 @@ export function Landing() {
             </motion.div>
 
             {/* Two columns: the manifesto (left) and a living phone (right) */}
-            <div className="relative z-10 grid h-full items-center gap-10 px-5 py-10 sm:px-10 lg:grid-cols-2 lg:gap-8 lg:px-14 lg:py-10">
+            <div className="relative z-10 grid h-full items-center gap-10 px-5 py-10 sm:px-10 lg:grid-cols-2 lg:gap-8 lg:px-14 lg:py-16">
               {/* Column 1 — the words. Left-aligned and pulled toward the phone when side-by-side; when
                   the phone is dropped (narrow screens) the text is right-aligned. */}
               <div className="ml-auto max-w-xl text-right text-white">
-                <p className="mb-8 inline-flex items-center gap-3 text-[11px] uppercase tracking-[0.35em] text-white/60">
+                <p className="mb-8 inline-flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.4em] text-white/60">
                   <span className="h-px w-8 bg-white/40" /> Less, but better
                 </p>
 
@@ -2720,13 +2392,13 @@ export function Landing() {
                       ? undefined
                       : { scale: manifestoTextScale, opacity: manifestoTextOpacity, transformOrigin: 'right center' }
                   }
-                  className="text-3xl font-serif leading-[1.15] [text-wrap:balance] drop-shadow-[0_2px_30px_rgba(0,0,0,0.45)] will-change-transform md:text-5xl"
+                  className="text-3xl font-light tracking-tight leading-[1.15] [text-wrap:balance] drop-shadow-[0_2px_30px_rgba(0,0,0,0.45)] will-change-transform md:text-5xl"
                 >
                   We&rsquo;re not here to{' '}
-                  <span className="italic text-white/50">maximize your options.</span> We&rsquo;re
+                  <span className="text-white/50">maximize your options.</span> We&rsquo;re
                   here to make{' '}
-                  <span className="italic underline decoration-white/40 underline-offset-8">
-                    one of them count.
+                  <span className="underline decoration-white/40 underline-offset-8">
+                    <Accent tone="silver">one</Accent> of them count.
                   </span>
                 </motion.p>
 
@@ -2736,7 +2408,7 @@ export function Landing() {
                   single active connection at a time. When you match, you&rsquo;re locked in.
                 </p>
 
-                <p className="mt-8 text-sm italic text-white/60">
+                <p className="mt-8 text-sm text-white/55">
                   &ldquo;The secret of wisdom is knowing what to leave out.&rdquo;
                 </p>
               </div>
@@ -2749,13 +2421,22 @@ export function Landing() {
                 transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
                 onMouseMove={prefersReducedMotion ? undefined : handlePhoneTilt}
                 onMouseLeave={prefersReducedMotion ? undefined : resetPhoneTilt}
-                className="hidden [perspective:1400px] lg:flex lg:justify-center"
+                // Sits close to the words (not centred in its half), with room on the left for the
+                // "It's a match" card that hangs off the device; the photo backdrop fills the right.
+                className="hidden [perspective:1400px] lg:flex lg:justify-start lg:pl-16 xl:pl-24"
               >
                 <motion.div
                   style={prefersReducedMotion ? undefined : { rotateX: tiltRotX, rotateY: tiltRotY }}
                   className="relative"
                 >
-                  <ManifestoPhone progress={manifestoProgress} reduce={prefersReducedMotion} />
+                  {/* Sized to the panel (~60% of its height at 3:2): 17vw tracks the full-bleed panel's width,
+                      clamped so it never shrinks to a toy on small laptops or dwarfs the words on wide
+                      screens. Narrower screens drop the phone entirely. */}
+                  <ManifestoPhone
+                    progress={manifestoProgress}
+                    reduce={prefersReducedMotion}
+                    className="relative isolate mx-auto w-[clamp(220px,17vw,300px)]"
+                  />
 
                   {/* ── Pop-out UI: floats in front of the glass (desktop), lifted via scale + parallax.
                       pointer-events-none so it never intercepts taps on the device below. ── */}
@@ -2798,151 +2479,66 @@ export function Landing() {
             </div>
           </motion.div>
 
-          {/* Old way vs OneHook way — played for a laugh, not a lawsuit. Every "old way" line is a
-              generic, self-aware dating-app gripe (no brand names, no borrowed taglines); the
-              disclaimer frames the whole thing as our own cheeky opinion. */}
+          {/* What we hold to — the rules that follow from the manifesto; they close the chapter. */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
-            className="mt-20 lg:mt-28 text-center"
+            className="mt-16 lg:mt-20"
           >
-            <p className="font-serif text-xl md:text-2xl italic text-text/70">
-              Guess which side your <span className="text-accent">thumb</span> prefers&nbsp;👀
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
-            className="mt-8 grid md:grid-cols-2 rounded-3xl overflow-hidden border border-border"
-          >
-            <div className="p-8 sm:p-10 lg:p-12 bg-white md:text-right">
-              <div className="mb-8 flex items-center gap-3 md:flex-row-reverse">
-                <p className="text-[11px] uppercase tracking-[0.3em] opacity-40">The old way</p>
-                <span className="inline-block rotate-[-6deg] rounded-full border border-dashed border-text/25 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-text/40">
-                  certified exhausting
-                </span>
-              </div>
-              <ul className="space-y-4">
-                {[
-                  { text: 'Swipe till your thumb files for overtime', emoji: '🫠' },
-                  { text: 'Nine chats open, zero plans made', emoji: '🥱' },
-                  { text: '\u201Chey\u201D \u2192 \u201Cheyy\u201D \u2192 \u201Cheyyy\u201D \u2192 crickets', emoji: '🦗' },
-                  { text: 'Pay extra to see who already likes you', emoji: '💸' },
-                ].map((item) => (
-                  <li
-                    key={item.text}
-                    className="flex items-center md:flex-row-reverse gap-3 text-lg opacity-60"
-                  >
-                    <span className="inline-flex w-6 h-6 rounded-full border border-border items-center justify-center shrink-0">
-                      <X className="w-3 h-3" />
-                    </span>
-                    <span className="inline-flex items-center gap-2">
-                      <span className="line-through decoration-1 decoration-text/30">{item.text}</span>
-                      <span aria-hidden="true" className="shrink-0">{item.emoji}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="p-8 sm:p-10 lg:p-12 bg-accent text-white">
-              <div className="mb-8 flex items-center gap-3">
-                <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">The OneHook way</p>
-                <span className="inline-block rotate-[5deg] rounded-full border border-dashed border-white/40 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-[0.18em] text-white/70">
-                  your new ritual
-                </span>
-              </div>
-              <ul className="space-y-4">
-                {[
-                  'One person. Your thumb finally rests. 😌',
-                  'Full, undivided attention 🎯',
-                  'Conversations that actually go somewhere 💬',
-                  'Locked end-to-end \u2014 only you two can read it 🔒',
-                ].map((item) => (
-                  <li key={item} className="flex items-center gap-3 text-lg">
-                    <span className="inline-flex w-6 h-6 rounded-full bg-white/15 items-center justify-center shrink-0">
-                      <Check className="w-3 h-3" />
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
+            {/* A sub-heading inside chapter 01, deliberately NOT the chapter-label style (hairlines, small
+                caps), so it reads as part of Philosophy rather than the start of a new chapter. */}
+            <h3 className="mb-8 text-center text-2xl font-light tracking-tight md:text-3xl">
+              What we hold to
+            </h3>
+            <div className="overflow-hidden rounded-3xl border border-border bg-white">
+              <PrincipleValues />
             </div>
           </motion.div>
-
-          <p className="mt-4 text-center text-[10px] uppercase tracking-[0.2em] text-black/55">
-            No apps were named in the making of this comparison. Any resemblance to your last three
-            is purely your own memory.
-          </p>
         </div>
 
-        {/* Principles block, with a subtle pine forest rising just above the divider (behind the
-            comparison). z-[1] keeps the forest behind the content (z-10) and the pink paint-stroke
-            (z-5), so it never overlaps that line. */}
-        <div className="relative mt-12 lg:mt-16">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-full left-1/2 z-[1] h-[22rem] w-screen -translate-x-1/2 overflow-hidden md:h-[36rem]"
-            style={{
-              // Keep only the side trees: fade the forest out across the centre so it never clutters
-              // behind the comparison box / disclaimer text (which are horizontally centred).
-              WebkitMaskImage:
-                'linear-gradient(to right, #000 0%, #000 18%, transparent 34%, transparent 66%, #000 82%, #000 100%)',
-              maskImage:
-                'linear-gradient(to right, #000 0%, #000 18%, transparent 34%, transparent 66%, #000 82%, #000 100%)',
-            }}
-          >
-            <ForestBackdrop className="h-full w-full" />
-          </div>
-
-          {/* Principles — a single static line (no slider) */}
-          <div
-            aria-hidden="true"
-            className="relative z-10 -mx-6 border-y border-border py-5 text-center select-none"
-          >
-            <p className="text-xs font-black uppercase tracking-[0.42em] text-text/60">
-              OneHook Principles
-            </p>
-          </div>
-
-          {/* Core values — full screen width (-mx-6 cancels the section padding) */}
-          <div className="relative z-10 -mx-6">
-            <PrincipleValues />
-          </div>
-
-          {/* Bottom line closing the principles section */}
-          <div aria-hidden="true" className="relative z-10 -mx-6 border-b border-border" />
-        </div>
       </section>
 
       {/* Features Section */}
-      <section id="features" className="pt-16 pb-0 px-6 bg-bg relative">
+      {/* A soft brushed-silver ground (the header pill's chrome tone) rising on a curved edge, so How it
+          works reads as a new chapter instead of a continuation of Philosophy's white page. The curve
+          echoes the other chapter edges (the stories' convex bottom, Mr.OneHook's arched top). */}
+      <section id="features" className="pt-20 pb-0 px-6 bg-[#EEF0F3] relative">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-12 -translate-y-full bg-[#EEF0F3] sm:h-16 lg:h-20"
+          style={{ clipPath: 'ellipse(100% 100% at 50% 100%)' }}
+        />
         <div className="max-w-6xl mx-auto">
-          {/* One sheet of glass behind the intro, stepper and slider, so the whole section reads as a unit. */}
-          <GlassPanel className="z-10 py-10 md:py-12">
+          {/* An open chapter like the others: header, a plain "before" line, every step side by side
+              (stacked on narrow screens), and a plain "after" line. No carousel, nothing hidden. */}
+          <div className="relative z-10">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.8 }}
-              className="text-center mb-6 relative z-10"
+              className="text-center"
             >
-              <p className="text-[11px] uppercase tracking-[0.4em] opacity-40 mb-4">How it works</p>
-              <h2 className="mb-6 text-4xl md:text-6xl font-light tracking-tight leading-[1.08]">
+              <Kicker chapter="02" className="mb-5 text-text/50">How it works</Kicker>
+              <h2 className={`${SECTION_TITLE} mb-6`}>
                 {relationshipMode === 'single' ? (
                   <>Three steps. <Accent tone="ink">One</Accent> focus.</>
                 ) : (
                   <>Two steps. <Accent tone="ink">One</Accent> person.</>
                 )}
               </h2>
-              <p className="text-lg opacity-70 leading-relaxed max-w-2xl mx-auto">
-                {relationshipMode === 'single'
-                  ? 'OneHook is designed to feel focused and intentional, never rushed. Follow the steps to see how it keeps your attention on one promising connection at a time.'
-                  : 'Already together? Keep OneHook as your private, end-to-end encrypted messenger — the one person who matters reaches you first, with no feeds, no ads and no audience. Just the two of you.'}
+              <p className={`${SECTION_LEAD} opacity-70`}>
+                <SwapText
+                  active={relationshipMode}
+                  versions={{
+                    single:
+                      'OneHook is designed to feel focused and intentional, never rushed. Here is how it keeps your attention on one promising connection at a time.',
+                    taken:
+                      'Already together? Keep OneHook as your private, end-to-end encrypted messenger — the one person who matters reaches you first, with no feeds, no ads and no audience. Just the two of you.',
+                  }}
+                />
               </p>
 
               {/* Single / not-single toggle */}
@@ -2964,7 +2560,7 @@ export function Landing() {
                       type="button"
                       role="tab"
                       aria-selected={isActive}
-                      onClick={() => handleRelationshipModeChange(option.key)} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'relationship_mode' })}
+                      onClick={() => setRelationshipMode(option.key)} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'relationship_mode' })}
                       className={`px-5 py-2 rounded-full text-[11px] font-black uppercase tracking-[0.2em] transition-all ${
                         isActive
                           ? 'bg-accent text-white shadow-sm'
@@ -2978,220 +2574,140 @@ export function Landing() {
               </div>
             </motion.div>
 
-            {/* Stepper: counter + progress timeline + controls */}
-            <div className="mt-12 mb-2 relative z-10">
-              <div className="flex items-center justify-between gap-4 mb-6">
-                <div className="text-xs uppercase tracking-[0.28em] opacity-50">
-                  Step{' '}
-                  <span className="text-accent font-black">
-                    {String(activeStep + 1).padStart(2, '0')}
-                  </span>{' '}
-                  / {String(howItWorksSteps.length).padStart(2, '0')}
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    aria-label="Previous step"
-                    onClick={() => scrollToStep(Math.max(activeStep - 1, 0))}
-                    {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'how_it_works_prev' })}
-                    disabled={activeStep === 0}
-                    className="w-11 h-11 rounded-full border border-border flex items-center justify-center transition-all hover:border-accent hover:bg-accent hover:text-white disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current disabled:hover:border-border"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Next step"
-                    onClick={() => scrollToStep(Math.min(activeStep + 1, howItWorksSteps.length - 1))}
-                    {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'how_it_works_next' })}
-                    disabled={activeStep === howItWorksSteps.length - 1}
-                    className="w-11 h-11 rounded-full border border-border flex items-center justify-center transition-all hover:border-accent hover:bg-accent hover:text-white disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-current disabled:hover:border-border"
-                  >
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+            <p className="mx-auto mt-14 max-w-2xl text-center text-base leading-relaxed text-text/55">
+              <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.4em] text-text/40">
+                Before OneHook
+              </span>
+              <SwapText
+                active={relationshipMode}
+                versions={{
+                  single: 'Endless swiping, a hundred half-conversations, and no one you actually remember.',
+                  taken:
+                    'No priority notifications, no end-to-end encrypted chats, no platform independence, and no AI dedicated to the one person who matters.',
+                }}
+              />
+            </p>
 
-              {/* Clickable labeled progress timeline */}
-              <div className="relative" role="tablist" aria-label="How OneHook works steps">
-                <div className="absolute left-0 right-0 top-[9px] h-px bg-border" />
-                <div
-                  className="absolute left-0 top-[9px] h-px bg-accent transition-all duration-500 ease-out"
-                  style={{
-                    width: `${(activeStep / (howItWorksSteps.length - 1)) * 100}%`,
-                  }}
-                />
-                <div className="relative flex justify-between">
-                  {howItWorksSteps.map((step, index) => {
-                    const isActive = activeStep === index;
-                    const isDone = index <= activeStep;
-                    return (
-                      <button
-                        key={step.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={isActive}
-                        aria-label={`Step ${index + 1}: ${step.label}`}
-                        onClick={() => scrollToStep(index)} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'how_it_works_step' })}
-                        className="group flex flex-col items-center gap-3 px-2 -mx-2 relative z-10"
-                      >
-                        <span
-                          className={`w-[18px] h-[18px] rounded-full border-2 transition-all duration-300 ${
-                            isActive
-                              ? 'bg-accent border-accent scale-110 ring-4 ring-accent/10'
-                              : isDone
-                                ? 'bg-accent border-accent'
-                                : 'bg-white border-border group-hover:border-accent/50'
-                          }`}
-                        />
-                        <span
-                          className={`hidden sm:block text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${
-                            isActive ? 'text-accent' : 'text-text/40 group-hover:text-text/70'
-                          }`}
-                        >
-                          {step.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Carousel rail */}
-            <div
-              ref={stepsRailRef}
-              role="group"
-              aria-roledescription="carousel"
-              aria-label="How OneHook works"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowRight') {
-                  e.preventDefault();
-                  scrollToStep(Math.min(activeStep + 1, howItWorksSteps.length - 1));
-                } else if (e.key === 'ArrowLeft') {
-                  e.preventDefault();
-                  scrollToStep(Math.max(activeStep - 1, 0));
-                }
-              }}
-              data-track-exempt="gesture: arrow-key paging/scroll of the carousel rail; discrete step changes are tracked via the prev/next and dot controls (how_it_works_prev/next/step)."
-              className="flex gap-6 overflow-x-auto pt-10 pb-14 px-[calc(50%-41vw)] sm:px-[calc(50%-190px)] lg:px-[calc(50%-230px)] snap-x snap-mandatory scrollbar-none rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 relative z-10"
-            >
-              {/* Bookend (not a step, no number) — fills the lead-in gutter; shown in both modes */}
-              <div
-                aria-hidden="true"
-                className="flex shrink-0 self-center min-h-[336px] w-[64vw] flex-col justify-center rounded-3xl border border-dashed border-border bg-bg/50 p-6 text-center sm:w-[240px] lg:w-[280px]"
-              >
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-text/40">Before</p>
-                <h3 className="mt-3 text-2xl font-light tracking-tight md:text-3xl">
-                  Life <Accent tone="ink">before</Accent> OneHook
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-text/55">
-                  {relationshipMode === 'single'
-                    ? 'Endless swiping, a hundred half-conversations, and no one you actually remember.'
-                    : 'No priority notifications, no end-to-end encrypted chats, no platform independence, and no AI dedicated to the one person who matters.'}
-                </p>
-              </div>
-              {howItWorksSteps.map((step, index) => {
-                const isActive = activeStep === index;
+            <ol aria-label="How OneHook works" className="mx-auto mt-12 grid max-w-xl gap-6 lg:max-w-none lg:grid-cols-3">
+              {allHowItWorksSteps.map((step, index) => {
+                const done = !step.modes.includes(relationshipMode);
                 return (
-                  <motion.article
+                  <motion.li
                     key={step.id}
-                    data-step-card
-                    data-step-index={index}
-                    role="group"
-                    aria-roledescription="slide"
-                    aria-label={`${index + 1} of ${howItWorksSteps.length}: ${step.label}`}
-                    initial={{ opacity: 0, y: 40, scale: 0.95 }}
-                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                    viewport={{ once: true, margin: '-5% 0px -5% 0px' }}
-                    transition={{
-                      duration: 0.8,
-                      delay: index * 0.05,
-                      ease: [0.21, 0.47, 0.32, 0.98],
-                    }}
-                    className={`group relative shrink-0 snap-center w-[82vw] sm:w-[380px] lg:w-[460px] rounded-3xl border overflow-hidden bg-white flex flex-col transition-all duration-700 ease-out ${
-                      isActive
-                        ? 'border-accent shadow-2xl shadow-black/10 -translate-y-2 z-10'
-                        : // Dim via filter, not `opacity`: Motion's entrance animation leaves an inline
-                          // `opacity: 1` on the card, which would silently override an opacity class.
-                          'border-border scale-[0.97] [filter:grayscale(1)_opacity(0.45)]'
+                    initial={{ opacity: 0, y: 28 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: '-5% 0px' }}
+                    transition={{ duration: 0.7, delay: index * 0.12, ease: [0.22, 1, 0.36, 1] }}
+                    className={`group flex flex-col overflow-hidden rounded-3xl border transition-[border-color,background-color] duration-500 ${
+                      done ? 'border-dashed border-text/15 bg-[#F7F8FA]' : 'border-border bg-white'
                     }`}
                   >
-                    {/* Image banner */}
                     <div className="relative aspect-[16/10] overflow-hidden bg-bg">
                       <img
                         src={step.image}
                         alt={step.alt}
                         loading="lazy"
                         decoding="async"
-                        className="absolute inset-0 w-full h-full object-cover object-center transition-transform duration-[1.2s] ease-out group-hover:scale-105"
+                        className={`absolute inset-0 h-full w-full object-cover object-center transition-[transform,filter,opacity] duration-700 ease-out ${
+                          done ? 'opacity-40 grayscale' : 'group-hover:scale-105'
+                        }`}
                       />
-                      <div className="absolute inset-0 bg-linear-to-t from-black/55 via-transparent to-transparent" />
-                      <div className="absolute top-4 left-4 inline-flex items-center rounded-full bg-white/90 px-3 py-1.5 backdrop-blur-sm">
-                        <span className="text-[10px] font-black uppercase tracking-[0.24em] text-accent">
-                          Step {index + 1} · {step.eyebrow}
+                      {/* "already done" stamp, faded in over the image */}
+                      <div
+                        aria-hidden={!done}
+                        className={`absolute inset-0 flex items-center justify-center transition-opacity duration-500 ${done ? 'opacity-100' : 'opacity-0'}`}
+                      >
+                        <span className="inline-flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-accent shadow-sm">
+                          <Check className="h-3.5 w-3.5" /> Already found
                         </span>
-                      </div>
-                      <div className="absolute top-4 right-4 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[11px] font-mono tracking-[0.2em] text-white backdrop-blur-sm">
-                        {String(index + 1).padStart(2, '0')}/
-                        {String(howItWorksSteps.length).padStart(2, '0')}
                       </div>
                     </div>
-
-                    {/* Content */}
                     <div className="flex flex-1 flex-col p-6 sm:p-7">
-                      <div className="flex items-baseline gap-3">
-                        <span className="text-4xl font-serif italic text-accent/15 leading-none">
-                          {String(index + 1).padStart(2, '0')}
-                        </span>
-                        <h3 className="text-2xl md:text-3xl font-semibold tracking-tight">
-                          {step.label}
-                        </h3>
-                      </div>
-
-                      <p className="mt-4 text-sm leading-relaxed opacity-70">{step.summary}</p>
-
-                      <ul className="mt-6 space-y-2.5 pt-5 border-t border-border/70">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.4em] text-text/45">
+                        Step {index + 1}
+                        {done && <span className="text-text/35"> · Done</span>}
+                      </p>
+                      <h3 className={`mt-3 text-2xl font-semibold tracking-tight transition-opacity duration-500 ${done ? 'opacity-45' : ''}`}>
+                        {step.label}
+                      </h3>
+                      <p className="mt-4 flex-1 text-sm leading-relaxed opacity-70">
+                        <SwapText
+                          active={done ? 'done' : 'live'}
+                          versions={{
+                            live: step.summary,
+                            done: 'You\u2019ve already found your person, so there\u2019s no dating profile to create and no one to discover. Just add your partner directly and start at step 2.',
+                          }}
+                        />
+                      </p>
+                      <ul
+                        aria-hidden={done}
+                        className={`mt-6 space-y-2.5 border-t border-border/70 pt-5 transition-opacity duration-500 ${done ? 'opacity-0' : ''}`}
+                      >
                         {step.bullets.map((bullet) => (
                           <li key={bullet} className="flex items-center gap-3 text-sm font-medium">
-                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent/10 text-accent shrink-0">
-                              <Check className="w-3 h-3" />
+                            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+                              <Check className="h-3 w-3" />
                             </span>
                             {bullet}
                           </li>
                         ))}
                       </ul>
                     </div>
-                  </motion.article>
+                  </motion.li>
                 );
               })}
-              {/* Bookend (not a step, no number) — fills the lead-out gutter; shown in both modes */}
-              <div
-                aria-hidden="true"
-                className="flex shrink-0 self-center min-h-[336px] w-[64vw] flex-col justify-center rounded-3xl border border-dashed border-border bg-bg/50 p-6 text-center sm:w-[240px] lg:w-[280px]"
-              >
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-text/40">After</p>
-                <h3 className="mt-3 text-2xl font-light tracking-tight md:text-3xl">
-                  Life <Accent tone="ink">after</Accent> OneHook
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-text/55">
-                  One person, real conversations, and the quiet confidence of undivided attention. And no one peeking at your chats to lure advertisers.
-                </p>
-              </div>
+            </ol>
+
+            {/* Where to go next, by audience: singles to the Dating Science, couples to the Private
+                Messenger. Same chrome as the header pill, so it reads as the same product family. Both
+                links share one grid cell (the toggle never shifts the layout); only the active one can
+                be seen, clicked or focused. */}
+            <div className="mt-10 grid justify-items-center">
+              {(
+                [
+                  { mode: 'single', to: '/science', track: 'science', kicker: 'Dating', name: 'Science', text: 'How your one match is found' },
+                  { mode: 'taken', to: '/messenger', track: 'messenger', kicker: 'Private', name: 'Messenger', text: 'Built for the two of you' },
+                ] as const
+              ).map((link) => {
+                const shown = relationshipMode === link.mode;
+                return (
+                  <Link
+                    key={link.mode}
+                    to={link.to}
+                    {...trackProps(UiElement.LANDING_NAV_LINK, { value: link.track })}
+                    aria-hidden={!shown}
+                    tabIndex={shown ? undefined : -1}
+                    className={`oh-chrome-pill oh-chrome-seg relative inline-flex items-center gap-3 overflow-hidden rounded-full border py-2.5 pl-5 pr-4 text-[#0A0B10] transition-opacity duration-300 [grid-area:1/1] sm:gap-4 ${
+                      shown ? 'opacity-100' : 'pointer-events-none opacity-0'
+                    }`}
+                  >
+                    <span aria-hidden="true" className="oh-chrome-shine pointer-events-none absolute inset-y-0 -left-1/2 w-1/3" />
+                    <span className="relative flex flex-col items-center leading-none">
+                      <span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-[#1F3A6B]/70">{link.kicker}</span>
+                      <span className="text-xs font-bold uppercase tracking-[0.2em]">{link.name}</span>
+                    </span>
+                    <span aria-hidden="true" className="relative h-6 w-px bg-gradient-to-b from-transparent via-[#9AA1AB] to-transparent" />
+                    <span className="relative text-left text-sm sm:whitespace-nowrap">{link.text}</span>
+                    <ArrowRight className="relative h-4 w-4 shrink-0" />
+                  </Link>
+                );
+              })}
             </div>
 
-            {/* Swipe/keys hint */}
-            <p className="text-center text-[10px] uppercase tracking-[0.28em] opacity-30 mt-2 relative z-10">
-              Swipe, use the arrows, or press ← / →
+            <p className="mx-auto mt-12 max-w-2xl text-center text-base leading-relaxed text-text/55">
+              <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.4em] text-text/40">
+                After OneHook
+              </span>
+              One person, real conversations, and the quiet confidence of undivided attention. And no
+              one peeking at your chats to lure advertisers.
             </p>
-          </GlassPanel>
+          </div>
 
           {/* Matching intelligence — the science behind a single good match */}
           <div
             ref={underTheHoodRef}
             id="under-the-hood"
-            className="scroll-mt-24 lg:scroll-mt-28 relative mt-20 lg:mt-28 bg-accent text-white overflow-visible w-screen -ml-[50vw] left-[50%] z-10"
+            className="scroll-mt-24 lg:scroll-mt-28 relative mt-32 sm:mt-36 lg:mt-44 bg-accent text-white overflow-visible w-screen -ml-[50vw] left-[50%] z-10"
           >
             {/* Parabolic curve top */}
             <div
@@ -3244,134 +2760,44 @@ export function Landing() {
               <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
                 <section className="relative pb-16 lg:pb-20 pt-10">
                   <div className="max-w-3xl relative mx-auto text-center">
-                    <p className="text-[11px] uppercase tracking-[0.4em] text-white/50 mb-5 inline-flex items-center gap-3">
-                      <Sparkles className="w-3.5 h-3.5" /> Under the hood: Mr.OneHook
-                    </p>
+                    <Kicker chapter="03" className="mb-5 text-white/60">Mr.OneHook</Kicker>
 
-                    <h3 className="text-3xl md:text-5xl font-light tracking-tight leading-[1.05]">
+                    <h2 className={SECTION_TITLE}>
                       The <Accent tone="silver">science</Accent> of one good match.
-                    </h3>
-                    <p className="mt-6 text-base md:text-lg text-white/70 leading-relaxed">
-                      Behind the calm experience is thoughtful matching technology. It reads
-                      meaning, not just keywords, and looks for a genuine two-way spark, not
-                      only whether you&rsquo;d swipe right.
+                    </h2>
+                    <p className={`${SECTION_LEAD} mt-6 text-white/70`}>
+                      Mr.OneHook does the hard work under the hood, so all you see is one person worth meeting.
                     </p>
                   </div>
 
-                  {/* Capability grid — Always visible */}
-                  <motion.div
+                  {/* What he weighs, as six short labels: the detail lives on the science page. */}
+                  <motion.ul
                     initial={{ opacity: 0, y: 12 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
-                    transition={{ duration: 0.4, ease: 'easeOut' }}
-                    className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-white/10 rounded-2xl overflow-hidden"
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                    className="mx-auto mt-10 grid max-w-4xl grid-cols-1 gap-px overflow-hidden rounded-2xl bg-white/10 sm:grid-cols-2 lg:grid-cols-3"
                   >
                     {[
-                      {
-                        icon: MapPin,
-                        title: 'Real people, truly nearby',
-                        text: 'We surface people genuinely within reach, never a random, endless global feed.',
-                      },
-                      {
-                        icon: Sparkles,
-                        title: 'Read for meaning',
-                        text: 'We understand the feel of your whole profile, so you’re matched on who you are, not the boxes you ticked.',
-                      },
-                      {
-                        icon: HeartHandshake,
-                        title: 'A two-way spark',
-                        text: 'We look for mutual fit: people likely to click with you, not just to like you back.',
-                      },
-                      {
-                        icon: Target,
-                        title: 'Your intent, respected',
-                        text: 'Serious or casual, a mismatch in what you’re each looking for never outranks a genuine one.',
-                      },
-                      {
-                        icon: Radar,
-                        title: 'A fair shot for everyone',
-                        text: 'Newer and quieter profiles get real, rotating visibility, not just the same popular few.',
-                      },
-                      {
-                        icon: Lock,
-                        title: 'Private by design',
-                        text: 'Your chats stay end-to-end encrypted, and your attention is never sold to advertisers.',
-                      },
-                    ].map((f, i) => (
-                      <motion.div
+                      { icon: MapPin, title: 'Truly nearby' },
+                      { icon: Sparkles, title: 'Read for meaning' },
+                      { icon: HeartHandshake, title: 'A two-way spark' },
+                      { icon: Target, title: 'Your intent, respected' },
+                      { icon: Radar, title: 'A fair shot for everyone' },
+                      { icon: Lock, title: 'Private by design' },
+                    ].map((f) => (
+                      <li
                         key={f.title}
-                        initial={{ opacity: 0, y: 16 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.5, delay: i * 0.05 }}
-                        className="group bg-accent/75 p-6 hover:bg-white/[0.03] transition-colors"
+                        className="group flex items-center gap-3 bg-accent/75 px-6 py-5 transition-colors hover:bg-white/[0.03]"
                       >
-                        <f.icon className="w-5 h-5 text-white/70 group-hover:text-white transition-colors" />
-                        <h4 className="mt-4 text-sm font-black uppercase tracking-[0.18em]">
-                          {f.title}
-                        </h4>
-                        <p className="mt-2 text-[13px] leading-relaxed text-white/55">{f.text}</p>
-                      </motion.div>
+                        <f.icon className="h-4 w-4 shrink-0 text-white/60 transition-colors group-hover:text-white" />
+                        <span className="text-xs font-semibold uppercase tracking-[0.18em]">{f.title}</span>
+                      </li>
                     ))}
-                  </motion.div>
-
-                  {/* The transparent one-line summary, framed so it reads as honesty, not homework */}
-                  <p className="mt-14 text-center text-[10px] uppercase tracking-[0.3em] text-white/40">
-                    The whole of it, in one honest line
-                  </p>
-
-                  {/* Weighted blend — the honest formula, centered; hidden entirely when it wraps to multiple lines */}
-                  <AdaptiveFlow
-                    className="mt-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white/50"
-                    rowClass="flex flex-wrap items-center gap-x-2 gap-y-3"
-                    colClass="flex flex-col items-center gap-y-3"
-                    centerHorizontal
-                    maxLines={1}
-                    overflowBehavior="hide"
-                    parts={[
-                      { key: 'lead', content: <span className="text-white/40">Final rank =</span> },
-                      {
-                        key: 'reciprocity',
-                        content: (
-                          <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
-                            Mutual fit
-                          </span>
-                        ),
-                      },
-                      { key: 'p1', content: <span className="text-white/30">+</span> },
-                      {
-                        key: 'proximity',
-                        content: (
-                          <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
-                            Nearby
-                          </span>
-                        ),
-                      },
-                      { key: 'p2', content: <span className="text-white/30">+</span> },
-                      {
-                        key: 'desirability',
-                        content: (
-                          <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-white/70">
-                            Genuine interest
-                          </span>
-                        ),
-                      },
-                      {
-                        key: 'trail',
-                        content: (
-                          <span className="text-white/30">
-                            &times; freshness, matched by intent
-                          </span>
-                        ),
-                      },
-                    ]}
-                  />
+                  </motion.ul>
 
                   {/* Deep-dive invitation — the curious can see exactly how it works */}
-                  <div className="mt-12 flex flex-col items-center gap-3 text-center">
-                    <p className="text-sm text-white/60">
-                      Curious how a single good match is actually found?
-                    </p>
+                  <div className="mt-10 flex flex-col items-center text-center">
                     <button
                       type="button"
                       ref={exploreScienceRef}
@@ -3385,9 +2811,6 @@ export function Landing() {
                     >
                       Explore the science <ArrowRight className="w-4 h-4" />
                     </button>
-                    <p className="text-[11px] text-white/40">
-                      A guided, interactive walkthrough. No math required.
-                    </p>
                   </div>
                 </section>
               </div>
@@ -3406,8 +2829,10 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Mascot Section */}
-      <section id="mascot" className="py-24 px-6 bg-white relative">
+      {/* Mr.OneHook himself: the sign-off of chapter 03, not a chapter of its own. It starts inside
+          the dark section's fade (no top padding gap, no heading), so the science and the mascot
+          read as one continuous section. */}
+      <section id="mascot" aria-label="Mr.OneHook" className="pt-6 sm:pt-8 lg:pt-10 pb-24 px-6 bg-white relative">
         <div className="max-w-6xl mx-auto">
           {showMascotVideo ? (
             <motion.div
@@ -3515,134 +2940,112 @@ export function Landing() {
         <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/5 blur-3xl" />
         <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full bg-white/5 blur-3xl" />
 
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 md:gap-16 items-center relative">
+        <Kicker chapter="04" className="relative mb-12 text-white/60">Get the app</Kicker>
+
+        {/* Copy + one QR code, centred as a pair. Side by side, the QR is a square exactly as tall as
+            the copy; stacked (narrow screens), the copy sits above and the QR below. */}
+        <div className="relative mx-auto flex max-w-5xl flex-col items-center gap-12 lg:flex-row lg:justify-center lg:gap-14">
+          {/* Side by side the QR is on the left and the copy on the right: the copy starts tucked behind
+              the QR (shifted left, clipped from its right edge) and slides out to the right; the QR sits
+              above it (z-10), so it truly emerges from behind it. Stacked: copy first, QR below.
+              Remounted (key) when the layout switches so the right entrance applies. */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
-            style={{ x: appLeftXSpring }}
-            className="text-center md:text-left"
+            key={appReveal ? 'reveal' : 'stacked'}
+            // The observer sits on this unclipped wrapper: a fully clipped element never counts as
+            // "in view", so the clip and slide live on the inner element below.
+            initial="hidden"
+            whileInView="shown"
+            viewport={{ once: true, amount: 0.5 }}
+            className="relative z-0 max-w-lg"
           >
-            <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 border border-white/25 rounded-full">
-              <Smartphone className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-black uppercase tracking-[0.28em] text-white/85">
-                The OneHook app
-              </span>
-            </div>
+            <motion.div
+              variants={
+                appReveal
+                  ? {
+                      hidden: { opacity: 0, x: '-30%', clipPath: 'inset(-20% 100% -20% -20%)' },
+                      shown: { opacity: 1, x: 0, clipPath: 'inset(-20% -20% -20% -20%)' },
+                    }
+                  : { hidden: { opacity: 0, y: 20 }, shown: { opacity: 1, y: 0 } }
+              }
+              transition={appReveal ? { duration: 1.1, delay: 0.35, ease: [0.22, 1, 0.36, 1] } : { duration: 0.7 }}
+              className="text-center lg:text-left"
+            >
+              <h2 className={`${SECTION_TITLE} mb-6`}>
+                Your <Accent tone="silver">one</Accent> connection,
+                <br />
+                in your pocket.
+              </h2>
 
-            <h2 className="mb-6 text-4xl md:text-6xl font-light leading-[1.05] tracking-tight">
-              Your <Accent tone="silver">one</Accent> connection,
-              <br />
-              in your pocket.
-            </h2>
+              <p className="text-lg text-white/70 leading-relaxed mb-8 max-w-md mx-auto lg:mx-0">
+                Fewer notifications, more meaning. Matches, private end-to-end encrypted chat, and
+                focus mode, wherever you are.
+              </p>
 
-            <p className="text-lg text-white/70 leading-relaxed mb-8 max-w-md mx-auto md:mx-0">
-              Fewer notifications, more meaning. Matches, private end-to-end encrypted chat, and
-              focus mode, wherever you are.
-            </p>
-
-            <div className="flex flex-wrap gap-4 justify-center md:justify-start">
-              <a
-                href={APP_DOWNLOAD_URL}
-                target="_blank"
-                rel="noreferrer"
-                {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
-                className="group inline-flex items-center gap-3 px-5 py-3 rounded-xl border border-white/25 hover:bg-white hover:text-accent transition-colors"
-              >
-                <AppleIcon className="w-6 h-6" />
-                <span className="text-left leading-tight">
-                  <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
-                    Download on the
+              <div className="flex flex-wrap gap-4 justify-center lg:justify-start">
+                <a
+                  href={APP_DOWNLOAD_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
+                  className="group inline-flex items-center gap-3 px-5 py-3 rounded-xl border border-white/25 hover:bg-white hover:text-accent transition-colors"
+                >
+                  <AppleIcon className="w-6 h-6" />
+                  <span className="text-left leading-tight">
+                    <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
+                      Download on the
+                    </span>
+                    <span className="block text-sm font-bold">App Store</span>
                   </span>
-                  <span className="block text-sm font-bold">App Store</span>
-                </span>
-              </a>
-              <a
-                href={APP_DOWNLOAD_URL}
-                target="_blank"
-                rel="noreferrer"
-                {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
-                className="group inline-flex items-center gap-3 px-5 py-3 rounded-xl border border-white/25 hover:bg-white hover:text-accent transition-colors"
-              >
-                <AndroidIcon className="w-6 h-6" />
-                <span className="text-left leading-tight">
-                  <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
-                    Get it on
+                </a>
+                <a
+                  href={APP_DOWNLOAD_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  {...trackProps(UiElement.LANDING_OPEN_IN_APP)}
+                  className="group inline-flex items-center gap-3 px-5 py-3 rounded-xl border border-white/25 hover:bg-white hover:text-accent transition-colors"
+                >
+                  <AndroidIcon className="w-6 h-6" />
+                  <span className="text-left leading-tight">
+                    <span className="block text-[9px] uppercase tracking-[0.2em] opacity-70">
+                      Get it on
+                    </span>
+                    <span className="block text-sm font-bold">Google Play</span>
                   </span>
-                  <span className="block text-sm font-bold">Google Play</span>
-                </span>
-              </a>
-            </div>
+                </a>
+              </div>
 
-            <p className="mt-6 text-xs text-white/50 italic">
-              <span className="hidden md:inline">
-                On your phone? Point your camera at the code.
-              </span>
-              <span className="md:hidden">Tap a badge to download.</span>
-            </p>
+              <p className="mt-6 text-xs text-white/50">
+                <span className="hidden lg:inline">
+                  On your phone? Point your camera at the code.
+                </span>
+                <span className="lg:hidden">Tap a badge to download.</span>
+              </p>
+            </motion.div>
           </motion.div>
 
-          {/* Product visual: floating phone mockup + overlapping QR card with scan beam */}
+          {/* The QR: small and quiet, a scannable code on a white tile with a caption. No scan-beam
+              animation, so nothing competes with the copy. Desktop only. */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.94 }}
+            initial={{ opacity: 0, scale: 0.96 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
             transition={{ duration: 0.7 }}
-            style={{ x: appRightXSpring }}
-            className="relative flex justify-center md:justify-end"
+            className="relative z-10 hidden shrink-0 lg:order-first lg:block"
           >
-            <div className="relative">
-              {/* soft glow behind phone */}
-              <div className="absolute inset-0 -m-6 rounded-[3rem] bg-white/10 blur-2xl" />
-
-              {/* The same faithful OneHook iOS mock used in the manifesto, but static here: reduce mode
-                  disables the scroll-linked and entrance/floating animation. Visitors can still scroll
-                  each screen and switch tabs (Discover / Messages / Profile). Sized close to the
-                  previous mock so it stays proportional to the copy beside it (not the manifesto's
-                  larger 23vw frame). */}
-              <ManifestoPhone
-                progress={staticProgress}
-                reduce
-                className="relative isolate mx-auto w-[240px] sm:w-[264px] lg:w-[300px]"
+            <div className="flex w-[184px] flex-col items-center rounded-2xl bg-white p-3.5 text-accent shadow-[0_20px_50px_-24px_rgba(0,0,0,0.7)] ring-1 ring-white/10">
+              <QRCodeSVG
+                value={APP_DOWNLOAD_URL}
+                size={156}
+                level="H"
+                marginSize={0}
+                bgColor="#ffffff"
+                fgColor="#1A1A1A"
+                imageSettings={{ src: brandMarkImage, height: 30, width: 30, excavate: true }}
+                title="QR code to download the OneHook app"
               />
-
-              {/* Floating QR card — raised to sit ABOVE the phone's bottom tab bar (navbar) so it never
-                  covers the Discover / Messages / Profile controls. */}
-              <div className="absolute -left-6 sm:-left-16 bottom-24 w-[150px] rounded-2xl bg-white text-accent p-3 shadow-2xl border border-black/5">
-                <div className="relative rounded-xl overflow-hidden border border-border p-2 flex items-center justify-center">
-                  <QRCodeSVG
-                    value={APP_DOWNLOAD_URL}
-                    size={118}
-                    level="H"
-                    marginSize={0}
-                    bgColor="#ffffff"
-                    fgColor="#1A1A1A"
-                    imageSettings={{ src: brandMarkImage, height: 24, width: 24, excavate: true }}
-                  />
-                  {/* animated scan beam */}
-                  <motion.div
-                    aria-hidden="true"
-                    initial={{ y: '-120%' }}
-                    animate={{ y: '120%' }}
-                    transition={{
-                      duration: 1.8,
-                      repeat: Infinity,
-                      ease: 'easeInOut',
-                      repeatType: 'reverse',
-                    }}
-                    className="pointer-events-none absolute left-0 right-0 h-8 bg-gradient-to-b from-transparent via-status-hooked/50 to-transparent"
-                  />
-                  {/* scanner corner brackets */}
-                  <span className="pointer-events-none absolute top-1 left-1 w-3 h-3 border-t-2 border-l-2 border-status-hooked/70" />
-                  <span className="pointer-events-none absolute top-1 right-1 w-3 h-3 border-t-2 border-r-2 border-status-hooked/70" />
-                  <span className="pointer-events-none absolute bottom-1 left-1 w-3 h-3 border-b-2 border-l-2 border-status-hooked/70" />
-                  <span className="pointer-events-none absolute bottom-1 right-1 w-3 h-3 border-b-2 border-r-2 border-status-hooked/70" />
-                </div>
-                <p className="mt-2 w-full text-center text-[8px] font-black uppercase tracking-[0.2em] opacity-60 inline-flex items-center gap-1 justify-center">
-                  <QrCode className="w-3 h-3" /> Scan to install
-                </p>
-              </div>
+              <p className="mt-3 inline-flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.3em] text-accent/55">
+                <QrCode className="h-3 w-3" /> Scan to install
+              </p>
             </div>
           </motion.div>
         </div>
@@ -3658,18 +3061,15 @@ export function Landing() {
           viewport={{ once: true }}
           className="max-w-4xl mx-auto text-center relative z-10"
         >
-          <div className="inline-flex items-center gap-2 px-4 py-2 mb-8 border border-accent/20 rounded-full">
-            <ShieldCheck className="w-3.5 h-3.5 text-accent" />
-            <span className="text-[10px] font-black uppercase tracking-[0.24em] opacity-70">
-              Invite-only · Limited spots
-            </span>
-          </div>
+          <Kicker className="mb-8 text-text/50">
+            <ShieldCheck className="w-3.5 h-3.5" /> Invite-only · Limited spots
+          </Kicker>
 
-          <h2 className="mb-8 text-4xl md:text-6xl font-light tracking-tight">
+          <h2 className={`${SECTION_TITLE} mb-8`}>
             Ready for one <Accent tone="ink">real</Accent> thing?
           </h2>
 
-          <p className="text-lg md:text-xl opacity-60 italic mb-12 max-w-2xl mx-auto">
+          <p className={`${SECTION_LEAD} opacity-60 mb-12 md:text-xl`}>
             Trade a thousand maybes for one real possibility. Bring an invite code and meet someone
             worth your attention.
           </p>
@@ -3679,19 +3079,19 @@ export function Landing() {
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
               onClick={goRedeemInvite} {...trackProps(UiElement.LANDING_GET_STARTED)}
-              className="w-full sm:w-auto px-10 py-5 bg-accent text-white text-sm font-black uppercase tracking-[0.3em] hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3"
+              className="w-full sm:w-auto h-[52px] px-10 rounded bg-accent text-white text-xs font-black uppercase tracking-[0.3em] hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3"
             >
-              Redeem your invite <ArrowRight className="w-5 h-5" />
+              Redeem your invite <ArrowRight className="w-4 h-4" />
             </motion.button>
             <button
               onClick={() => navigate('/login')} {...trackProps(UiElement.LANDING_LOGIN)}
-              className="w-full sm:w-auto px-10 py-5 border border-accent text-accent text-sm font-black uppercase tracking-[0.3em] hover:bg-accent hover:text-white transition-colors"
+              className="w-full sm:w-auto h-[52px] px-10 rounded border border-accent text-accent text-xs font-black uppercase tracking-[0.3em] hover:bg-accent hover:text-white transition-colors"
             >
               I have an account
             </button>
           </div>
 
-          <p className="mt-8 text-sm opacity-40 italic">
+          <p className="mt-8 text-sm opacity-40">
             OneHook is invite-only. Don&rsquo;t have a code? Ask someone you know.
           </p>
         </motion.div>

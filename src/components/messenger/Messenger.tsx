@@ -2445,6 +2445,21 @@ function SceneProgress({ index, reduce }: { index: number; reduce: boolean }) {
   );
 }
 
+/** Height of the largest viewport (100lvh), measured once per call from a probe element. Unlike
+ *  innerHeight it doesn't change while a phone's toolbar shows or hides, so snap points stay put. */
+function stableViewportHeight() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:100lvh;visibility:hidden;pointer-events:none';
+  document.body.appendChild(probe);
+  const h = probe.offsetHeight || window.innerHeight;
+  probe.remove();
+  return h;
+}
+/** Scrollable length of the story track while its stage is pinned. */
+function trackSpan(el: HTMLElement, viewportH: number) {
+  return Math.max(1, el.offsetHeight - viewportH);
+}
+
 export function Messenger() {
   const [lite] = useState(detectLite);
   const navigate = useNavigate();
@@ -2455,142 +2470,88 @@ export function Messenger() {
   useMotionValueEvent(scrollYProgress, 'change', setProgress);
 
   const n = SCENES.length;
-  // The scene on screen only moves forward once its own animation has finished (SCENE_SECONDS),
-  // however hard you scroll: until then the page is held at the end of the current scene, and once
-  // it's done the next scroll advances exactly one scene. Scrolling back is never held. With reduced
-  // motion nothing is held, so no one can get stuck.
+  // Scrolling is never intercepted (no preventDefault, no scrollTo, no overflow freezing, no scroll
+  // snapping): those behave differently in every browser and made the wheel feel dead or sticky.
+  // The page always scrolls natively, with wheel, trackpad, touch, keyboard and scrollbar.
+  //
+  // The scene on screen FOLLOWS the scroll position: it steps one scene at a time toward wherever the
+  // reader has scrolled, showing each for at least SCENE_DWELL_MS. The stage is pinned for the whole
+  // track, so even a hard flick plays every screen in order while the page sits still.
+  //
+  // A hard flick can't fly past the story either: the closer and footer below it only exist once
+  // the last screen is on stage (see `storyDone`), so until then the page simply ends at the bottom
+  // of the track and the browser stops there by itself.
+  // With reduced motion there is no dwell: the scene matches the scroll position directly.
   const [index, setIndex] = useState(0);
-  const shownRef = useRef(0);
-  const doneAtRef = useRef(0);
   useEffect(() => {
     const el = storyRef.current;
     if (!el) return;
-    const secs = (i: number) => (reduce ? 0 : SCENE_SECONDS[i] ?? 3);
-    const geo = () => ({ top: el.getBoundingClientRect().top + window.scrollY, span: Math.max(1, el.offsetHeight - window.innerHeight) });
-    const rawIndex = () => {
-      const { top, span } = geo();
-      const p = Math.min(0.9999, Math.max(0, (window.scrollY - top) / span));
+    const SCENE_DWELL_MS = reduce ? 0 : 600;
+    // measured on mount and on resize only, never per scroll frame
+    let viewportH = stableViewportHeight();
+    let shown = -1;
+    let shownAt = 0;
+    let timer = 0;
+    let raf = 0;
+
+    const target = () => {
+      const rect = el.getBoundingClientRect();
+      const span = trackSpan(el, viewportH);
+      const p = Math.min(0.9999, Math.max(0, -rect.top / span));
       return Math.min(n - 1, Math.floor(p * n));
     };
-    // last scroll position that still belongs to scene d
-    const limitY = (d: number) => {
-      const { top, span } = geo();
-      return top + ((d + 1) / n) * span - 2;
+    // is any part of the stage on screen? (if not, there is nothing to play: match directly)
+    const onScreen = () => {
+      const rect = el.getBoundingClientRect();
+      return rect.bottom > 0 && rect.top < viewportH;
     };
-    // first scroll position that belongs to scene d
-    const startY = (d: number) => {
-      const { top, span } = geo();
-      return top + (d / n) * span + 2;
-    };
-    // Going back plays a shorter hold (the scene re-enters quickly) — enough that a fast upward swipe
-    // steps back one screen at a time instead of skipping one.
-    const BACK_HOLD = 1.1;
-    const show = (i: number, back = false) => {
-      shownRef.current = i;
-      doneAtRef.current = performance.now() + (back ? Math.min(BACK_HOLD, secs(i)) : secs(i)) * 1000;
+    const show = (i: number) => {
+      shown = i;
+      shownAt = performance.now();
       setIndex(i);
     };
-    const hold = (y: number) => window.scrollTo({ top: y, behavior: 'instant' });
-
-    // Freezing page scroll outright (overflow hidden on <html> only) is the only thing that stops a
-    // scroll that can't be cancelled: Chrome's latched trackpad swipes, and the momentum glide after a
-    // touch swipe on phones (iOS Safari ignores scrollTo while it glides, which made screens get
-    // skipped). Never on <body>: that would make <body> the scroll container, the pinned stage would
-    // stop sticking and the screen would go blank. It lifts as soon as the scene's hold is over.
-    const root = document.documentElement;
-    let frozenUntil = 0;
-    let unfreeze = 0;
-    const freeze = () => {
-      if (frozenUntil) return;
-      frozenUntil = doneAtRef.current;
-      root.style.overflow = 'hidden';
-      unfreeze = window.setTimeout(() => {
-        root.style.overflow = '';
-        frozenUntil = 0;
-      }, Math.max(0, doneAtRef.current - performance.now()));
+    const step = () => {
+      timer = 0;
+      const t = target();
+      if (t === shown) return;
+      if (!onScreen() || SCENE_DWELL_MS === 0) {
+        show(t);
+        return;
+      }
+      const wait = shownAt + SCENE_DWELL_MS - performance.now();
+      if (wait > 0) {
+        timer = window.setTimeout(step, wait);
+        return;
+      }
+      show(shown + (t > shown ? 1 : -1));
+      if (shown !== t) timer = window.setTimeout(step, SCENE_DWELL_MS);
     };
-    const touchDevice = window.matchMedia('(pointer: coarse)').matches;
-    show(rawIndex());
     const onScroll = () => {
-      const d = shownRef.current;
-      const raw = rawIndex();
-      if (raw < d) {
-        // upward: one scene at a time, held briefly while it re-enters
-        if (performance.now() < doneAtRef.current) {
-          hold(startY(d)); // the current scene is still settling — stay on it
-          if (touchDevice) freeze();
-          return;
-        }
-        show(d - 1, true);
-        if (window.scrollY < startY(d - 1)) {
-          hold(startY(d - 1));
-          if (touchDevice) freeze(); // stop the glide here, one screen up
-        }
-        return;
-      }
-      if (window.scrollY <= limitY(d)) return;
-      if (performance.now() < doneAtRef.current) {
-        hold(limitY(d)); // animation still playing — stay on this scene
-        if (touchDevice) freeze();
-        return;
-      }
-      if (d < n - 1) {
-        show(d + 1); // one scene at a time
-        if (window.scrollY > limitY(d + 1)) {
-          hold(limitY(d + 1));
-          if (touchDevice) freeze();
-        }
-      }
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (!timer) step();
+      });
     };
-    // While a scene is still playing, swallow any input that would scroll past it, so the page never
-    // moves and gets snapped back (that snap-back juddered, worst on the zooming finale). Scrolling up
-    // is always allowed, and the scroll-event hold above remains as a fallback (scrollbar drags etc).
-    const blocking = (dy: number) =>
-      performance.now() < doneAtRef.current &&
-      ((dy > 0 && window.scrollY + dy > limitY(shownRef.current)) ||
-        // upward too (never above the story's own first screen, so the page header stays reachable)
-        (dy < 0 && shownRef.current > 0 && window.scrollY + dy < startY(shownRef.current)));
-    const onWheel = (e: WheelEvent) => {
-      if (!blocking(e.deltaY)) return;
-      if (e.cancelable) e.preventDefault();
-      else freeze();
-      if (e.deltaY > 0 && window.scrollY < limitY(shownRef.current)) hold(limitY(shownRef.current));
-      if (e.deltaY < 0 && window.scrollY > startY(shownRef.current)) hold(startY(shownRef.current));
-    };
-    let touchY = 0;
-    const onTouchStart = (e: TouchEvent) => {
-      touchY = e.touches[0]?.clientY ?? 0;
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      const y = e.touches[0]?.clientY ?? touchY;
-      if (blocking(touchY - y)) {
-        if (e.cancelable) e.preventDefault();
-        else freeze();
-      }
-      touchY = y;
-    };
-    const KEYS: Record<string, number> = { ArrowDown: 40, PageDown: 600, ' ': 600, End: 1e6, ArrowUp: -40, PageUp: -600, Home: -1e6 };
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-      const dy = e.key === ' ' && e.shiftKey ? -600 : KEYS[e.key];
-      if (dy && blocking(dy)) e.preventDefault();
+
+    show(target());
+    shownAt = 0; // the first scene on load is not "held"
+    const onResize = () => {
+      viewportH = stableViewportHeight();
+      onScroll();
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('wheel', onWheel, { passive: false });
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize);
     return () => {
       window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('wheel', onWheel);
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('keydown', onKey);
-      window.clearTimeout(unfreeze);
-      root.style.overflow = '';
+      window.removeEventListener('resize', onResize);
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
     };
   }, [n, reduce]);
+
+  // The closer + footer exist only once the story's last screen is on stage (see the scroll comment).
+  // (With reduced motion the scene simply matches the scroll position, so nothing needs gating.)
+  const storyDone = index === n - 1 || Boolean(reduce);
   const scene = SCENES[index];
   const headerH = useHeaderHeight();
   const ending = useFullScreenEnding();
@@ -2598,23 +2559,6 @@ export function Messenger() {
   // over the whole stage — large and centred — with the buttons staying in their usual place.
   const finale = index === n - 1;
 
-  // Arriving on the finale from screen 7, the section below (closer + footer) is held back until the
-  // finale's animation has played: with nothing below the story there is nothing to scroll into, so
-  // a fast swipe simply stops at the end — Chrome otherwise lets an in-flight swipe run past and the
-  // page would be yanked back (the glitch). It appears, below the fold, the moment the words settle.
-  const [endingHeld, setEndingHeld] = useState(false);
-  const prevIndexRef = useRef(index);
-  useEffect(() => {
-    const from = prevIndexRef.current;
-    prevIndexRef.current = index;
-    if (!(index === n - 1 && from === n - 2) || reduce) {
-      setEndingHeld(false);
-      return;
-    }
-    setEndingHeld(true);
-    const id = window.setTimeout(() => setEndingHeld(false), (SCENE_SECONDS[n - 1] ?? 2) * 1000);
-    return () => window.clearTimeout(id);
-  }, [index, n, reduce]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -2869,7 +2813,7 @@ export function Messenger() {
         </div>
         {/* the heartbeat closer (shared with the Science page) + the footer below it fill exactly one
             screen under the header, so the last scroll lands on a clean, full-screen ending */}
-        <div className="flex flex-col" style={{ minHeight: ending.minHeight, display: endingHeld ? 'none' : undefined }}>
+        <div className="flex flex-col" style={{ minHeight: ending.minHeight, display: storyDone ? undefined : 'none' }}>
           <Finale
             body="Every message locked end to end, every memory kept safe, on every screen you own — free, forever. All so the two of you can just talk."
             secondary="invite"
@@ -2879,7 +2823,7 @@ export function Messenger() {
         </div>
       </main>
 
-      <div ref={ending.footerRef} style={endingHeld ? { display: 'none' } : undefined}>
+      <div ref={ending.footerRef} style={storyDone ? undefined : { display: 'none' }}>
         <SiteFooter />
       </div>
     </div>
