@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { UiElement, trackProps } from '../lib/analytics/analytics';
 import { MOST_POPULAR_TIER, PAID_TIER_NAMES } from '../config/membership.config';
-import { motion, useMotionValue, useSpring, useScroll, useTransform, useReducedMotion, type MotionValue } from 'motion/react';
+import { motion, useInView, useMotionValue, useSpring, useScroll, useTransform, useReducedMotion, type MotionValue } from 'motion/react';
 import {
   Heart,
   Focus,
@@ -1280,6 +1280,94 @@ export function ManifestoPhone({
   );
 }
 
+/**
+ * Single / Seeing someone switch for "How it works". The two flows differ, so the choice must not be
+ * missed: when the section comes into view it asks "Which one are you?" and a soft pink ring keeps
+ * pulsing around the switch, and the inactive option gently glows, until the visitor picks one.
+ * After the first pick it is a plain, quiet switch. Reduced motion: the prompt only, no pulse.
+ */
+function RelationshipToggle({
+  mode,
+  onChange,
+}: {
+  mode: 'single' | 'taken';
+  onChange: (mode: 'single' | 'taken') => void;
+}) {
+  const reduce = useReducedMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, amount: 0.8 });
+  const [chosen, setChosen] = useState(false);
+  const calling = inView && !chosen;
+  const options = [
+    { key: 'single', label: 'Single' },
+    { key: 'taken', label: 'Seeing someone' },
+  ] as const;
+  return (
+    <div ref={ref} className="mt-8 flex flex-col items-center">
+      <motion.p
+        initial={false}
+        // fades out once chosen but keeps its space, so nothing below jumps when the visitor clicks
+        animate={{ opacity: chosen ? 0 : 1 }}
+        transition={{ duration: 0.35 }}
+        aria-hidden={chosen}
+        className="mb-3 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#c2185b]"
+      >
+        First, which one are you?
+      </motion.p>
+      <div className="relative">
+        {/* the call for attention: a pink ring that breathes out from the switch */}
+        {calling && !reduce && (
+          <motion.span
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-1 rounded-full border-2 border-[#ff8fc7]"
+            initial={{ opacity: 0.8, scale: 1 }}
+            animate={{ opacity: [0.8, 0], scale: [1, 1.18] }}
+            transition={{ duration: 1.4, repeat: Infinity, repeatDelay: 0.6, ease: 'easeOut' }}
+          />
+        )}
+        <div
+          role="tablist"
+          aria-label="Choose your relationship status"
+          className={`relative inline-flex items-center rounded-full border bg-white p-1 transition-[border-color,box-shadow] duration-500 ${
+            calling ? 'border-[#ff8fc7] shadow-[0_10px_30px_-12px_rgba(255,105,180,0.6)]' : 'border-border'
+          }`}
+        >
+          {options.map((option) => {
+            const isActive = mode === option.key;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => {
+                  setChosen(true);
+                  onChange(option.key);
+                }}
+                {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'relationship_mode' })}
+                className={`relative rounded-full px-6 py-2.5 text-xs font-black uppercase tracking-[0.2em] transition-all ${
+                  isActive ? 'bg-accent text-white shadow-sm' : 'text-text/55 hover:text-text/85'
+                }`}
+              >
+                {/* the option not yet chosen glows softly, so it reads as a real alternative */}
+                {calling && !isActive && !reduce && (
+                  <motion.span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 rounded-full bg-[#ff8fc7]/20"
+                    animate={{ opacity: [0, 1, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                )}
+                <span className="relative">{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Landing() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -2534,37 +2622,8 @@ export function Landing() {
                 />
               </p>
 
-              {/* Single / not-single toggle */}
-              <div
-                role="tablist"
-                aria-label="Choose your relationship status"
-                className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-white"
-              >
-                {(
-                  [
-                    { key: 'single', label: 'Single' },
-                    { key: 'taken', label: 'Seeing someone' },
-                  ] as const
-                ).map((option) => {
-                  const isActive = relationshipMode === option.key;
-                  return (
-                    <button
-                      key={option.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={isActive}
-                      onClick={() => setRelationshipMode(option.key)} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'relationship_mode' })}
-                      className={`px-5 py-2 rounded-full text-[11px] font-black uppercase tracking-[0.2em] transition-all ${
-                        isActive
-                          ? 'bg-accent text-white shadow-sm'
-                          : 'text-text/50 hover:text-text/80'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
+              {/* Single / not-single toggle: asks for attention until the visitor picks one */}
+              <RelationshipToggle mode={relationshipMode} onChange={setRelationshipMode} />
             </motion.div>
 
             <p className="mx-auto mt-14 max-w-2xl text-center text-base leading-relaxed text-text/55">
