@@ -48,6 +48,8 @@ interface AlienScannerProps {
    * paint brush, the paint bucket, the ground shadow or the silver sparkle behind it.
    */
   bare?: boolean;
+  /** Show the silver sparkle ring already finished (no pop-in), e.g. on a revisited story screen. */
+  settled?: boolean;
 }
 
 export const AlienScanner: React.FC<AlienScannerProps> = ({
@@ -61,6 +63,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
   hoverLabel = 'Click to watch me explain more about onehook.club',
   forceExcited = false,
   hideTooltips = false,
+  settled = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const pointerFocusRef = useRef(false);
@@ -292,6 +295,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
     >
       {/* Ai Sparkle Background Effect */}
       {!bare && <AiSparkle 
+        settled={settled}
         size="320%" 
         className="hidden md:block absolute top-[80%] left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 pointer-events-none opacity-80" 
       />}
