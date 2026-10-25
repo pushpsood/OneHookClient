@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { Activity, Eye, Hand, MessageCircle, UserRound, Trash2 } from 'lucide-react';
+import { Activity, Eye, Hand, MessageCircle, UserRound } from 'lucide-react';
 import { BRAND, ENGINE_META, pillClass } from './ScienceUi';
 import { ROUTES, type EngineId, type SignalKind } from './science-model';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
@@ -141,31 +141,35 @@ const LANE_Y = 220;
 const HUB_X = 500;
 const STAGES = [
   { id: 'phone', x: 110, label: 'Your phone', sub: 'a quiet moment' },
-  { id: 'backend', x: 240, label: 'OneHook', sub: 'verifies it is you' },
-  { id: 'ingest', x: 370, label: 'Ingest', sub: 'checks · normalises' },
+  { id: 'backend', x: 240, label: 'OneHook', sub: 'is it really you?' },
+  { id: 'ingest', x: 370, label: 'Ingest', sub: 'checked' },
 ] as const;
+const HUB_SUB = 'in your order';
 const ENGINE_X = 890;
-const ENGINE_Y: Record<EngineId, number> = { engagement: LANE_Y - 120, rhythm: LANE_Y, meaning: LANE_Y + 120 };
+const ENGINE_Y: Record<EngineId, number> = { engagement: LANE_Y - 80, rhythm: LANE_Y, meaning: LANE_Y + 80 };
 
 export const SIGNALS: { kind: SignalKind; label: string; Icon: typeof Eye; caption: string }[] = [
-  { kind: 'view', label: 'Profile view', Icon: Eye, caption: 'Only Engagement listens: how long you lingered is about them, not your pace.' },
-  { kind: 'swipe', label: 'Swipe', Icon: Hand, caption: 'Two minds hear it: Engagement weighs the decision, Rhythm watches your speed.' },
-  { kind: 'session', label: 'Session', Icon: Activity, caption: 'Opening and closing the app shapes Rhythm (time today) and Engagement (when you are usually around).' },
-  { kind: 'chat', label: 'Message sent', Icon: MessageCircle, caption: 'Engagement only sees that and when you replied. The words stay end-to-end encrypted, never here.' },
-  { kind: 'profile', label: 'Profile edit', Icon: UserRound, caption: 'Only Meaning listens, and only re-reads you when your words actually changed.' },
+  { kind: 'view', label: 'Profile view', Icon: Eye, caption: 'Only one mind is listening. Which one?' },
+  { kind: 'swipe', label: 'Swipe', Icon: Hand, caption: 'Two minds hear this one, for different reasons.' },
+  { kind: 'session', label: 'Session', Icon: Activity, caption: 'When you come and go says more than you think.' },
+  { kind: 'chat', label: 'Message sent', Icon: MessageCircle, caption: 'That you replied, and when. Never the words.' },
+  { kind: 'profile', label: 'Profile edit', Icon: UserRound, caption: 'Only your words matter here.' },
 ];
 
 function enginePath(engine: EngineId): string {
   const y = ENGINE_Y[engine];
-  return `M${HUB_X + 48} ${LANE_Y} C ${HUB_X + 190} ${LANE_Y}, ${ENGINE_X - 190} ${y}, ${ENGINE_X - 48} ${y}`;
+  return `M${HUB_X + 48} ${LANE_Y} C ${HUB_X + 190} ${LANE_Y}, ${ENGINE_X - 190} ${y}, ${ENGINE_X - 20} ${y}`;
 }
 
-export function PipelineDiagram({ kind, pulse }: { kind: SignalKind; pulse: number }) {
-  const reduce = useReducedMotion();
-  const targets = ROUTES[kind];
-  const [lit, setLit] = useState<readonly EngineId[]>(targets);
+/** The "+" chip: there are more signals than the five shown, and some reach every mind. */
+export type DiagramSignal = SignalKind | 'more';
+export const MORE_SIGNALS_CAPTION = 'And many more. Some reach every mind.';
+const ALL_ENGINES: readonly EngineId[] = ['engagement', 'rhythm', 'meaning'];
 
-  // Light the engines once the packet has travelled; re-runs on every "send".
+/** Engines light up once the packet has travelled; re-runs on every "send". */
+function useLitEngines(kind: DiagramSignal, pulse: number, reduce: boolean | null) {
+  const targets = kind === 'more' ? ALL_ENGINES : ROUTES[kind];
+  const [lit, setLit] = useState<readonly EngineId[]>(targets);
   useEffect(() => {
     if (reduce) {
       setLit(targets);
@@ -175,16 +179,155 @@ export function PipelineDiagram({ kind, pulse }: { kind: SignalKind; pulse: numb
     const t = window.setTimeout(() => setLit(targets), 1700);
     return () => window.clearTimeout(t);
   }, [pulse, targets, reduce]);
+  return { targets, lit };
+}
 
+/** A mind on the diagram, drawn like the stage nodes: a small ring with a centre dot and its name
+ *  underneath. It lights up in the mind's colour when the signal arrives. */
+function EngineNode({ cx, cy, engine, on, fontSize }: { cx: number; cy: number; engine: EngineId; on: boolean; fontSize: number }) {
+  const meta = ENGINE_META[engine];
   return (
-    <svg viewBox="0 0 1000 440" className="h-auto w-full" role="img" aria-label={`A ${kind} signal travelling to: ${targets.map((t) => ENGINE_META[t].name).join(', ')}`}>
-      {/* Mumbai residency envelope around everything the intelligence layer stores */}
-      <rect x={305} y={40} width={670} height={360} rx={36} fill="rgba(255,255,255,0.015)" stroke="rgba(255,255,255,0.07)" />
-      <text x={640} y={424} textAnchor="middle" fill="rgba(255,255,255,0.35)" fontSize={10} letterSpacing={4} fontWeight={600}>
-        STORED IN MUMBAI, INDIA
+    <g>
+      <motion.circle
+        cx={cx}
+        cy={cy}
+        r={18}
+        initial={false}
+        animate={{ fill: on ? meta.soft : '#FFFFFF', stroke: on ? meta.deep : 'rgba(10,11,16,0.3)' }}
+        transition={{ duration: 0.35 }}
+        strokeWidth={on ? 1.5 : 1}
+      />
+      <motion.circle
+        cx={cx}
+        cy={cy}
+        initial={false}
+        animate={{ r: on ? 5 : 3.5, fill: on ? meta.deep : '#8F96A0' }}
+        transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+      />
+      <text x={cx} y={cy + 18 + fontSize + 8} textAnchor="middle" fill={on ? meta.deep : BRAND.ink} fontSize={fontSize} fontWeight={600} style={{ transition: 'fill 350ms' }}>
+        {meta.name}
+      </text>
+    </g>
+  );
+}
+
+export function PipelineDiagram({ kind, pulse, caption }: { kind: DiagramSignal; pulse: number; caption: string }) {
+  return (
+    <>
+      <div className="sm:hidden">
+        <PipelineDiagramVertical kind={kind} pulse={pulse} caption={caption} />
+      </div>
+      <div className="hidden sm:block">
+        <PipelineDiagramWide kind={kind} pulse={pulse} caption={caption} />
+      </div>
+      {/* The caption is drawn inside the diagram; this announces it to screen readers. */}
+      <p className="sr-only" aria-live="polite">
+        {caption}
+      </p>
+    </>
+  );
+}
+
+/* Phone layout: the same journey read top to bottom on one centred axis — name to the left of
+   each dot, detail to the right — so it is symmetric and every label stays legible. */
+const V_X = 180;
+const V_STAGE_Y = [34, 96, 158];
+const V_HUB_Y = 246;
+const V_ENGINE_Y = 350;
+const V_ENGINE_X: Record<EngineId, number> = { engagement: 86, rhythm: 180, meaning: 274 };
+const V_GAP = 30; // space between a dot and its two labels
+
+function PipelineDiagramVertical({ kind, pulse, caption }: { kind: DiagramSignal; pulse: number; caption: string }) {
+  const reduce = useReducedMotion();
+  const { targets, lit } = useLitEngines(kind, pulse, reduce);
+  const vPath = (e: EngineId) =>
+    `M${V_X} ${V_HUB_Y + 40} C ${V_X} ${V_HUB_Y + 62}, ${V_ENGINE_X[e]} ${V_ENGINE_Y - 46}, ${V_ENGINE_X[e]} ${V_ENGINE_Y - 20}`;
+  return (
+    <svg viewBox="0 0 360 486" className="mx-auto h-auto w-full max-w-sm" role="img" aria-label={`A ${kind} signal travelling to: ${targets.map((t) => ENGINE_META[t].name).join(', ')}`}>
+      <rect x={10} y={196} width={340} height={274} rx={28} fill="rgba(10,11,16,0.015)" stroke="rgba(10,11,16,0.07)" />
+      <text x={180} y={426} textAnchor="middle" fill="rgba(10,11,16,0.6)" fontSize={12.5}>
+        {caption}
+      </text>
+      <text x={180} y={450} textAnchor="middle" fill="rgba(10,11,16,0.4)" fontSize={10} letterSpacing={3} fontWeight={600}>
+        STORED IN INDIA
       </text>
 
-      <line x1={STAGES[0].x} y1={LANE_Y} x2={HUB_X - 48} y2={LANE_Y} stroke="rgba(255,255,255,0.16)" strokeDasharray="2 7" />
+      <line x1={V_X} y1={V_STAGE_Y[0]} x2={V_X} y2={V_HUB_Y - 40} stroke="rgba(10,11,16,0.18)" strokeDasharray="2 7" />
+      {ENGINE_ORDER.map((e) => {
+        const on = targets.includes(e);
+        return (
+          <path key={e} d={vPath(e)} fill="none" stroke={on ? ENGINE_META[e].deep : 'rgba(10,11,16,0.12)'} strokeWidth={on ? 1.5 : 1} strokeDasharray={on ? undefined : '2 7'} style={{ transition: 'stroke 400ms' }} />
+        );
+      })}
+
+      {STAGES.map((s, i) => (
+        <g key={s.id}>
+          <circle cx={V_X} cy={V_STAGE_Y[i]} r={18} fill="#FFFFFF" stroke="rgba(10,11,16,0.3)" />
+          <circle cx={V_X} cy={V_STAGE_Y[i]} r={3.5} fill="#8F96A0" />
+          <text x={V_X - V_GAP} y={V_STAGE_Y[i] + 5} textAnchor="end" fill={BRAND.ink} fontSize={15} fontWeight={600}>
+            {s.label}
+          </text>
+          <text x={V_X + V_GAP} y={V_STAGE_Y[i] + 5} textAnchor="start" fill="rgba(10,11,16,0.5)" fontSize={13}>
+            {s.sub}
+          </text>
+        </g>
+      ))}
+
+      <circle cx={V_X} cy={V_HUB_Y} r={40} fill="#FFFFFF" stroke="rgba(10,11,16,0.32)" />
+      <image href={BRAND.logo} x={V_X - 26} y={V_HUB_Y - 26} width={52} height={52} />
+      <text x={V_X - 52} y={V_HUB_Y + 5} textAnchor="end" fill={BRAND.ink} fontSize={15} fontWeight={600}>
+        Event bus
+      </text>
+      <text x={V_X + 52} y={V_HUB_Y + 5} textAnchor="start" fill="rgba(10,11,16,0.5)" fontSize={13}>
+        {HUB_SUB}
+      </text>
+
+      {ENGINE_ORDER.map((e) => {
+        const on = lit.includes(e);
+        const meta = ENGINE_META[e];
+        return (
+          <g key={e}>
+            <EngineNode cx={V_ENGINE_X[e]} cy={V_ENGINE_Y} engine={e} on={on} fontSize={14} />
+          </g>
+        );
+      })}
+
+      {!reduce &&
+        targets.map((e) => (
+          <motion.circle
+            key={`${pulse}-${e}`}
+            r={5}
+            fill={ENGINE_META[e].deep}
+            initial={{ cx: V_X, cy: V_STAGE_Y[0], opacity: 0 }}
+            animate={{
+              cx: [V_X, V_X, V_X, V_X, V_ENGINE_X[e]],
+              cy: [V_STAGE_Y[0], V_STAGE_Y[1], V_STAGE_Y[2], V_HUB_Y, V_ENGINE_Y - 20],
+              opacity: [0, 1, 1, 1, 0],
+            }}
+            transition={{ duration: 1.7, ease: 'easeInOut', times: [0, 0.22, 0.44, 0.66, 1] }}
+          />
+        ))}
+    </svg>
+  );
+}
+
+function PipelineDiagramWide({ kind, pulse, caption }: { kind: DiagramSignal; pulse: number; caption: string }) {
+  const reduce = useReducedMotion();
+  const { targets, lit } = useLitEngines(kind, pulse, reduce);
+
+  return (
+    // Cropped to the drawn content (x 68–975, y 96–414) with equal margins, so it sits centred.
+    <svg viewBox="48 80 947 350" className="mx-auto h-auto w-full max-w-4xl" role="img" aria-label={`A ${kind} signal travelling to: ${targets.map((t) => ENGINE_META[t].name).join(', ')}`}>
+      {/* Mumbai residency envelope around everything the intelligence layer stores */}
+      <rect x={305} y={96} width={670} height={318} rx={36} fill="rgba(10,11,16,0.015)" stroke="rgba(10,11,16,0.07)" />
+      <text x={640} y={372} textAnchor="middle" fill="rgba(10,11,16,0.6)" fontSize={14}>
+        {caption}
+      </text>
+      <text x={640} y={396} textAnchor="middle" fill="rgba(10,11,16,0.4)" fontSize={10} letterSpacing={4} fontWeight={600}>
+        STORED IN INDIA
+      </text>
+
+      <line x1={STAGES[0].x} y1={LANE_Y} x2={HUB_X - 48} y2={LANE_Y} stroke="rgba(10,11,16,0.16)" strokeDasharray="2 7" />
       {ENGINE_ORDER.map((e) => {
         const on = targets.includes(e);
         return (
@@ -192,7 +335,7 @@ export function PipelineDiagram({ kind, pulse }: { kind: SignalKind; pulse: numb
             key={e}
             d={enginePath(e)}
             fill="none"
-            stroke={on ? ENGINE_META[e].color : 'rgba(255,255,255,0.10)'}
+            stroke={on ? ENGINE_META[e].deep : 'rgba(10,11,16,0.10)'}
             strokeOpacity={on ? 0.8 : 1}
             strokeWidth={on ? 1.5 : 1}
             strokeDasharray={on ? undefined : '2 7'}
@@ -203,26 +346,26 @@ export function PipelineDiagram({ kind, pulse }: { kind: SignalKind; pulse: numb
 
       {STAGES.map((s) => (
         <g key={s.id}>
-          <circle cx={s.x} cy={LANE_Y} r={22} fill={BRAND.ink} stroke="rgba(255,255,255,0.28)" />
-          <circle cx={s.x} cy={LANE_Y} r={3.5} fill={BRAND.silver} />
-          <text x={s.x} y={LANE_Y + 52} textAnchor="middle" fill="#FFFFFF" fontSize={14} fontWeight={600}>
+          <circle cx={s.x} cy={LANE_Y} r={22} fill="#FFFFFF" stroke="rgba(10,11,16,0.28)" />
+          <circle cx={s.x} cy={LANE_Y} r={3.5} fill="#8F96A0" />
+          <text x={s.x} y={LANE_Y + 52} textAnchor="middle" fill={BRAND.ink} fontSize={14} fontWeight={600}>
             {s.label}
           </text>
-          <text x={s.x} y={LANE_Y + 72} textAnchor="middle" fill="rgba(255,255,255,0.45)" fontSize={11.5}>
+          <text x={s.x} y={LANE_Y + 72} textAnchor="middle" fill="rgba(10,11,16,0.45)" fontSize={11.5}>
             {s.sub}
           </text>
         </g>
       ))}
 
       {/* Hub: the event bus, marked with the logo */}
-      <circle cx={HUB_X} cy={LANE_Y} r={56} fill="none" stroke="rgba(255,255,255,0.10)" />
-      <circle cx={HUB_X} cy={LANE_Y} r={46} fill={BRAND.ink} stroke="rgba(255,255,255,0.32)" />
+      <circle cx={HUB_X} cy={LANE_Y} r={56} fill="none" stroke="rgba(10,11,16,0.10)" />
+      <circle cx={HUB_X} cy={LANE_Y} r={46} fill="#FFFFFF" stroke="rgba(10,11,16,0.32)" />
       <image href={BRAND.logo} x={HUB_X - 30} y={LANE_Y - 30} width={60} height={60} />
-      <text x={HUB_X} y={LANE_Y + 86} textAnchor="middle" fill="#FFFFFF" fontSize={14} fontWeight={600}>
+      <text x={HUB_X} y={LANE_Y + 86} textAnchor="middle" fill={BRAND.ink} fontSize={14} fontWeight={600}>
         Event bus
       </text>
-      <text x={HUB_X} y={LANE_Y + 106} textAnchor="middle" fill="rgba(255,255,255,0.45)" fontSize={11.5}>
-        in order, per person
+      <text x={HUB_X} y={LANE_Y + 106} textAnchor="middle" fill="rgba(10,11,16,0.45)" fontSize={11.5}>
+        {HUB_SUB}
       </text>
 
       {ENGINE_ORDER.map((e) => {
@@ -230,20 +373,7 @@ export function PipelineDiagram({ kind, pulse }: { kind: SignalKind; pulse: numb
         const meta = ENGINE_META[e];
         return (
           <g key={e}>
-            <motion.circle
-              cx={ENGINE_X}
-              cy={ENGINE_Y[e]}
-              initial={false}
-              animate={{ r: on ? 48 : 43, opacity: on ? 1 : 0.5 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 16 }}
-              fill={on ? meta.soft : 'rgba(255,255,255,0.02)'}
-              stroke={meta.color}
-              strokeOpacity={on ? 0.9 : 0.35}
-              strokeWidth={1.25}
-            />
-            <text x={ENGINE_X} y={ENGINE_Y[e] + 4.5} textAnchor="middle" fill={on ? meta.color : 'rgba(255,255,255,0.4)'} fontSize={10.5} fontWeight={600} letterSpacing={1.2}>
-              {meta.name}
-            </text>
+            <EngineNode cx={ENGINE_X} cy={ENGINE_Y[e]} engine={e} on={on} fontSize={14} />
           </g>
         );
       })}
@@ -254,10 +384,10 @@ export function PipelineDiagram({ kind, pulse }: { kind: SignalKind; pulse: numb
           <motion.circle
             key={`${pulse}-${e}`}
             r={5}
-            fill={ENGINE_META[e].color}
+            fill={ENGINE_META[e].deep}
             initial={{ cx: STAGES[0].x, cy: LANE_Y, opacity: 0 }}
             animate={{
-              cx: [STAGES[0].x, STAGES[1].x, STAGES[2].x, HUB_X, ENGINE_X - 48],
+              cx: [STAGES[0].x, STAGES[1].x, STAGES[2].x, HUB_X, ENGINE_X - 20],
               cy: [LANE_Y, LANE_Y, LANE_Y, LANE_Y, ENGINE_Y[e]],
               opacity: [0, 1, 1, 1, 0],
             }}
@@ -333,128 +463,5 @@ export function ReplyCurve({ minutes, score, curve }: { minutes: number; score: 
         strokeWidth={2}
       />
     </svg>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────────────────────
- * Erasure — the tombstone goes up first (centre), then every store lets you go.
- * ────────────────────────────────────────────────────────────────────────────── */
-
-const STORES = [
-  { id: 'signals', label: 'Moments', note: 'expire after 30 days', engine: 'engagement' as EngineId },
-  { id: 'scores', label: 'Scores', note: 'expire after 24 hours', engine: 'engagement' as EngineId },
-  { id: 'rhythm', label: 'Rhythm', note: 'last 50 swipes, 7 days', engine: 'rhythm' as EngineId },
-  { id: 'intent', label: 'Intent', note: 'expires after 24 hours', engine: 'engagement' as EngineId },
-  { id: 'meaning', label: 'Meaning', note: 'replaced when you change', engine: 'meaning' as EngineId },
-];
-
-export function ErasureDemo() {
-  const reduce = useReducedMotion();
-  const [phase, setPhase] = useState<'idle' | 'tombstone' | 'erasing' | 'done'>('idle');
-  const [erased, setErased] = useState(0);
-  const timers = useRef<number[]>([]);
-
-  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
-
-  const clear = () => {
-    timers.current.forEach((t) => window.clearTimeout(t));
-    timers.current = [];
-  };
-
-  const run = () => {
-    clear();
-    const step = reduce ? 0 : 420;
-    setErased(0);
-    setPhase('tombstone');
-    timers.current.push(window.setTimeout(() => setPhase('erasing'), step * 2));
-    STORES.forEach((_, i) => timers.current.push(window.setTimeout(() => setErased(i + 1), step * (3 + i))));
-    timers.current.push(window.setTimeout(() => setPhase('done'), step * (4 + STORES.length)));
-  };
-
-  const reset = () => {
-    clear();
-    setPhase('idle');
-    setErased(0);
-  };
-
-  const status =
-    phase === 'idle'
-      ? 'Your data, as the three minds hold it.'
-      : phase === 'tombstone'
-        ? 'First, a tombstone goes up, so any signal still in flight is dropped on arrival.'
-        : phase === 'erasing'
-          ? 'Then every mind erases what it holds, and everyone your moments touched is scored afresh.'
-          : 'Gone. Replaying the request changes nothing: every step is safe to repeat.';
-
-  return (
-    <div className="flex flex-col items-center">
-      <motion.div
-        initial={false}
-        animate={{ opacity: phase === 'idle' ? 0.4 : 1, scale: phase === 'tombstone' ? 1.04 : 1 }}
-        className="w-full max-w-xs rounded-3xl border p-5 text-center"
-        style={{ borderColor: 'rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.03)' }}
-      >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-white/45">Tombstone</p>
-        <p className="mt-2 text-2xl font-light">{phase === 'idle' ? '—' : <span className="font-serif italic">Erased</span>}</p>
-        <p className="mt-1 text-[11px] text-white/40">a one-way hash, never your id</p>
-      </motion.div>
-
-      <span aria-hidden="true" className="h-6 w-px bg-white/15" />
-      <span aria-hidden="true" className="h-px w-full max-w-4xl bg-white/15" />
-
-      <div className="mt-0 grid w-full max-w-4xl grid-cols-2 gap-3 sm:grid-cols-5">
-        {STORES.map((s, i) => {
-          const gone = erased > i;
-          const color = ENGINE_META[s.engine].color;
-          return (
-            <div key={s.id} className="flex flex-col items-center">
-              <span aria-hidden="true" className="hidden h-4 w-px bg-white/15 sm:block" />
-              <motion.div
-                initial={false}
-                animate={{ opacity: gone ? 0.25 : 1, filter: gone && !reduce ? 'blur(1.5px)' : 'blur(0px)' }}
-                transition={{ duration: 0.4 }}
-                className="mt-3 w-full rounded-2xl border p-4 text-center sm:mt-0"
-                style={{ borderColor: `${color}40`, background: `${color}0D` }}
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-[0.3em]" style={{ color }}>
-                  {s.label}
-                </p>
-                <div className="mt-3 flex justify-center gap-1" aria-hidden="true">
-                  {Array.from({ length: 5 }, (_, d) => (
-                    <span key={d} className="h-1.5 w-1.5 rounded-full" style={{ background: gone ? 'rgba(255,255,255,0.15)' : color }} />
-                  ))}
-                </div>
-                <p className="mt-3 text-[11px] text-white/45">{gone ? 'erased' : s.note}</p>
-              </motion.div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-7 flex flex-col items-center gap-4 text-center">
-        <button
-          type="button"
-          onClick={phase === 'done' ? reset : run}
-          disabled={phase === 'tombstone' || phase === 'erasing'}
-          {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_erasure' })}
-          className={pillClass(phase === 'done' ? 'ghost-light' : 'solid-light')}
-        >
-          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-          {phase === 'done' ? 'Reset the demo' : 'Delete my account (demo)'}
-        </button>
-        <AnimatePresence mode="wait">
-          <motion.p
-            key={phase}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            className="max-w-lg text-sm font-light text-white/65"
-            aria-live="polite"
-          >
-            {status}
-          </motion.p>
-        </AnimatePresence>
-      </div>
-    </div>
   );
 }

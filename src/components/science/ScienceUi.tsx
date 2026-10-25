@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import type { EngineId } from './science-model';
+import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /** Brand tones sampled from the OneHook love logo (silver heart, navy "1"). */
 export const BRAND = {
@@ -25,8 +26,10 @@ export const ENGINE_META: Record<EngineId, { name: string; role: string; color: 
   meaning: { name: 'Meaning', role: 'Who you are in words', color: '#9FB1E8', deep: '#1F3A6B', soft: 'rgba(159,177,232,0.10)' },
 };
 
+export type ScienceChapterId = 'signal' | 'journey' | 'minds' | 'time' | 'mr-onehook' | 'promises';
+
 export interface ChapterDef {
-  id: string;
+  id: ScienceChapterId;
   number: string;
   title: string;
 }
@@ -68,8 +71,6 @@ export function Chapter({
   handoff,
   dark = false,
   continues = false,
-  quote,
-  by,
 }: {
   chapter: ChapterDef;
   kicker: string;
@@ -80,21 +81,29 @@ export function Chapter({
   dark?: boolean;
   /** Follows a section of the same colour: skip the top padding so the gap is not doubled. */
   continues?: boolean;
-  /** Decorative pull-quote shown ONLY on dark chapters, as a vertical strip on the right edge. */
-  quote?: string;
-  by?: string;
 }) {
   const reduce = useReducedMotion();
-  const showQuote = dark && Boolean(quote);
   return (
     <section
       id={chapter.id}
       data-chapter={chapter.id}
       aria-labelledby={`${chapter.id}-title`}
-      className={`relative scroll-mt-20 px-6 ${showQuote ? 'sm:pr-20 lg:pr-28' : ''} ${continues ? 'pb-16 pt-2 sm:pb-20 sm:pt-4' : 'py-16 sm:py-20'}`}
+      className={`relative scroll-mt-24 px-5 sm:px-6 ${continues ? 'pb-12 pt-2 sm:pb-14 sm:pt-4' : 'py-12 sm:py-14'}`}
       style={{ background: dark ? BRAND.ink : BRAND.paper, color: dark ? '#FFFFFF' : BRAND.ink }}
     >
       <div className="mx-auto max-w-6xl">
+        {/* Hairline separator: the light chapters are divided by a rule, not by colour blocks. */}
+        {/* Number on top; the hairlines run either side of the section name below it. */}
+        <div className="mb-6 sm:mb-7">
+          <p className={`text-center font-mono text-xs tabular-nums ${dark ? 'text-white/40' : 'text-black/35'}`}>{chapter.number}</p>
+          <div className="mt-2 flex items-center gap-4">
+            <span aria-hidden="true" className={`h-px flex-1 ${dark ? 'bg-white/15' : 'bg-black/10'}`} />
+            <p className={`whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.32em] ${dark ? 'text-white/45' : 'text-black/40'}`}>
+              {kicker}
+            </p>
+            <span aria-hidden="true" className={`h-px flex-1 ${dark ? 'bg-white/15' : 'bg-black/10'}`} />
+          </div>
+        </div>
         <motion.div
           initial={reduce ? false : { opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -102,39 +111,22 @@ export function Chapter({
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           className="mx-auto max-w-3xl text-center"
         >
-          <p className={`font-mono text-xs ${dark ? 'text-white/35' : 'text-black/30'}`}>{chapter.number}</p>
-          <div className="mt-3">
-            <Kicker dark={dark}>{kicker}</Kicker>
-          </div>
-          <h2 id={`${chapter.id}-title`} className="mt-5 text-4xl font-light leading-[1.08] tracking-[-0.02em] sm:text-6xl">
+          <h2 id={`${chapter.id}-title`} className="text-3xl font-light leading-[1.1] tracking-[-0.02em] sm:text-5xl">
             {title}
           </h2>
-          <div className={`mx-auto mt-5 max-w-2xl text-base font-light leading-relaxed sm:text-lg ${dark ? 'text-white/60' : 'text-black/55'}`}>{lede}</div>
+          <div className={`mx-auto mt-3 max-w-2xl text-base font-light leading-relaxed ${dark ? 'text-white/60' : 'text-black/55'}`}>{lede}</div>
         </motion.div>
 
-        <div className="mt-10 sm:mt-12">{children}</div>
+        <div className="mt-7 sm:mt-8">{children}</div>
 
         {handoff && (
-          <p className={`mt-12 flex items-center justify-center gap-5 text-center text-sm font-light italic ${dark ? 'text-white/45' : 'text-black/45'}`}>
+          <p className={`mt-8 flex items-center justify-center gap-5 text-center text-sm font-light italic ${dark ? 'text-white/45' : 'text-black/45'}`}>
             <span aria-hidden="true" className={`hidden h-px w-20 sm:block ${dark ? 'bg-white/15' : 'bg-black/10'}`} />
             {handoff}
             <span aria-hidden="true" className={`hidden h-px w-20 sm:block ${dark ? 'bg-white/15' : 'bg-black/10'}`} />
           </p>
         )}
       </div>
-
-      {showQuote && (
-        <figure className="pointer-events-none absolute right-3 top-1/2 hidden max-h-[84%] -translate-y-1/2 flex-row items-center gap-3 sm:flex sm:right-6 lg:right-9">
-          <blockquote className="[writing-mode:vertical-rl] text-sm font-light italic leading-snug tracking-wide text-white/55 sm:text-base">
-            &ldquo;{quote}&rdquo;
-          </blockquote>
-          {by && (
-            <figcaption className="[writing-mode:vertical-rl] text-[10px] font-semibold uppercase tracking-[0.32em] text-white/30">
-              {by}
-            </figcaption>
-          )}
-        </figure>
-      )}
     </section>
   );
 }
@@ -152,6 +144,7 @@ export function Range({
   format,
   dark = false,
   accent = BRAND.navy,
+  inline = false,
 }: {
   label: string;
   value: number;
@@ -162,29 +155,52 @@ export function Range({
   format?: (v: number) => string;
   dark?: boolean;
   accent?: string;
+  /** Label, slider and value on one line. */
+  inline?: boolean;
 }) {
   const id = useId();
   const shown = format ? format(value) : String(value);
+  const labelEl = (
+    <label
+      htmlFor={id}
+      className={`${
+        inline ? 'whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.14em] sm:tracking-[0.2em]' : LABEL
+      } ${dark ? 'text-white/50' : 'text-black/45'}`}
+    >
+      {label}
+    </label>
+  );
+  const input = (
+    <input
+      id={id}
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      aria-valuetext={shown}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className={`${inline ? '' : 'mt-3 '}w-full cursor-pointer`}
+      style={{ accentColor: accent }}
+    />
+  );
+  if (inline) {
+    // One row: label · slider · value. Fixed label and value columns keep every slider aligned.
+    return (
+      <div className="grid grid-cols-[7.5rem_1fr_3.25rem] items-center gap-3 sm:grid-cols-[10.5rem_1fr_3.5rem]">
+        {labelEl}
+        {input}
+        <span className="text-right font-mono text-sm tabular-nums">{shown}</span>
+      </div>
+    );
+  }
   return (
     <div>
       <div className="flex items-baseline justify-between gap-4">
-        <label htmlFor={id} className={`${LABEL} ${dark ? 'text-white/50' : 'text-black/45'}`}>
-          {label}
-        </label>
+        {labelEl}
         <span className="font-mono text-sm tabular-nums">{shown}</span>
       </div>
-      <input
-        id={id}
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        aria-valuetext={shown}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-3 w-full cursor-pointer"
-        style={{ accentColor: accent }}
-      />
+      {input}
     </div>
   );
 }
@@ -263,7 +279,7 @@ export function Meter({
 export function Panel({ children, dark = false, className = '' }: { children: ReactNode; dark?: boolean; className?: string }) {
   return (
     <div
-      className={`rounded-[28px] border p-6 sm:p-8 ${dark ? 'bg-white/[0.025]' : 'bg-white shadow-[0_30px_80px_-50px_rgba(10,11,16,0.35)]'} ${className}`}
+      className={`rounded-[24px] border p-5 sm:p-6 ${dark ? 'bg-white/[0.025]' : 'bg-white text-[#0A0B10] shadow-[0_30px_80px_-50px_rgba(10,11,16,0.35)]'} ${className}`}
       style={{ borderColor: dark ? BRAND.hairlineDark : BRAND.hairlineLight }}
     >
       {children}
@@ -273,7 +289,7 @@ export function Panel({ children, dark = false, className = '' }: { children: Re
 
 /** Pill button with one consistent, restrained style. */
 export const pillClass = (variant: 'solid-light' | 'solid-dark' | 'ghost-light' | 'ghost-dark') =>
-  `inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[10px] font-semibold uppercase tracking-[0.28em] transition-all disabled:opacity-40 ${
+  `inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[10px] font-semibold uppercase tracking-[0.28em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9FB1E8] focus-visible:ring-offset-2 disabled:opacity-40 ${
     {
       'solid-light': 'bg-white text-[#0A0B10] hover:bg-white/90',
       'solid-dark': 'bg-[#1F3A6B] text-white hover:bg-[#182F57]',
@@ -283,3 +299,107 @@ export const pillClass = (variant: 'solid-light' | 'solid-dark' | 'ghost-light' 
   }`;
 
 export const labelClass = LABEL;
+
+/** One plain-language instruction at the top of a demo, so visitors know what to do first. */
+export function TryIt({ children, dark = false }: { children: ReactNode; dark?: boolean }) {
+  return (
+    <p
+      className={`mx-auto flex items-center justify-center gap-2.5 whitespace-nowrap text-center text-[13px] font-light leading-none sm:text-sm ${dark ? 'text-white/70' : 'text-black/60'}`}
+    >
+      <span
+        className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.2em] ${dark ? 'bg-white/10 text-white/85' : 'bg-black/[0.06] text-black/65'}`}
+      >
+        Try it
+      </span>
+      <span>{children}</span>
+    </p>
+  );
+}
+
+/** Ready-made scenarios: one tap shows a meaningful result before any slider is touched. */
+export function Presets<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  dark = false,
+  accent,
+}: {
+  label: string;
+  options: readonly { id: T; label: string }[];
+  /** null while the visitor has fine-tuned the values by hand. */
+  value: T | null;
+  onChange: (id: T) => void;
+  dark?: boolean;
+  accent: string;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap justify-center gap-2">
+      {options.map((option) => {
+        const on = value === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(option.id)}
+            {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_tab' })}
+            className={`min-h-10 rounded-full border px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+              on
+                ? ''
+                : dark
+                  ? 'border-white/15 text-white/65 hover:border-white/40 hover:text-white'
+                  : 'border-black/10 text-black/60 hover:border-black/30 hover:text-black'
+            }`}
+            style={on ? { background: accent, borderColor: accent, color: dark ? BRAND.ink : '#FFFFFF' } : undefined}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** "Fine-tune" control: the detailed inputs stay one tap away instead of crowding the demo. */
+export function Disclosure({
+  label,
+  open,
+  onToggle,
+  dark = false,
+  children,
+}: {
+  label: string;
+  open: boolean;
+  onToggle: () => void;
+  dark?: boolean;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div>
+      <div className="flex justify-center">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={id}
+          onClick={onToggle}
+          {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_tab' })}
+          className={`inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] transition-colors focus-visible:outline-none focus-visible:ring-2 ${
+            dark ? 'text-white/60 hover:bg-white/[0.06] hover:text-white' : 'text-black/55 hover:bg-black/[0.05] hover:text-black'
+          }`}
+        >
+          {open ? 'Done' : label}
+          <span aria-hidden="true" className={`transition-transform ${open ? 'rotate-180' : ''}`}>
+            ▾
+          </span>
+        </button>
+      </div>
+      {open && (
+        <div id={id} className="mt-5">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}

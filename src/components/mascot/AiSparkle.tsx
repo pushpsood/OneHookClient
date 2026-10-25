@@ -13,6 +13,8 @@ export interface AiSparkleProps {
   size?: number | string; // controls the overall size of the component
   className?: string;
   triggerAnimation?: boolean; // force animation to run manually if desired
+  /** Show the finished ring at once (no pop-in), e.g. when a story screen is revisited. */
+  settled?: boolean;
 }
 
 const DEFAULT_BRANCHES: SparkleBranch[] = [
@@ -35,7 +37,8 @@ export const AiSparkle: React.FC<AiSparkleProps> = ({
   branches = DEFAULT_BRANCHES, 
   size = "100%", 
   className = "",
-  triggerAnimation = false
+  triggerAnimation = false,
+  settled = false,
 }) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<HTMLDivElement>(null);
@@ -63,6 +66,7 @@ export const AiSparkle: React.FC<AiSparkleProps> = ({
     <div
       ref={wrapperRef}
       data-live={isLive ? "true" : "false"}
+      data-settled={settled ? "true" : undefined}
       className={`burst group aspect-square ${className.includes('absolute') || className.includes('fixed') ? className : `relative ${className}`}`}
       style={{ width: size, height: size, perspective: "1000px" }}
     >

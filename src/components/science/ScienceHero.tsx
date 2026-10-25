@@ -75,15 +75,27 @@ function useHeroLayout(
       const gapTop = Math.min(56, Math.max(28, s.height * 0.05)); // breathing room under the text
       const gapBottom = 16;
       const band = Math.max(0, legendTop - textBottom - gapTop - gapBottom);
+      const cx = s.width / 2;
+      const cy = textBottom + gapTop + band / 2;
       // Logo: comfortably sized, but always inside the free band.
       const logoPx = Math.min(band, Math.max(88, Math.min(176, Math.min(s.width, s.height) * 0.2)));
-      // Orbits: as large as the hero allows; they may pass behind the headline and legend.
-      const orbitPx = Math.max(logoPx * 1.9, Math.min(s.height * 0.62, s.width * (s.width < 640 ? 0.72 : 0.58)));
+      // `orbitPx` is the radius of the complete outer halo, not its diameter. Cap it against every
+      // viewport edge around the measured centre so the full circle is visible at every aspect ratio.
+      const edgeInset = s.width < 640 ? 12 : 24;
+      const availableRadius = Math.max(
+        1,
+        Math.min(cx - edgeInset, s.width - cx - edgeInset, cy - edgeInset, s.height - cy - edgeInset)
+      );
+      const preferredRadius = Math.max(
+        logoPx * 1.9,
+        Math.min(s.height * 0.62, s.width * (s.width < 640 ? 0.72 : 0.58))
+      );
+      const orbitPx = Math.min(preferredRadius, availableRadius);
       const next = {
         w: s.width,
         h: s.height,
-        cx: s.width / 2,
-        cy: textBottom + gapTop + band / 2,
+        cx,
+        cy,
         orbitScale: orbitPx / outer,
         logoScale: logoPx / ring,
         ready: true,
@@ -454,7 +466,7 @@ export function ScienceHero({ onFollow }: { onFollow: () => void }) {
           className="mx-auto mt-[clamp(0.5rem,2vh,1.5rem)] max-w-xl font-light leading-relaxed text-white/55"
           style={{ fontSize: 'clamp(0.9rem, 1.9vh, 1.125rem)' }}
         >
-          Every pause, every reply, every word you choose is a quiet signal. Touch the orbits to send one.
+          What OneHook quietly notices, and what it never will.
         </motion.p>
       </div>
 
@@ -462,7 +474,7 @@ export function ScienceHero({ onFollow }: { onFollow: () => void }) {
       <div className="min-h-0 flex-1" />
 
       {/* Bottom: legend (interactive), live counter, CTAs — always inside the viewport */}
-      <div ref={bottomRef} className="relative z-10 mx-auto w-full max-w-4xl shrink-0 pb-[clamp(1rem,4vh,2.5rem)]">
+      <div ref={bottomRef} className="relative z-10 mx-auto min-w-0 w-full max-w-4xl shrink-0 pb-[clamp(1rem,4vh,2.5rem)]">
         <ul className="grid grid-cols-3 gap-2" aria-label="The three minds">
           {ENGINES.map((id) => {
             const meta = ENGINE_META[id];
@@ -481,7 +493,7 @@ export function ScienceHero({ onFollow }: { onFollow: () => void }) {
                   }}
                   aria-label={`${meta.name}: ${meta.role}. Send a ${meta.name} signal.`}
                   {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_signal_kind' })}
-                  className="group flex w-full flex-col items-center gap-1.5 rounded-2xl px-2 py-2 text-center transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.04] focus-visible:outline-none"
+                  className="group flex w-full flex-col items-center gap-1.5 rounded-2xl px-2 py-2 text-center transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
                 >
                   <motion.span
                     aria-hidden="true"
@@ -499,8 +511,33 @@ export function ScienceHero({ onFollow }: { onFollow: () => void }) {
           })}
         </ul>
 
-        <div className="mt-[clamp(0.5rem,2vh,1.25rem)] flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-6">
-          <p className="order-last flex items-center gap-2 font-mono text-[11px] text-white/45 sm:order-none" aria-live="polite">
+        <div className="mt-[clamp(0.5rem,2vh,1.25rem)] flex flex-col items-center justify-center gap-3">
+          <div className="grid min-w-0 w-full max-w-sm grid-cols-2 gap-2 [&>button]:min-w-0 sm:flex sm:w-auto sm:max-w-none sm:items-center sm:gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                lastInteraction.current = Date.now();
+                emitRandom();
+              }}
+              {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_signal_send' })}
+              className={`${pillClass('ghost-light')} whitespace-nowrap px-3 sm:px-6`}
+            >
+              <Radio className="hidden h-3.5 w-3.5 sm:inline" aria-hidden="true" /> Send a signal
+            </button>
+            <button type="button" onClick={onFollow} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_signal_send' })} className={`${pillClass('solid-light')} whitespace-nowrap px-3 sm:px-6`}>
+              <span className="sm:hidden">Explore</span>
+              <span className="hidden sm:inline">See how it works</span>
+              <motion.span
+                aria-hidden="true"
+                className="inline-flex"
+                animate={reduce ? undefined : { y: [0, 3, 0] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <ArrowDown className="h-3.5 w-3.5" />
+              </motion.span>
+            </button>
+          </div>
+          <p className="flex items-center gap-2 font-mono text-[11px] text-white/45" aria-live="polite">
             <span className="tabular-nums text-white/80">{String(received).padStart(3, '0')}</span>
             <span>signals received</span>
             <AnimatePresence mode="wait">
@@ -517,30 +554,6 @@ export function ScienceHero({ onFollow }: { onFollow: () => void }) {
               )}
             </AnimatePresence>
           </p>
-          <div className="grid w-full max-w-sm grid-cols-2 gap-2 sm:flex sm:w-auto sm:max-w-none sm:items-center sm:gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                lastInteraction.current = Date.now();
-                emitRandom();
-              }}
-              {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_signal_send' })}
-              className={`${pillClass('ghost-light')} whitespace-nowrap px-3 sm:px-6`}
-            >
-              <Radio className="hidden h-3.5 w-3.5 sm:inline" aria-hidden="true" /> Send a signal
-            </button>
-            <button type="button" onClick={onFollow} {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_signal_send' })} className={`${pillClass('solid-light')} whitespace-nowrap px-3 sm:px-6`}>
-              Follow it
-              <motion.span
-                aria-hidden="true"
-                className="inline-flex"
-                animate={reduce ? undefined : { y: [0, 3, 0] }}
-                transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <ArrowDown className="h-3.5 w-3.5" />
-              </motion.span>
-            </button>
-          </div>
         </div>
       </div>
     </section>

@@ -24,6 +24,14 @@ import {
   Tent,
   TreePine,
   Video,
+  Phone,
+  SmilePlus,
+  Timer,
+  Reply,
+  ScreenShare,
+  Trash2,
+  CheckCheck,
+  MessageCircleMore,
 } from 'lucide-react';
 import { SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
@@ -31,8 +39,25 @@ import { Seo } from '../common/Seo';
 import { ROUTE_SEO } from '../../config/seo-routes';
 import { AlienScanner } from '../mascot';
 import { ManifestoPhone } from '../Landing';
-import { Finale, ProgressBar, useFullScreenEnding } from '../science/Science';
-import { StoryTimelineProvider, bandIndex, makeBands, usePassed, useSceneClock, useSceneProgress, useTimeline, useVisualProgress } from './storyTimeline';
+import { ProgressBar } from '../science/Science';
+import {
+  StoryTimelineProvider,
+  bandIndex,
+  isStoryComplete,
+  makeEqualBands,
+  SHOW_MIN_MS,
+  scrollLimit,
+  storyTrackHeight,
+  usePassed,
+  useSceneClock,
+  useSceneLine,
+  useSceneProgress,
+  useStoryInstant,
+  useScrollLimit,
+  useScrollSpeed,
+  useStoryPlayback,
+  useTimeline,
+} from './storyTimeline';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { GetAppLink } from '../common/GetAppLink';
@@ -122,6 +147,7 @@ function FitCanvas({
   portView?: { y: number; h: number };
   children: (layout: 'land' | 'port', width: number) => ReactNode;
 }) {
+  const instant = useStoryInstant();
   const ref = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
@@ -156,7 +182,7 @@ function FitCanvas({
             height: dim.h,
             transform: `translate(-50%, -50%) translateY(${shiftY}px) scale(${scale})`,
             transformOrigin: 'center',
-            transition: 'transform 0.9s cubic-bezier(0.22, 1, 0.36, 1)',
+            transition: instant ? 'none' : 'transform 0.9s cubic-bezier(0.22, 1, 0.36, 1)',
           }}
         >
           {children(layout, width)}
@@ -617,51 +643,56 @@ function SyncDevices({ layout, phone, W }: { layout: 'land' | 'port'; phone: Pos
 
   return (
     <motion.div className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.6, ease: [0.7, 0, 1, 1] } }}>
-      {/* full lines: cloud → iPad, cloud → Android, and the QR from the main phone to the laptop */}
-      <OkLine d={poly(toIpad)} start={SYNC.appear + 0.2} clock={clock} />
-      <OkLine d={poly(toAndroid)} start={SYNC.appear + 0.2} clock={clock} />
-      <OkLine d={poly(qrLaptop)} start={SYNC.laptopQr} clock={clock} color={PINK} />
+      {/* the wiring between the devices: on the way to screen 5 it fades at once, so it never hangs in
+          the air as an empty frame while the devices fly into the phone */}
+      <motion.div className="absolute inset-0" exit={{ opacity: 0, transition: { duration: 0.18, ease: 'easeOut' } }}>
+        {/* full lines: cloud → iPad, cloud → Android, and the QR from the main phone to the laptop */}
+        <OkLine d={poly(toIpad)} start={SYNC.appear + 0.2} clock={clock} />
+        <OkLine d={poly(toAndroid)} start={SYNC.appear + 0.2} clock={clock} />
+        <OkLine d={poly(qrLaptop)} start={SYNC.laptopQr} clock={clock} color={PINK} />
 
-      {/* the cloud can't reach the laptop or the camping phone; no device's QR reaches the camping phone */}
-      <FailLine {...cloudToLaptop} start={SYNC.cloudFail} clock={clock} label="Cloud not reachable" labelSide="right" />
-      <FailLine {...cloudToCamp} start={SYNC.cloudFail} clock={clock} label="Cloud not reachable" labelSide="left" />
-      <FailLine {...phoneToCamp} start={SYNC.phoneTry} clock={clock} label="Out of reach" labelSide={land ? 'above' : 'right'} />
-      <FailLine {...androidToCamp} start={SYNC.androidTry} clock={clock} label="Out of reach" labelSide="left" />
+        {/* the cloud can't reach the laptop or the camping phone; no device's QR reaches the camping phone */}
+        <FailLine {...cloudToLaptop} start={SYNC.cloudFail} clock={clock} label="Cloud not reachable" labelSide="right" />
+        <FailLine {...cloudToCamp} start={SYNC.cloudFail} clock={clock} label="Cloud not reachable" labelSide="left" />
+        <FailLine {...phoneToCamp} start={SYNC.phoneTry} clock={clock} label="Out of reach" labelSide={land ? 'above' : 'right'} />
+        <FailLine {...androidToCamp} start={SYNC.androidTry} clock={clock} label="Out of reach" labelSide="left" />
 
-      {/* a key on each line leaving the cloud — it pulses as that device's key arrives */}
-      {[
-        { at: { x: xL, y: (C.y + ipadTop) / 2 }, opacity: ipadKeyOpacity, scale: ipadKeyScale },
-        { at: { x: xR, y: (C.y + androidTop) / 2 }, opacity: androidKeyOpacity, scale: androidKeyScale },
-      ].map((b, i) => (
+        {/* a key on each line leaving the cloud — it pulses as that device's key arrives */}
+        {[
+          { at: { x: xL, y: (C.y + ipadTop) / 2 }, opacity: ipadKeyOpacity, scale: ipadKeyScale },
+          { at: { x: xR, y: (C.y + androidTop) / 2 }, opacity: androidKeyOpacity, scale: androidKeyScale },
+        ].map((b, i) => (
+          <motion.span
+            key={i}
+            className="absolute z-30 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-white shadow-[0_8px_22px_-6px_rgba(255,143,199,0.9)]"
+            style={{ left: b.at.x, top: b.at.y, background: INK, opacity: b.opacity, scale: b.scale }}
+          >
+            <KeyRound className="h-3.5 w-3.5" style={{ color: PINK }} />
+          </motion.span>
+        ))}
+
+        {/* the QR, sitting in the middle of the line from the main phone to the laptop */}
         <motion.span
-          key={i}
-          className="absolute z-30 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-white shadow-[0_8px_22px_-6px_rgba(255,143,199,0.9)]"
-          style={{ left: b.at.x, top: b.at.y, background: INK, opacity: b.opacity, scale: b.scale }}
+          className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white p-1.5 shadow-lg ring-1 ring-black/10"
+          style={{ left: qrMid.x, top: qrMid.y, opacity: qrOpacity, scale: qrScale }}
         >
-          <KeyRound className="h-3.5 w-3.5" style={{ color: PINK }} />
+          <QrCode className="h-6 w-6 text-text" />
         </motion.span>
-      ))}
 
-      {/* the QR, sitting in the middle of the line from the main phone to the laptop */}
-      <motion.span
-        className="absolute z-30 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white p-1.5 shadow-lg ring-1 ring-black/10"
-        style={{ left: qrMid.x, top: qrMid.y, opacity: qrOpacity, scale: qrScale }}
-      >
-        <QrCode className="h-6 w-6 text-text" />
-      </motion.span>
+        {/* the moment the new message lands everywhere at once: no sync needed for new messages */}
+        <motion.div
+          aria-hidden="true"
+          // phones: in the gap above the main phone · wide screens: just under it (clear of the cloud's caption)
+          className={`absolute z-30 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[9px] font-semibold text-text shadow-[0_10px_26px_-12px_rgba(255,105,180,0.7)] ring-1 ${land ? '' : '-translate-y-full'}`}
+          style={{ left: phone.cx, top: land ? phone.cy + ph + 16 : phone.cy - ph - 14, ['--tw-ring-color' as string]: 'rgba(255,143,199,0.55)' }}
+          initial={false}
+          animate={{ opacity: newOn ? 1 : 0, y: newOn ? 0 : 8, scale: newOn ? 1 : 0.92 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <span className="h-1.5 w-1.5 rounded-full" style={{ background: PINK }} />
+          New messages reach every device — no sync needed
+        </motion.div>
 
-      {/* the moment the new message lands everywhere at once: no sync needed for new messages */}
-      <motion.div
-        aria-hidden="true"
-        // phones: in the gap above the main phone · wide screens: just under it (clear of the cloud's caption)
-        className={`absolute z-30 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-[9px] font-semibold text-text shadow-[0_10px_26px_-12px_rgba(255,105,180,0.7)] ring-1 ${land ? '' : '-translate-y-full'}`}
-        style={{ left: phone.cx, top: land ? phone.cy + ph + 16 : phone.cy - ph - 14, ['--tw-ring-color' as string]: 'rgba(255,143,199,0.55)' }}
-        initial={false}
-        animate={{ opacity: newOn ? 1 : 0, y: newOn ? 0 : 8, scale: newOn ? 1 : 0.92 }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-      >
-        <span className="h-1.5 w-1.5 rounded-full" style={{ background: PINK }} />
-        New messages reach every device — no sync needed
       </motion.div>
 
       {/* top-left · iPad — synced from the cloud */}
@@ -988,6 +1019,35 @@ const SCENE_RECOVER = 2;
 const SCENE_SYNC = 3;
 /** Scene index of screen 5 (live, translated captions), scrubbed by scroll. */
 const SCENE_LANG = 4;
+/** Arriving on screen 5 the phone is gone this many seconds in (its exit: 0.45 s delay + 0.55 s). */
+const PHONE_GONE = 1.0;
+
+/** Real seconds since this mounted (huge when `active` is false, so `min(clock, since)` is just `clock`). */
+function useSinceMount(active: boolean): MotionValue<number> {
+  const since = useMotionValue(active ? 0 : Number.MAX_SAFE_INTEGER);
+  useEffect(() => {
+    if (!active) return;
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const s = (now - start) / 1000;
+      since.set(s);
+      if (s < 10) raf = requestAnimationFrame(tick); // well past every beat
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [active, since]);
+  return since;
+}
+
+/**
+ * `clock` held back to the real seconds since arrival, so scroll-driven beats can never get ahead of a
+ * time-driven exit that plays on arrival. Slow scrolling: simply `clock`. A brisk scroll: the beats
+ * play at their designed pace instead of popping in.
+ */
+function useHandoffClock(clock: MotionValue<number>, since: MotionValue<number>): MotionValue<number> {
+  return useTransform(() => Math.min(clock.get(), since.get()));
+}
 
 const PW = 230; // phone width in canvas px
 const PH = 473; // phone height (230 wide, 9:19.5 screen + bezel)
@@ -1142,17 +1202,19 @@ function PhonesStage({ index }: { index: number }) {
   const syncing = index >= 3;
   const lang = index >= 4; // screen 5: everything gathers into the phone, which becomes the caption window
   const k = reduce ? 1 / 3 : 1;
+  // switched to without animation (scrolling up, or a screen that has already played)
+  const instant = useStoryInstant();
   // Arriving straight onto screen 4 (scrolling back up from screen 5): the new phone is simply there —
   // no slide-in, no unboxing, history already on it.
   const direct = useRef(index >= 3).current;
-  // The new phone (with its box) is rebuilt every time we arrive on screen 3, so the unboxing plays
-  // again whichever way you scroll in. It only starts "already unboxed" when the stage itself first
-  // mounts on screen 4/5 (scrolling back up from further down).
+  // The new phone (with its box) is built when we arrive on screen 3 coming FORWARD, so its unboxing
+  // plays then. Coming back up from screen 4 it is already there, finished — nothing is rebuilt. It
+  // starts "already unboxed" when the stage itself first mounts on screen 4/5.
   const [freshGen, setFreshGen] = useState(0);
   const [freshDirect, setFreshDirect] = useState(index >= 3);
   const prevIndex = useRef(index);
   useEffect(() => {
-    if (index === 2 && prevIndex.current !== 2) {
+    if (index === 2 && prevIndex.current < 2) {
       setFreshGen((g) => g + 1);
       setFreshDirect(false);
     }
@@ -1427,8 +1489,13 @@ function PhonesStage({ index }: { index: number }) {
               )}
             </AnimatePresence>
 
-            {/* Isha's phone: drops in once, then glides between poses — and on screen 3 falls & breaks */}
+            {/* Isha's phone: drops in once, then glides between poses — and on screen 3 falls & breaks. Once
+                everything has moved on to the new phone (screen 4+) it fades out and is unmounted, so a
+                hidden phone mock isn't kept alive behind the stage. */}
+            <AnimatePresence>
+            {!syncing && (
             <motion.div
+              key="isha"
               className="absolute z-20"
               style={{ width: PW, height: PH, transformStyle: 'preserve-3d' }}
               initial={
@@ -1436,7 +1503,8 @@ function PhonesStage({ index }: { index: number }) {
                   ? { ...isha, opacity: 0, rotate: ishaRotate }
                   : { left: isha.left, top: -PH - 260, scale: isha.scale * 0.88, rotate: -26, rotateX: 38, rotateY: -12, opacity: 0 }
               }
-              animate={{ ...isha, rotate: ishaRotate, rotateX: 0, rotateY: 0, opacity: syncing ? 0 : 1 }}
+              animate={{ ...isha, rotate: ishaRotate, rotateX: 0, rotateY: 0, opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.35 } }}
               transition={
                 reduce
                   ? { duration: 0.3 }
@@ -1481,7 +1549,8 @@ function PhonesStage({ index }: { index: number }) {
                       initialTab="messages"
                       messagesOnly
                       liveThread={sent ? ISHA_SENDS : ISHA_HELLO}
-                      liveDelay={sent ? 0 : reduce ? 300 : 800}
+                      liveDelay={sent || instant ? 0 : reduce ? 300 : 800}
+                      liveSpeed={instant ? 0.01 : 1}
                       contactName="Rohan"
                       contactPhoto="/media/profile-demo/profile-male-1.jpg"
                       ownerName="Isha"
@@ -1556,6 +1625,8 @@ function PhonesStage({ index }: { index: number }) {
                 transition={{ duration: 1.1, ease: 'easeOut', delay: 0.2 }}
               />
             </motion.div>
+            )}
+            </AnimatePresence>
 
             {/* Rohan's phone: drops in from the top on screen 2 */}
             <AnimatePresence>
@@ -1601,7 +1672,8 @@ function PhonesStage({ index }: { index: number }) {
               {lang && (
                 <Fragment key="burst">
                   <div className="absolute inset-y-0" style={{ left: (L.w - (layout === 'port' ? LAYOUTS.port.w : L.w)) / 2, width: layout === 'port' ? LAYOUTS.port.w : L.w }}>
-                    <TranslationBurst layout={layout} />
+                    {/* prevIndex still holds the previous screen during this render */}
+                    <TranslationBurst layout={layout} handoff={prevIndex.current === SCENE_SYNC && !instant} />
                   </div>
                 </Fragment>
               )}
@@ -1672,7 +1744,7 @@ function PhonesStage({ index }: { index: number }) {
                       messagesOnly
                       liveThread={newMsg ? ISHA_WITH_NEW : restoring ? ISHA_SENDS : NOTHING_YET}
                       liveDelay={0}
-                      liveSpeed={freshDirect ? 0.01 : 0.28}
+                      liveSpeed={freshDirect || instant ? 0.01 : 0.28}
                       contactName="Rohan"
                       contactPhoto="/media/profile-demo/profile-male-1.jpg"
                       ownerName="Isha"
@@ -1840,7 +1912,7 @@ function CaptionMain() {
  */
 /** One translation box springing out of the main window, read off screen 5's scroll clock. */
 function BurstBox({ b, cx, cy, clock, reduce }: { b: { x: number; y: number; s: number; delay: number; blurred: boolean; pair: (typeof CAPTION_PAIRS)[number]; i: number }; cx: number; cy: number; clock: MotionValue<number>; reduce: boolean }) {
-  const d = b.delay - 0.6; // same 0.6 s pull-forward as the main window
+  const d = b.delay + 0.1; // after the window (from PHONE_GONE − 0.1 s) has grown into place
   const left = useTransform(clock, [d, d + 0.45, d + 0.65], [cx, b.x + (b.x - cx) * 0.04, b.x]);
   const top = useTransform(clock, [d, d + 0.45, d + 0.65], [cy, b.y + (b.y - cy) * 0.04, b.y]);
   const scale = useTransform(clock, [d, d + 0.45, d + 0.65], [0.2, b.s * 1.04, b.s]);
@@ -1855,17 +1927,23 @@ function BurstBox({ b, cx, cy, clock, reduce }: { b: { x: number; y: number; s: 
   );
 }
 
-function TranslationBurst({ layout }: { layout: 'land' | 'port' }) {
+function TranslationBurst({ layout, handoff }: { layout: 'land' | 'port'; handoff: boolean }) {
   const reduce = useReducedMotion() ?? false;
-  // Screen 5 is scrubbed by scroll: the old second marks (main window 0.85 s, boxes from 1.15 s)
-  // are read off the screen's scroll clock.
-  const clock = useSceneClock(SCENE_LANG, SCENE_SECONDS[SCENE_LANG]);
-  // (pulled ~0.6 s earlier than the old timings: the phone's shrink still plays on arrival, so the
-  // window must be there as soon as the reader starts scrolling into the screen, never an empty stage)
-  const mainOpacity = useTransform(clock, [0.2, 0.4], [0, 1]);
-  const mainScale = useTransform(clock, [0.2, 0.55, 0.75], [0.35, 1.04, 1]);
-  const mainY = useTransform(clock, [0.2, 0.65], [-50, 0]);
-  const mainRotate = useTransform(clock, [0.2, 0.65], [8, 0]);
+  // Arriving from screen 4 the devices gather into the phone, then it drops and shrinks away on a fixed
+  // ~1 s timer. The window IS that phone becoming a caption window, so it grows on the same timer, right
+  // as the phone vanishes. The boxes after it are scrubbed by scroll, but held back so they can never
+  // overtake the phone either.
+  const [fromPhone] = useState(handoff);
+  const since = useSinceMount(fromPhone && !reduce);
+  const scrollClock = useSceneClock(SCENE_LANG, SCENE_SECONDS[SCENE_LANG]);
+  const clock = useHandoffClock(scrollClock, since);
+  const windowClock = fromPhone && !reduce ? since : scrollClock;
+  // the window grows out of the spot where the phone vanished (it dropped 70 px, tilted 10°)
+  const w0 = PHONE_GONE - 0.1;
+  const mainOpacity = useTransform(windowClock, [w0, w0 + 0.2], [0, 1]);
+  const mainScale = useTransform(windowClock, [w0, w0 + 0.35, w0 + 0.55], [0.35, 1.04, 1]);
+  const mainY = useTransform(windowClock, [w0, w0 + 0.45], [70, 0]);
+  const mainRotate = useTransform(windowClock, [w0, w0 + 0.45], [10, 0]);
   const land = layout === 'land';
   const W = land ? LAYOUTS.land.w : LAYOUTS.port.w;
   const H = land ? LAYOUTS.land.h : LAYOUTS.port.h;
@@ -1936,11 +2014,13 @@ function TranslationBurst({ layout }: { layout: 'land' | 'port' }) {
  * The supported-language list, rolling the full height of the screen on the right. It sits in front of
  * the caption boxes, and turns see-through where it would run behind the headline and buttons.
  */
-function LanguageRail() {
+function LanguageRail({ handoff }: { handoff: boolean }) {
   const reduce = useReducedMotion() ?? false;
-  const clock = useSceneClock(SCENE_LANG, SCENE_SECONDS[SCENE_LANG]);
-  const railOpacity = useTransform(clock, [0.3, 0.9], [0, 1]);
-  const railX = useTransform(clock, [0.3, 0.9], [40, 0]);
+  const [fromPhone] = useState(handoff);
+  const clock = useHandoffClock(useSceneClock(SCENE_LANG, SCENE_SECONDS[SCENE_LANG]), useSinceMount(fromPhone && !reduce));
+  // slides in with the boxes, once the phone has gone and the window is in place
+  const railOpacity = useTransform(clock, [PHONE_GONE + 0.25, PHONE_GONE + 0.85], [0, 1]);
+  const railX = useTransform(clock, [PHONE_GONE + 0.25, PHONE_GONE + 0.85], [40, 0]);
   const list = [...CAPTION_LANGS, ...CAPTION_LANGS]; // doubled for a seamless loop
   return (
     <motion.div
@@ -2045,13 +2125,16 @@ function MrMessage({ m, i, p, t }: { m: (typeof MR_MESSAGES)[number]; i: number;
 }
 
 function SceneMrOneHook() {
+  const instant = useStoryInstant();
   const reduce = useReducedMotion() ?? false;
   const k = reduce ? 0.3 : 1;
   const p = useSceneProgress(SCENE_MR);
   const { t } = useTimeline(MR_SECONDS);
   const [pay0, pay1] = t(1.4, 1.9);
   const payloadOpacity = useTransform(p, [pay0, pay1], [0, 1]);
-  const [rep0, rep1] = t(2.6, 3.1);
+  // the reply follows the payload straight away (it used to wait until 2.6 s, leaving a dead gap), and
+  // lands before the pink brush stroke behind the screen has finished its sweep
+  const [rep0, rep1] = t(1.7, 2.2);
   const replyOpacity = useTransform(p, [rep0, rep1], [0, 1]);
   const replyY = useTransform(p, [rep0, rep1], [14, 0]);
   const picked = MR_MESSAGES.filter((m) => m.pick);
@@ -2115,7 +2198,8 @@ function SceneMrOneHook() {
             ))}
           </div>
           <div className="relative z-[1] flex flex-col items-center gap-3">
-            <AlienScanner size={108} hideTooltips />
+            {/* shown finished (revisit / scrolling up): the ring is already there, no pop-in */}
+            <AlienScanner size={108} hideTooltips settled={instant} />
             <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-black/40">Mr OneHook</p>
           </div>
         </div>
@@ -2276,7 +2360,8 @@ function MascotPeeks() {
 function PinkStrokes() {
   const p = useSceneProgress(SCENE_MR);
   const { t } = useTimeline(MR_SECONDS);
-  const [w0, w1] = t(0, 1.8);
+  // sweeps the whole time the story plays out, finishing just after Mr OneHook's reply lands (2.2 s)
+  const [w0, w1] = t(0, 2.4);
   const revealWidth = useTransform(p, [w0, w1], [0, 1600]);
   // One line: it draws in from off-screen left, sweeps across and leaves past the right edge — then
   // simply stays there, still.
@@ -2328,21 +2413,199 @@ function PinkStrokes() {
 
 /** Scene indexes of the screens that drive their own choreography from scroll. */
 const SCENE_SEALED = 6;
-const SCENE_FREE = 7;
 
-/** Photo, video, voice note, file — each gets stamped with the same lock, scrubbed by scroll. */
+/**
+ * Screen 7's second wave: once the four memories are sealed, more of the messenger loads in the
+ * background around them. Every tile is a real capability (see the file header): reactions are stored
+ * as ciphertext, calls carry the 4-emoji safety code, screen sharing needs the other person to accept,
+ * disappearing messages expire on the server, deletes fan out to both phones, and read receipts /
+ * typing / last seen are privacy settings. Those last ones are controls, not encryption, so they get
+ * a switch badge instead of a lock.
+ */
+type Feature = { Icon: typeof ImageIcon; title: string; sub: string; badge: 'lock' | 'switch' };
+const SEALED_FEATURES: Feature[] = [
+  { Icon: Phone, title: 'Voice calls', sub: 'Encrypted end to end', badge: 'lock' },
+  { Icon: SmilePlus, title: 'Reactions', sub: 'Even the emoji is sealed', badge: 'lock' },
+  { Icon: Video, title: 'Video calls', sub: 'Face to face, sealed', badge: 'lock' },
+  { Icon: Timer, title: 'Disappearing', sub: 'Gone when the timer ends', badge: 'lock' },
+  { Icon: Reply, title: 'Replies', sub: 'Quote any message', badge: 'lock' },
+  { Icon: ScreenShare, title: 'Screen sharing', sub: 'Only if they accept', badge: 'lock' },
+  { Icon: ShieldCheck, title: 'Safety code', sub: '4 emoji verify every call', badge: 'lock' },
+  { Icon: Trash2, title: 'Delete for both', sub: 'Gone from both phones', badge: 'switch' },
+  { Icon: CheckCheck, title: 'Read receipts', sub: 'On or off, your call', badge: 'switch' },
+  { Icon: MessageCircleMore, title: 'Typing & last seen', sub: 'Show it, or don’t', badge: 'switch' },
+];
+/** The four memories finish sealing at 1.8 s; the background starts loading just after. */
+const FEATURES_FROM = 1.95;
+const FEATURE_STAGGER = 0.14;
+/** Side-column geometry (canvas px, before FitBox scaling). */
+const FEATURE_W = 136;
+const FEATURE_GAP = 24;
+/** Where the side tiles sit, in load order: inner columns first, alternating sides, top to bottom. */
+const FEATURE_SPOTS: { side: 'left' | 'right'; col: 0 | 1; top: string }[] = [
+  { side: 'left', col: 0, top: '14%' },
+  { side: 'right', col: 0, top: '14%' },
+  { side: 'left', col: 0, top: '50%' },
+  { side: 'right', col: 0, top: '50%' },
+  { side: 'left', col: 0, top: '86%' },
+  { side: 'right', col: 0, top: '86%' },
+  { side: 'left', col: 1, top: '30%' },
+  { side: 'right', col: 1, top: '30%' },
+  { side: 'left', col: 1, top: '70%' },
+  { side: 'right', col: 1, top: '70%' },
+];
+
+/**
+ * How many side columns fit beside the 420 px grid: 2 on wide screens, 1 on laptops/tablets, 0 on
+ * phones (the tiles become a row of chips under the grid). Read from the window width only, so the
+ * choice never feeds back into FitBox's scaling.
+ */
+function featureColumns(): 0 | 1 | 2 {
+  if (typeof window === 'undefined') return 2;
+  const grid = Math.min(420, window.innerWidth - 48);
+  const side = (window.innerWidth - grid) / 2 - 40; // keep clear of the story thread on the right
+  return side >= 2 * (FEATURE_W + FEATURE_GAP) ? 2 : side >= FEATURE_W + FEATURE_GAP ? 1 : 0;
+}
+
+function useFeatureColumns() {
+  const [cols, setCols] = useState(featureColumns);
+  useEffect(() => {
+    const onResize = () => setCols(featureColumns());
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return cols;
+}
+
+/** Photo, video, voice note, file — each gets stamped with the same lock, scrubbed by scroll. Then
+ *  more of the messenger loads in the background around them. */
 function SceneSealed() {
   const p = useSceneProgress(SCENE_SEALED);
-  const { t } = useTimeline(1.9);
+  const { t } = useTimeline(SCENE_SECONDS[SCENE_SEALED]);
+  const cols = useFeatureColumns();
   const items = [ImageIcon, Video, Mic, FileText];
+  const spots = FEATURE_SPOTS.filter((s) => s.col < cols);
   return (
-    <div className="grid w-full max-w-[420px] grid-cols-2 gap-4">
-      {items.map((Icon, i) => (
-        <Fragment key={i}>
-          <SealedItem Icon={Icon} i={i} p={p} t={t} />
-        </Fragment>
-      ))}
+    <div className="flex w-full flex-col items-center">
+      <div className="relative w-full max-w-[420px]">
+        {/* the background wave, beside the grid (behind it in paint order) */}
+        {spots.map((spot, k) => (
+          <Fragment key={k}>
+            <FeatureTile f={SEALED_FEATURES[k]} k={k} p={p} t={t} spot={spot} />
+          </Fragment>
+        ))}
+        <div className="relative z-10 grid w-full grid-cols-2 gap-4">
+          {items.map((Icon, i) => (
+            <Fragment key={i}>
+              <SealedItem Icon={Icon} i={i} p={p} t={t} />
+            </Fragment>
+          ))}
+        </div>
+      </div>
+      {/* phones: no room beside the grid, so the same wave loads as chips under it (space reserved,
+          so nothing moves when they appear) */}
+      {cols === 0 && (
+        <div className="mt-4 flex max-w-[420px] flex-wrap justify-center gap-1.5">
+          {SEALED_FEATURES.map((f, k) => (
+            <Fragment key={f.title}>
+              <FeatureChip f={f} k={k} p={p} t={t} />
+            </Fragment>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** One background tile's load-in: it fades up, then its badge stamps on (scrubbed by scroll). */
+function useFeatureIn(k: number, p: MotionValue<number>, t: (start: number, end: number) => [number, number]) {
+  const s = FEATURES_FROM + k * FEATURE_STAGGER;
+  const [a0, a1] = t(s, s + 0.35);
+  const [b0, b1] = t(s + 0.2, s + 0.55);
+  const mid = b0 + (b1 - b0) * 0.65;
+  return {
+    opacity: useTransform(p, [a0, a1], [0, 1]),
+    y: useTransform(p, [a0, a1], [10, 0]),
+    scale: useTransform(p, [a0, a1], [0.9, 1]),
+    badgeScale: useTransform(p, [b0, mid, b1], [1.8, 0.92, 1]),
+    badgeOpacity: useTransform(p, [b0, b0 + (b1 - b0) * 0.4], [0, 1]),
+  };
+}
+
+function FeatureBadge({ kind, scale, opacity, small = false }: { kind: Feature['badge']; scale: MotionValue<number>; opacity: MotionValue<number>; small?: boolean }) {
+  return kind === 'lock' ? (
+    <motion.span
+      style={{ scale, opacity }}
+      className={`grid shrink-0 place-items-center rounded-full bg-accent text-white shadow-sm ${small ? 'h-3.5 w-3.5' : 'h-5 w-5'}`}
+    >
+      <Lock className={small ? 'h-2 w-2' : 'h-2.5 w-2.5'} />
+    </motion.span>
+  ) : (
+    // a tiny switch, on: "your choice", not encryption
+    <motion.span
+      style={{ scale, opacity }}
+      className={`relative shrink-0 rounded-full bg-accent ${small ? 'h-2.5 w-[18px]' : 'h-3.5 w-6'}`}
+    >
+      <span className={`absolute top-1/2 -translate-y-1/2 rounded-full bg-white ${small ? 'right-[2px] h-1.5 w-1.5' : 'right-[2px] h-2.5 w-2.5'}`} />
+    </motion.span>
+  );
+}
+
+function FeatureTile({
+  f,
+  k,
+  p,
+  t,
+  spot,
+}: {
+  f: Feature;
+  k: number;
+  p: MotionValue<number>;
+  t: (start: number, end: number) => [number, number];
+  spot: (typeof FEATURE_SPOTS)[number];
+}) {
+  const a = useFeatureIn(k, p, t);
+  // background, not foreground: the outer column sits a step further back
+  const opacity = useTransform(a.opacity, (o) => o * (spot.col === 0 ? 0.92 : 0.7));
+  const offset = `calc(100% + ${FEATURE_GAP + spot.col * (FEATURE_W + FEATURE_GAP)}px)`;
+  const { Icon } = f;
+  return (
+    <motion.div
+      className="absolute -translate-y-1/2 rounded-2xl border border-black/[0.07] bg-white/90 p-3 text-left shadow-[0_16px_36px_-28px_rgba(10,11,16,0.5)]"
+      style={{
+        width: FEATURE_W,
+        top: spot.top,
+        ...(spot.side === 'left' ? { right: offset } : { left: offset }),
+        opacity,
+        y: a.y,
+        scale: a.scale,
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <span className="grid h-8 w-8 place-items-center rounded-full bg-black/[0.04]">
+          <Icon className="h-4 w-4 text-accent/70" />
+        </span>
+        <FeatureBadge kind={f.badge} scale={a.badgeScale} opacity={a.badgeOpacity} />
+      </div>
+      <p className="mt-2 text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-text/80">{f.title}</p>
+      <p className="mt-0.5 text-[9.5px] leading-snug text-black/45">{f.sub}</p>
+    </motion.div>
+  );
+}
+
+function FeatureChip({ f, k, p, t }: { f: Feature; k: number; p: MotionValue<number>; t: (start: number, end: number) => [number, number] }) {
+  const a = useFeatureIn(k, p, t);
+  const { Icon } = f;
+  return (
+    <motion.span
+      className="flex items-center gap-1.5 rounded-full border border-black/[0.07] bg-white/90 py-1 pl-2 pr-1.5 text-[10px] font-semibold text-text/75"
+      style={{ opacity: a.opacity, y: a.y, scale: a.scale }}
+    >
+      <Icon className="h-3 w-3 text-accent/70" />
+      {f.title}
+      <FeatureBadge kind={f.badge} scale={a.badgeScale} opacity={a.badgeOpacity} small />
+    </motion.span>
   );
 }
 
@@ -2383,12 +2646,13 @@ function SealedItem({
   );
 }
 
-/** A heart that fills up — free forever, kept alive by people who care. The fill follows scroll. */
+/**
+ * A heart that fills up — free forever, kept alive by people who care. It fills the moment it
+ * arrives: the finale dissolves the heart into the big words within ~1.8 s, so a scroll-driven fill
+ * was never seen.
+ */
 function SceneFree() {
   const reduce = useReducedMotion();
-  const p = useSceneProgress(SCENE_FREE);
-  // was: a 3.2 s fill to 30 with a small settle (times 0 / 0.7 / 0.85 / 1)
-  const fillY = useTransform(p, [0, 0.7, 0.85, 1], [92, 30, 38, 30]);
   return (
     <div className="relative grid h-72 w-72 place-items-center">
       <svg viewBox="0 0 100 92" className="h-64 w-64" aria-hidden="true">
@@ -2405,7 +2669,16 @@ function SceneFree() {
           strokeWidth="1.5"
         />
         <g clipPath="url(#msg-heart)">
-          <motion.rect x="0" width="100" height="92" fill={PINK} style={{ y: fillY }} />
+          <motion.rect
+            x="0"
+            width="100"
+            height="92"
+            fill={PINK}
+            initial={{ y: reduce ? 30 : 92 }}
+            // full while the heart is fully visible (the finale holds it ~0.7 s, then dissolves it)
+            animate={{ y: reduce ? 30 : [92, 30, 38, 30] }}
+            transition={reduce ? { duration: 0 } : { duration: 0.85, times: [0, 0.7, 0.85, 1], ease: 'easeOut' }}
+          />
         </g>
       </svg>
       {/* ambient: hearts keep floating up on their own (not part of the story's timeline) */}
@@ -2518,7 +2791,7 @@ const SCENES: Scene[] = [
   {
     title: <>Every memory, <Accent>sealed</Accent>.</>,
     plain: 'Every memory, sealed.',
-    line: 'Photos, videos, voice notes, files.',
+    line: 'Photos, videos, voice notes, files — and calls, reactions, the lot.',
     art: () => <SceneSealed />,
   },
   {
@@ -2530,15 +2803,23 @@ const SCENES: Scene[] = [
 ];
 
 
-/** How long each screen's choreography runs (s). Screens map these timings onto their scroll band. */
-const SCENE_SECONDS = [3.9, 8.9, 6.1, 5.4, 2.6, 3.2, 1.9, 1.8];
-/** Scroll length per screen: proportional to its choreography, within limits so short screens still
- *  get a comfortable stretch of scroll and the longest doesn't take forever. */
-const STORY_BANDS = makeBands(SCENE_SECONDS.map((s) => Math.min(6, Math.max(2.4, s))));
+/**
+ * Each screen's choreography as AUTHORED, in seconds: every beat is written against this (e.g. screen
+ * 2's checkpoints at 2.6 / 4.3 / 6.0 / 7.9 s of 8.9 s). It is the timeline beats are placed on, not
+ * how long the screen plays — see SCENE_PLAY_SECONDS.
+ */
+const SCENE_SECONDS = [3.9, 8.9, 6.1, 5.4, 3.0, 3.2, 3.9, 1.8];
+/** Every screen's animation plays for the same time; each screen's authored timeline is scaled to fit,
+ *  so its beats keep their order and spacing (screen 2 runs a little faster, screen 8 slower). */
+const SCREEN_PLAY_SECONDS = 5;
+const SCENE_PLAY_SECONDS = SCENE_SECONDS.map(() => SCREEN_PLAY_SECONDS);
+/** Every screen owns exactly one eighth of story progress, independent of choreography complexity. */
+const STORY_BANDS = makeEqualBands(SCENES.length);
 
-/** A thin bar under the counter showing how far through the current screen the reader has scrolled. */
+/** A thin bar under the counter on the screen's own clock: its animation fills the first ~70%, the rest
+ *  fills while everything stays on screen to look at. */
 function SceneProgress({ index }: { index: number }) {
-  const p = useSceneProgress(index);
+  const p = useSceneLine(index);
   return (
     <div
       className="mx-auto mt-2 h-[3px] w-28 overflow-hidden rounded-full bg-black/10"
@@ -2557,33 +2838,81 @@ export function Messenger() {
   const navigate = useNavigate();
   const reduce = useReducedMotion();
   const storyRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: storyRef, offset: ['start start', 'end end'] });
+  const headerH = useHeaderHeight();
+  // Progress starts at the initial, below-header stage position—not after the sticky header has
+  // scrolled past—and finishes exactly where the bottom of the track meets the viewport bottom.
+  const { scrollYProgress } = useScroll({ target: storyRef, offset: [`start ${headerH}px`, 'end end'] });
 
   const n = SCENES.length;
   // The page always scrolls natively: nothing intercepts the wheel, trackpad, touch, keyboard or
-  // scrollbar. The story is scrubbed by scroll instead (see storyTimeline.tsx): a visual progress
-  // follows the scroll position, rate-limited so even a hard flick plays every screen in order.
+  // scrollbar. Scroll picks the screen; each screen's animation plays once, for the same time on every screen, the first
+  // time it arrives going forward. Going back, or returning to a screen that has played, just switches
+  // to its finished state (see storyTimeline.tsx).
   //
-  // A hard flick can't fly past the story either: the closer and footer below it only exist once
-  // the last screen is on stage (see `storyDone`), so until then the page ends at the bottom of the
-  // track and the browser stops there by itself.
-  const visual = useVisualProgress(scrollYProgress, STORY_BANDS, Boolean(reduce));
-  const [index, setIndex] = useState(() => bandIndex(STORY_BANDS, scrollYProgress.get()));
-  useMotionValueEvent(visual, 'change', (p) => {
-    const i = bandIndex(STORY_BANDS, p);
-    setIndex((prev) => (prev === i ? prev : i));
+  // The footer exists only while the LAST screen is on stage. The stage can trail the scroll
+  // (it walks screen by screen), so without this the page could scroll on past the track into the
+  // footer while the stage still shows screen 3. Until screen 8 is up, the page simply ends at the
+  // bottom of the track. Hiding it again is safe: whenever an earlier screen is on stage the reader is
+  // inside the track, above it, so nothing in view moves.
+  // how long a screen you've already seen stays up follows your scroll speed (see storyTimeline.tsx)
+  const scrollSpeed = useScrollSpeed(!reduce);
+  const { index, instant, play, line } = useStoryPlayback(scrollYProgress, STORY_BANDS, SCENE_PLAY_SECONDS, Boolean(reduce), scrollSpeed);
+  // the footer only once the last screen is actually on stage (it can still be finishing an earlier one)
+  // ...and only once screen 8 has had its time (its animation done, then SHOW_MIN_MS on the finished
+  // screen). Otherwise a reader still scrolling when it arrives is carried straight past it into the
+  // footer, and screen 8 is cut off half-shown.
+  const [endingOpen, setEndingOpen] = useState(false);
+  const atEnd = useRef(isStoryComplete(scrollYProgress.get()));
+  const lastReady = useRef(false);
+  useMotionValueEvent(scrollYProgress, 'change', (p) => {
+    atEnd.current = isStoryComplete(p);
+    if (atEnd.current && index === n - 1 && lastReady.current) setEndingOpen(true);
   });
-  const threadHeight = useTransform(visual, (v) => `${Math.min(1, Math.max(0, v)) * 100}%`);
-  const story = useMemo(() => ({ progress: visual, bands: STORY_BANDS, reduce: Boolean(reduce) }), [visual, reduce]);
+  useEffect(() => {
+    lastReady.current = false;
+    if (index < n - 1) {
+      setEndingOpen(false);
+      return;
+    }
+    const last = play[n - 1];
+    let timer = 0;
+    const arm = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        lastReady.current = true;
+        if (atEnd.current) setEndingOpen(true);
+      }, SHOW_MIN_MS);
+    };
+    const off = last.on('change', (v) => v >= 1 && arm());
+    if (last.get() >= 1) arm();
+    return () => {
+      off();
+      window.clearTimeout(timer);
+    };
+  }, [index, n, play]);
+  const storyDone = endingOpen && index === n - 1;
+  // The page can't run ahead of the stage: at most to the end of the next screen's section while a
+  // screen plays (the cap moves on as each screen comes up; none on the last screen).
+  useScrollLimit({
+    trackRef: storyRef,
+    headerHeight: headerH,
+    maxProgress: scrollLimit(STORY_BANDS, index),
+    enabled: !reduce,
+  });
+  const threadHeight = useTransform(scrollYProgress, (v) => `${Math.min(1, Math.max(0, v)) * 100}%`);
+  // the screen we came from (updated after render, so during a render it is the previous screen)
+  const prevIndex = useRef(index);
+  useEffect(() => {
+    prevIndex.current = index;
+  }, [index]);
+  const story = useMemo(
+    () => ({ scroll: scrollYProgress, play, line, bands: STORY_BANDS, reduce: Boolean(reduce), instant }),
+    [scrollYProgress, play, line, reduce, instant]
+  );
 
-  // The closer + footer exist only once the story's last screen is on stage (see the scroll comment).
-  // (With reduced motion the scene simply matches the scroll position, so nothing needs gating.)
-  const storyDone = index === n - 1 || Boolean(reduce);
   const scene = SCENES[index];
-  const headerH = useHeaderHeight();
-  const ending = useFullScreenEnding();
   // Last screen ("Free forever"): the heart blurs and fades into the background, and the words take
-  // over the whole stage — large and centred — with the buttons staying in their usual place.
+  // over the whole stage—large and centred—with the buttons staying in their usual place.
   const finale = index === n - 1;
 
 
@@ -2620,8 +2949,8 @@ export function Messenger() {
           ))}
         </section>
 
-        {/* One tall scroll track; the stage inside stays pinned while the story plays. */}
-        <div ref={storyRef} className="relative" style={{ height: `${n * 95}vh` }}>
+        {/* One stable large-viewport of scroll per screen, plus the sticky stage itself. */}
+        <div ref={storyRef} className="relative" style={{ height: storyTrackHeight(n, headerH) }}>
           <div
             // Stable on phones: the stage's background covers the whole screen even with the browser's
             // toolbar collapsed (100lvh), but everything in it is laid out for the screen WITH the
@@ -2644,7 +2973,7 @@ export function Messenger() {
             <AnimatePresence>
               {index === 4 && (
                 <Fragment key="rail">
-                  <LanguageRail />
+                  <LanguageRail handoff={prevIndex.current === SCENE_SYNC && !instant} />
                 </Fragment>
               )}
             </AnimatePresence>
@@ -2835,19 +3164,10 @@ export function Messenger() {
             </div>
           </div>
         </div>
-        {/* the heartbeat closer (shared with the Science page) + the footer below it fill exactly one
-            screen under the header, so the last scroll lands on a clean, full-screen ending */}
-        <div className="flex flex-col" style={{ minHeight: ending.minHeight, display: storyDone ? undefined : 'none' }}>
-          <Finale
-            body="Every message locked end to end, every memory kept safe, on every screen you own — free, forever. All so the two of you can just talk."
-            secondary="invite"
-            fill
-            lite={lite}
-          />
-        </div>
       </main>
 
-      <div ref={ending.footerRef} style={storyDone ? undefined : { display: 'none' }}>
+      {/* the footer follows the last screen directly — only once screen 8 is on stage */}
+      <div style={storyDone ? undefined : { display: 'none' }}>
         <SiteFooter />
       </div>
     </div>
