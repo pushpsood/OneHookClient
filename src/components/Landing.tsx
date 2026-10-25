@@ -174,8 +174,8 @@ function Accent({ children, tone = 'silver' }: { children: React.ReactNode; tone
  * "Every hook starts with a sentence" — couple case studies
  *
  * Two categories, shown as two rows: couples who MET on OneHook, and couples who JOINED as a
- * couple. Within each row, one couple is still on OneHook and one has moved on together — so every
- * card always shows its current status WITHOUT hovering; hovering/focusing reveals the fuller story.
+ * couple. Every couple is still on OneHook (it launched in August 2026, so every story is weeks old),
+ * and each card shows that status WITHOUT hovering; hovering/focusing reveals the fuller story.
  *
  * Every couple uses an anonymous, privacy-protecting illustration (two faceless silhouettes sharing
  * a heart, with a small lock badge) rather than a photo — real couples, identities protected while
@@ -209,6 +209,7 @@ interface CoupleStory {
   story: string;
 }
 
+// OneHook launched in August 2026, so every timeline here fits inside the weeks since then.
 const COUPLE_STORIES: readonly CoupleStory[] = [
   // Row 1 — Met on OneHook
   {
@@ -219,17 +220,17 @@ const COUPLE_STORIES: readonly CoupleStory[] = [
     names: 'Aisha & Rohan',
     location: 'New Delhi',
     story:
-      'One honest question about chai became a three-hour call the same night. Two years on they still argue about the perfect cutting chai — still here, still talking.',
+      'One honest question about chai became a three-hour call the same night in August. Ten weeks on, they still argue about the perfect cutting chai, and still talk every night.',
   },
   {
     id: 'noah-priya',
     origin: 'met',
-    presence: 'off',
+    presence: 'on',
     opener: 'If we skipped the small talk, what should I actually ask you?',
     names: 'Noah & Priya',
     location: 'Faridabad',
     story:
-      'One match was all it took. Three months in, they deleted the app together — the happiest reason to leave.',
+      'They matched in their first week on OneHook and never reopened discovery. Two months in, it is still just the two of them, one conversation that keeps going.',
   },
   // Row 2 — Joined as a couple
   {
@@ -240,7 +241,7 @@ const COUPLE_STORIES: readonly CoupleStory[] = [
     names: 'Dev & Sara',
     location: 'Gurugram',
     story:
-      'Already together when they joined, they made OneHook their own private, encrypted corner — now the openers are their weekly date-night game. Loser picks dinner.',
+      'Already together when they joined in August, they made OneHook their private, encrypted corner. The openers are now their weekly date-night game. Loser picks dinner.',
   },
   {
     id: 'meera-kabir',
@@ -250,7 +251,7 @@ const COUPLE_STORIES: readonly CoupleStory[] = [
     names: 'Meera & Kabir',
     location: 'Noida',
     story:
-      'They joined already together and kept OneHook as their private messenger — midnight openers, two jobs and one move later, they still trade them, and still answer honestly.',
+      'They joined together in September and kept OneHook as their private messenger. Six weeks of midnight openers in, they still trade one every night, and still answer honestly.',
   },
 ] as const;
 
@@ -382,7 +383,9 @@ function ExpandingCouplePanel({
       initial={false}
       animate={{ flexGrow: active ? 5 : 1 }}
       transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 200, damping: 28 }}
-      className="group relative h-full min-w-0 basis-0 overflow-hidden rounded-[1.5rem] border border-[#E6E9EE]/15 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#ff8fc7]"
+      // Phones: only the spotlighted couple shows, full width (four slivers were unreadable); the dots
+      // below switch couples. md+: the accordion, where the others shrink to slim panels.
+      className={`group relative h-full min-w-0 basis-0 overflow-hidden rounded-[1.5rem] border border-[#E6E9EE]/15 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#ff8fc7] ${active ? 'block' : 'hidden md:block'}`}
     >
       <StoryPortrait story={story} className="absolute inset-0 h-full w-full" />
       <div
@@ -422,10 +425,11 @@ function ExpandingCouplePanel({
               <span className="mb-1 flex items-center gap-1 text-[8px] font-black uppercase tracking-[0.14em]" style={{ color: '#ff8fc7' }}>
                 <Heart className="h-2.5 w-2.5 shrink-0" fill="currentColor" /> the line that started it
               </span>
-              <p className="line-clamp-2 text-sm font-light leading-snug text-white md:text-base">
+              <p className="line-clamp-3 text-lg font-light leading-snug text-white md:line-clamp-2 md:text-base">
                 &ldquo;{story.opener}&rdquo;
               </p>
-              <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-white/75 md:line-clamp-3 md:text-xs">
+              {/* the fuller story only where there is room; on phones the hook itself gets the space */}
+              <p className="mt-1.5 hidden text-xs leading-relaxed text-white/75 md:line-clamp-3 md:block">
                 {story.story}
               </p>
               <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -2237,16 +2241,29 @@ export function Landing() {
 
             {/* progress dots + a single CTA */}
             <div className="mt-5 flex flex-col items-center gap-4">
-              <div className="flex items-center gap-1.5" aria-hidden="true">
+              <div className="flex items-center gap-1" role="group" aria-label="Choose a couple">
                 {COUPLE_STORIES.map((s, i) => (
-                  <span
+                  <button
                     key={s.id}
-                    className="h-1.5 rounded-full transition-all duration-300"
-                    style={{
-                      width: spotlight === i ? 18 : 6,
-                      background: spotlight === i ? '#ff8fc7' : 'rgba(255,255,255,0.25)',
+                    type="button"
+                    aria-label={`Show ${s.names}`}
+                    aria-pressed={spotlight === i}
+                    onClick={() => {
+                      setSpotlight(i);
+                      setStoryPaused(true);
                     }}
-                  />
+                    {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'couple_story' })}
+                    // a comfortable tap target around the small visible dot
+                    className="grid h-6 place-items-center px-1"
+                  >
+                    <span
+                      className="block h-1.5 rounded-full transition-all duration-300"
+                      style={{
+                        width: spotlight === i ? 18 : 6,
+                        background: spotlight === i ? '#ff8fc7' : 'rgba(255,255,255,0.25)',
+                      }}
+                    />
+                  </button>
                 ))}
               </div>
               <button
