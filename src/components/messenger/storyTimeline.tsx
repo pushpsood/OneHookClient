@@ -14,8 +14,8 @@
  *
  * With reduced motion the visual progress simply equals the scroll progress (no catch-up motion).
  */
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
-import { useMotionValue, useTransform, type MotionValue } from 'motion/react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMotionValue, useMotionValueEvent, useTransform, type MotionValue } from 'motion/react';
 
 /** Fraction of each band spent entering, and resting on the finished state. */
 const ENTER = 0.1;
@@ -122,4 +122,21 @@ export function useTimeline(totalSeconds: number) {
     }),
     [totalSeconds]
   );
+}
+
+/**
+ * How many of `marks` (sorted progress values) `p` has passed. Re-renders only when that count
+ * changes, so discrete story beats (a message arriving, a checkpoint lighting up) follow scroll in
+ * both directions without re-rendering every frame.
+ */
+export function usePassed(p: MotionValue<number>, marks: readonly number[]) {
+  const count = (v: number) => marks.reduce((n, m) => (v >= m ? n + 1 : n), 0);
+  const [passed, setPassed] = useState(() => count(p.get()));
+  useMotionValueEvent(p, 'change', (v) => {
+    const c = count(v);
+    setPassed((prev) => (prev === c ? prev : c));
+  });
+  // a new MotionValue (e.g. reduced motion switching) must be read once immediately
+  useEffect(() => setPassed(count(p.get())), [p]); // eslint-disable-line react-hooks/exhaustive-deps
+  return passed;
 }

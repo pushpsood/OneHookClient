@@ -33,7 +33,7 @@ import { AlienScanner } from '../mascot';
 import { QRCodeSVG } from 'qrcode.react';
 import { ManifestoPhone } from '../Landing';
 import { Finale, ProgressBar, useFullScreenEnding } from '../science/Science';
-import { StoryTimelineProvider, bandIndex, makeBands, useSceneProgress, useTimeline, useVisualProgress } from './storyTimeline';
+import { StoryTimelineProvider, bandIndex, makeBands, usePassed, useSceneProgress, useTimeline, useVisualProgress } from './storyTimeline';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { APP_DOWNLOAD_URL } from '../../config/membership.config';
@@ -981,6 +981,9 @@ const NEW_MESSAGE = 'On my way 🚗';
 const NEW_AT = 4.6; // s after arriving on screen 4
 const ISHA_WITH_NEW = [...ISHA_SENDS, { me: false, t: NEW_MESSAGE }] as const;
 const ROHAN_RECEIVES = [{ me: false, t: 'See you at 8? 💛' }] as const;
+const NOTHING_YET: readonly { me: boolean; t: string }[] = [];
+/** Scene index of the encryption journey (screen 2), scrubbed by scroll. */
+const SCENE_JOURNEY = 1;
 
 const PW = 230; // phone width in canvas px
 const PH = 473; // phone height (230 wide, 9:19.5 screen + bezel)
@@ -1142,18 +1145,19 @@ function PhonesStage({ index }: { index: number }) {
     return () => window.clearTimeout(id);
   }, [syncing, k]);
 
-  // once Isha has sent the message it stays in her thread
-  const [sent, setSent] = useState(false);
-  const [stage, setStage] = useState(0);
-  useEffect(() => {
-    if (index >= 1) setSent(true);
-    if (!journey) {
-      setStage(0);
-      return;
-    }
-    const timers = JOURNEY_TIMES.map((t, i) => window.setTimeout(() => setStage(i + 1), t * k));
-    return () => timers.forEach((id) => window.clearTimeout(id));
-  }, [index, journey, k]);
+  // Screen 2 (the journey) is scrubbed by scroll: its old second-based beats become points in the
+  // screen's scroll band, so they play forward and rewind with the reader. The beats: Isha sends
+  // (SEND_DELAY), the route fades in (1.4 s), the message reaches each checkpoint and finally Rohan
+  // (JOURNEY_TIMES).
+  const journeyP = useSceneProgress(SCENE_JOURNEY);
+  const J = SCENE_SECONDS[SCENE_JOURNEY];
+  const sendPassed = usePassed(journeyP, [SEND_DELAY / 1000 / J]);
+  const stagePassed = usePassed(journeyP, JOURNEY_TIMES.map((ms) => ms / 1000 / J));
+  const stage = journey ? stagePassed : 0;
+  // once past screen 2 the message simply stays in her thread
+  const sent = index > SCENE_JOURNEY || (journey && sendPassed > 0);
+  const rohanGot = journey && stagePassed >= JOURNEY_TIMES.length;
+  const routeOpacity = useTransform(journeyP, [1.4 / J, 1.9 / J], [0, 1]);
 
   const stops: Stop[] = ['attackers', 'database', 'family'];
   const stateOf = (i: number) => (stage === i + 1 ? 'active' : stage > i + 1 ? 'done' : 'idle') as 'idle' | 'active' | 'done';
@@ -1193,8 +1197,7 @@ function PhonesStage({ index }: { index: number }) {
                 <motion.div
                   key="journey"
                   className="absolute inset-0"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1, transition: { delay: 1.4 * k, duration: 0.5 } }}
+                  style={{ opacity: routeOpacity }}
                   exit={{ opacity: 0, transition: { duration: 0.3 } }}
                 >
                   {layout === 'land' ? (
@@ -1443,7 +1446,7 @@ function PhonesStage({ index }: { index: number }) {
                       reduce
                       initialTab="messages"
                       liveThread={sent ? ISHA_SENDS : ISHA_HELLO}
-                      liveDelay={sent ? SEND_DELAY * k : reduce ? 300 : 800}
+                      liveDelay={sent ? 0 : reduce ? 300 : 800}
                       contactName="Rohan"
                       contactPhoto="/media/profile-demo/profile-3.jpg"
                       className="relative isolate"
@@ -1542,8 +1545,8 @@ function PhonesStage({ index }: { index: number }) {
                     progress={still}
                     reduce
                     initialTab="messages"
-                    liveThread={ROHAN_RECEIVES}
-                    liveDelay={JOURNEY_TIMES[3] * k}
+                    liveThread={rohanGot ? ROHAN_RECEIVES : NOTHING_YET}
+                    liveDelay={0}
                     className="relative isolate"
                   />
                   <span aria-hidden="true" className="absolute -bottom-8 left-1/2 h-6 w-[78%] -translate-x-1/2 rounded-[50%] bg-black/25 blur-xl" />
