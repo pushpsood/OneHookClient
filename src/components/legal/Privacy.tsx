@@ -9,6 +9,8 @@ import { ROUTE_SEO } from '../../config/seo-routes';
 
 /** Anchor the apply-with-video consent checkbox links to (onehook.club/privacy#admissions-assist). */
 export const ADMISSIONS_ASSIST_ANCHOR = 'admissions-assist';
+/** Linked from the in-app report flow and docs/MODERATION.md (`/privacy#reporting-safety`). */
+export const REPORTING_SAFETY_ANCHOR = 'reporting-safety';
 
 export function Privacy() {
   const location = useLocation();
@@ -41,7 +43,7 @@ export function Privacy() {
             Privacy Policy
           </h1>
           <p className="text-lg opacity-60">
-            Last updated: October 23, 2026
+            Last updated: October 26, 2026
             <br />
             Effective from: May 23, 2026
           </p>
@@ -248,7 +250,10 @@ export function Privacy() {
                   Admissions Assist is a model that learns from our team&rsquo;s past review
                   decisions to help reviewers work through applications. It is trained on transcript
                   text, the quality measurements above, reviewers&rsquo; decisions, and whether an
-                  invite was later used. It is not trained on the images in your video. A person on
+                  invite was later used. If you join, it also learns from simple conduct outcomes
+                  from your first 90 days: whether several members blocked you and whether a report
+                  about you was upheld by our safety team (see section 5). It never sees the content
+                  of reports or chats. It is not trained on the images in your video. A person on
                   our team makes every decision; Admissions Assist does not approve or reject anyone
                   on its own.
                 </p>
@@ -316,9 +321,108 @@ export function Privacy() {
             </div>
           </div>
 
+          {/* Reporting & Safety (linked from the in-app report flow) */}
+          <div id={REPORTING_SAFETY_ANCHOR} className="scroll-mt-28">
+            <h2 className="text-3xl font-serif italic mb-4">5. Reporting &amp; Safety</h2>
+            <p className="text-lg opacity-70 leading-relaxed">
+              You can report another member from a chat or their profile. This section explains what
+              a report contains, the optional chat copy you can attach, who sees it, what can happen
+              as a result, and how long we keep it.
+            </p>
+
+            <div className="bg-bg p-6 rounded-lg border border-border mt-6 space-y-4">
+              <div>
+                <h4 className="font-bold mb-2">What a report contains</h4>
+                <p className="opacity-70">
+                  The member you reported, the reason you chose, any description you write, the
+                  conversation it relates to, the time, and whether you also blocked them. A report is
+                  reviewed by people on our safety team.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Attaching a copy of your chat (optional)</h4>
+                <p className="opacity-70">
+                  Chats on OneHook are end-to-end encrypted, so we cannot read them. When you report
+                  someone from a chat, you can choose to share a copy with our safety team by ticking a
+                  box that is never pre-ticked; we only receive it if you tick it, and your report is
+                  handled the same way if you don&rsquo;t. Your device decrypts and sends only the last
+                  200 messages or the last 30 days of that one conversation, whichever is smaller:
+                  each message&rsquo;s text, time and whether you or the other member sent it. Photos,
+                  videos, voice notes and files are not included. You can preview exactly what will be
+                  sent before you submit. The copy is encrypted in transit and in storage, and a
+                  fingerprint of it lets us detect any change.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Who can see it</h4>
+                <p className="opacity-70">
+                  Only authorised members of our safety team. Reading an attached chat requires a
+                  separate permission from handling reports, and every time someone opens one it is
+                  recorded. We do not tell the reported member who reported them or that a chat was
+                  shared.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">How reports are prioritised</h4>
+                <p className="opacity-70">
+                  We use automated scoring to decide which reports to look at first, based on the
+                  seriousness of the reason, how many different members reported the same person and
+                  how recently, and how often a reporter&rsquo;s earlier reports were upheld. This only
+                  sets the order of the queue. A person on our team makes every decision.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">What can happen</h4>
+                <p className="opacity-70">
+                  Depending on what we find, we may dismiss the report, warn the member, limit their
+                  account, suspend it for a period, or ban it. A ban needs the agreement of two members
+                  of our team. A member whose account is limited, suspended or banned can appeal, and
+                  the appeal is decided by someone who did not take the original decision.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Reports about self-harm and about minors</h4>
+                <p className="opacity-70">
+                  If you tell us you are worried someone may harm themselves, we treat it as a request
+                  for support, not punishment, and show you support resources such as Tele-MANAS
+                  (14416, India, 24x7). Reports that someone may be under 18 go straight to our
+                  safety lead, and you cannot attach a chat to them.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">How long we keep it</h4>
+                <ul className="list-disc list-inside space-y-1 opacity-70">
+                  <li>
+                    An attached chat is deleted 180 days after the case is closed, unless we must keep
+                    it longer because of a legal obligation or legal proceedings.
+                  </li>
+                  <li>
+                    If you delete your account while a case you reported is still open, we keep the
+                    chat you chose to share until the case is resolved, then delete it on the same
+                    schedule, so that a safety case about someone else can be completed.
+                  </li>
+                  <li>
+                    Our record of a case keeps the reason, dates and outcome with pseudonymous
+                    identifiers, so we can recognise repeated abuse.
+                  </li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-bold mb-2">Why we can do this</h4>
+                <p className="opacity-70">
+                  We process reports and attached chats to keep members safe and to meet our legal
+                  obligations. You can ask for the information we hold about you, but we will not
+                  reveal who reported you or share an attached chat where that could put the person
+                  who reported you at risk. We may share information with law enforcement where the
+                  law requires it or to prevent imminent harm.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Data Security */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">5. Data Security & Encryption</h2>
+            <h2 className="text-3xl font-serif italic mb-4">6. Data Security & Encryption</h2>
             <div className="bg-accent/5 p-6 rounded-lg border border-accent/20 mt-4 space-y-4">
               <div>
                 <h4 className="font-bold mb-2">End-to-End Encryption (E2EE)</h4>
@@ -364,7 +468,7 @@ export function Privacy() {
 
           {/* Third-Party Sharing */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">6. We Do Not Share Your Data</h2>
+            <h2 className="text-3xl font-serif italic mb-4">7. We Do Not Share Your Data</h2>
             <div className="bg-red-50 p-6 rounded-lg border border-red-200 mt-4">
               <p className="font-bold text-red-900 mb-4">❌ OneHook Does NOT:</p>
               <ul className="list-disc list-inside space-y-2 text-red-800">
@@ -388,7 +492,7 @@ export function Privacy() {
               </li>
               <li>
                 <strong>Safety & Security:</strong> To prevent fraud, abuse, or to protect user
-                safety
+                safety, including with law enforcement to prevent imminent harm (see section 5)
               </li>
               <li>
                 <strong>Service Providers:</strong> Only with vendors who sign strict data
@@ -402,7 +506,7 @@ export function Privacy() {
 
           {/* International Transfers */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">7. Data International Transfers</h2>
+            <h2 className="text-3xl font-serif italic mb-4">8. Data International Transfers</h2>
             <p className="opacity-70 leading-relaxed">
               OneHook operates primarily in India. If you are outside India, your data
               will be transferred to and stored inside India. By using OneHook, you
@@ -418,7 +522,7 @@ export function Privacy() {
 
           {/* Data Retention */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">8. Data Retention</h2>
+            <h2 className="text-3xl font-serif italic mb-4">9. Data Retention</h2>
             <div className="bg-bg p-6 rounded-lg border border-border mt-4 space-y-3">
               <div>
                 <strong>Active Accounts:</strong>
@@ -435,6 +539,13 @@ export function Privacy() {
                 <p className="opacity-70">
                   Application videos and transcripts are deleted 90 days after a decision, or 30
                   days after an approved applicant uses their invite (see section 4)
+                </p>
+              </div>
+              <div>
+                <strong>Reports and Attached Chats:</strong>
+                <p className="opacity-70">
+                  A chat attached to a report is deleted 180 days after the case is closed, including
+                  when the reporter has deleted their account (see section 5)
                 </p>
               </div>
               <div>
@@ -455,7 +566,7 @@ export function Privacy() {
 
           {/* Your Rights */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">9. Your Privacy Rights</h2>
+            <h2 className="text-3xl font-serif italic mb-4">10. Your Privacy Rights</h2>
             <p className="opacity-70 mb-4">
               You have the following rights regarding your personal data:
             </p>
@@ -492,7 +603,7 @@ export function Privacy() {
 
           {/* Compliance */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">10. Regulatory Compliance</h2>
+            <h2 className="text-3xl font-serif italic mb-4">11. Regulatory Compliance</h2>
             <div className="space-y-4">
               <div className="border-l-4 border-accent pl-4">
                 <h4 className="font-bold mb-2">GDPR (EU General Data Protection Regulation)</h4>
@@ -534,7 +645,7 @@ export function Privacy() {
 
           {/* Security Incident Response */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">11. Security Incident Response</h2>
+            <h2 className="text-3xl font-serif italic mb-4">12. Security Incident Response</h2>
             <p className="opacity-70 mb-4">In the event of a data breach, we will:</p>
             <ul className="list-disc list-inside space-y-2 opacity-70">
               <li>Notify affected users without undue delay (as required by law)</li>
@@ -547,7 +658,7 @@ export function Privacy() {
 
           {/* Third-Party Services */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">12. Third-Party Service Providers</h2>
+            <h2 className="text-3xl font-serif italic mb-4">13. Third-Party Service Providers</h2>
             <p className="opacity-70 mb-4">
               We use limited third-party services only where necessary. All processors sign Data
               Processing Agreements (DPAs) ensuring the same level of data protection:
@@ -576,7 +687,7 @@ export function Privacy() {
 
           {/* Contact */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">13. Contact Us</h2>
+            <h2 className="text-3xl font-serif italic mb-4">14. Contact Us</h2>
             <div className="bg-bg p-6 rounded-lg border border-border mt-4 space-y-3">
               <div>
                 <strong>Privacy Inquiries:</strong>
@@ -615,7 +726,7 @@ export function Privacy() {
 
           {/* Changes to Policy */}
           <div>
-            <h2 className="text-3xl font-serif italic mb-4">14. Changes to This Policy</h2>
+            <h2 className="text-3xl font-serif italic mb-4">15. Changes to This Policy</h2>
             <p className="opacity-70">
               We may update this Privacy Policy from time to time. We will notify you of material
               changes by email or through the platform. Your continued use of OneHook after changes
@@ -626,7 +737,7 @@ export function Privacy() {
           {/* Footer */}
           <div className="pt-8 mt-12 border-t border-border">
             <p className="text-sm opacity-50 text-center">
-              © 2026 OneHook. Your privacy is our priority. Last updated October 23, 2026.
+              © 2026 OneHook. Your privacy is our priority. Last updated October 26, 2026.
             </p>
           </div>
         </motion.div>
