@@ -1,0 +1,50 @@
+{
+  "note": "Two ASCII messages; input order reversed, canonical sort puts m1 (earlier sentAt) first.",
+  "input": {
+    "reportId": "rep_01HZ",
+    "conversationId": "conv_42",
+    "messages": [
+      {
+        "messageId": "m2",
+        "sentAt": "2026-10-26T12:00:01.000Z",
+        "senderSide": "reported",
+        "text": "stop messaging me"
+      },
+      {
+        "messageId": "m1",
+        "sentAt": "2026-10-26T12:00:00.000Z",
+        "senderSide": "reporter",
+        "text": "hello"
+      }
+    ]
+  },
+  "bundle": {
+    "v": 1,
+    "reportId": "rep_01HZ",
+    "conversationId": "conv_42",
+    "window": {
+      "maxMessages": 200,
+      "maxDays": 30
+    },
+    "messages": [
+      {
+        "messageId": "m1",
+        "sentAt": "2026-10-26T12:00:00.000Z",
+        "senderSide": "reporter",
+        "text": "hello"
+      },
+      {
+        "messageId": "m2",
+        "sentAt": "2026-10-26T12:00:01.000Z",
+        "senderSide": "reported",
+        "text": "stop messaging me"
+      }
+    ],
+    "attachments": []
+  },
+  "canonical": "{\"v\":1,\"reportId\":\"rep_01HZ\",\"conversationId\":\"conv_42\",\"window\":{\"maxMessages\":200,\"maxDays\":30},\"messages\":[{\"messageId\":\"m1\",\"sentAt\":\"2026-10-26T12:00:00.000Z\",\"senderSide\":\"reporter\",\"text\":\"hello\"},{\"messageId\":\"m2\",\"sentAt\":\"2026-10-26T12:00:01.000Z\",\"senderSide\":\"reported\",\"text\":\"stop messaging me\"}],\"attachments\":[]}",
+  "canonicalByteLength": 328,
+  "canonicalBytesHex": "7b2276223a312c227265706f72744964223a227265705f3031485a222c22636f6e766572736174696f6e4964223a22636f6e765f3432222c2277696e646f77223a7b226d61784d65737361676573223a3230302c226d617844617973223a33307d2c226d65737361676573223a5b7b226d6573736167654964223a226d31222c2273656e744174223a22323032362d31302d32365431323a30303a30302e3030305a222c2273656e64657253696465223a227265706f72746572222c2274657874223a2268656c6c6f227d2c7b226d6573736167654964223a226d32222c2273656e744174223a22323032362d31302d32365431323a30303a30312e3030305a222c2273656e64657253696465223a227265706f72746564222c2274657874223a2273746f70206d6573736167696e67206d65227d5d2c226174746163686d656e7473223a5b5d7d",
+  "sha256Hex": "d0cd2fdab27cee978781a8b341d0fa5f4fffb4da7e483c00c9848d10dd662998",
+  "sha256Base64": "0M0v2rJ87peHgaizQdD6X0//tNp+SDwAyYSNEN1mKZg="
+}

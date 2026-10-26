@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 d056181449f8f1338ba1f67fcca18da6873ef5d1ddecc63a861f39cdd2a8f286
+// telemetry-integrity: sha256 ba978d01fe927413a36fd8f2b3d8d595ed4c72a84bc4ad1c5a9e880a72aa4c97
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.5.0, hash 4ab81c4d5f20cdb7.
+// Catalog version 1.7.0, hash 4a3328962531236a.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.5.0";
-export const TELEMETRY_CATALOG_HASH = "4ab81c4d5f20cdb7";
+export const TELEMETRY_CATALOG_VERSION = "1.7.0";
+export const TELEMETRY_CATALOG_HASH = "4a3328962531236a";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -31,6 +31,7 @@ export const SignalType = {
   HOOKED_STATE_VIEW: "hooked_state_view",
   LIKES_YOU_VIEW: "likes_you_view",
   SAFETY_UI_OPEN: "safety_ui_open",
+  REPORT_FLOW: "report_flow",
 } as const;
 export type SignalType = (typeof SignalType)[keyof typeof SignalType];
 
@@ -212,6 +213,48 @@ export const HookedStateAction = {
 } as const;
 export type HookedStateAction = (typeof HookedStateAction)[keyof typeof HookedStateAction];
 
+/** Member-report reason category the user chose. Mirrors the backend ReportCategory taxonomy (packages/matching ReportCategory / MODERATION.md section 1) so telemetry segments by the same codes the report API records. Carries no free text. */
+export const ReportCategory = {
+  HARASSMENT: "HARASSMENT",
+  THREATS_VIOLENCE: "THREATS_VIOLENCE",
+  SEXUAL_CONTENT_NONCONSENT: "SEXUAL_CONTENT_NONCONSENT",
+  MINOR_SAFETY: "MINOR_SAFETY",
+  SCAM_FRAUD: "SCAM_FRAUD",
+  FAKE_IMPERSONATION: "FAKE_IMPERSONATION",
+  SPAM_PROMOTION: "SPAM_PROMOTION",
+  HATE: "HATE",
+  SELF_HARM_CONCERN: "SELF_HARM_CONCERN",
+  OFF_PLATFORM_HARM: "OFF_PLATFORM_HARM",
+  OTHER: "OTHER",
+} as const;
+export type ReportCategory = (typeof ReportCategory)[keyof typeof ReportCategory];
+
+/** Where in the app the member started the report flow from (not the reported content). */
+export const ReportSource = {
+  CHAT: "chat",
+  PROFILE: "profile",
+} as const;
+export type ReportSource = (typeof ReportSource)[keyof typeof ReportSource];
+
+/** Step in the member-report flow a report_flow signal records. The flow mixes presses, "shown" impressions and upload outcomes, so it is a signal (not a ui_interaction). Carries only the ReportCategory / ReportSource / evidence dimensions — never message text, user ids or report free text. */
+export const ReportEvent = {
+  REPORT_OPEN: "report.open",
+  REPORT_CATEGORY_SELECTED: "report.category_selected",
+  REPORT_NOT_REPORTABLE_SHOWN: "report.not_reportable_shown",
+  REPORT_NOT_REPORTABLE_BLOCK: "report.not_reportable_block",
+  REPORT_SELF_HARM_RESOURCES_SHOWN: "report.self_harm_resources_shown",
+  REPORT_EVIDENCE_TOGGLE: "report.evidence_toggle",
+  REPORT_ATTACHMENTS_TOGGLE: "report.attachments_toggle",
+  REPORT_EVIDENCE_PREVIEW: "report.evidence_preview",
+  REPORT_NUDGE_SHOWN: "report.nudge_shown",
+  REPORT_SUBMIT_WITH_EVIDENCE: "report.submit_with_evidence",
+  REPORT_SUBMIT_WITHOUT_EVIDENCE: "report.submit_without_evidence",
+  REPORT_SUBMIT_FAILED: "report.submit_failed",
+  REPORT_EVIDENCE_UPLOAD_SUCCEEDED: "report.evidence_upload_succeeded",
+  REPORT_EVIDENCE_UPLOAD_FAILED: "report.evidence_upload_failed",
+} as const;
+export type ReportEvent = (typeof ReportEvent)[keyof typeof ReportEvent];
+
 /** Registered UI element ids (`<screen>.<subject>`). Use with trackUi / data-track-id. */
 export const UiElement = {
   NAV_TAB_SELECT: "nav.tab_select",
@@ -318,6 +361,8 @@ export const UiElement = {
   CHAT_PROFILE_OPEN: "chat.profile_open",
   CHAT_SAFETY_MENU_OPEN: "chat.safety_menu_open",
   CHAT_UNMATCH: "chat.unmatch",
+  CHAT_REPORT_OPEN: "chat.report_open",
+  CHAT_BLOCK_OPEN: "chat.block_open",
   CHAT_REPORT_SPAM: "chat.report_spam",
   CHAT_REPORT_BLOCK: "chat.report_block",
   CHAT_BLOCK_CONFIRM: "chat.block_confirm",
@@ -572,8 +617,10 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.profile_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.safety_menu_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.unmatch": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["ios", "android"] },
-  "chat.report_spam": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
-  "chat.report_block": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.report_open": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.block_open": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.report_spam": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: [] },
+  "chat.report_block": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: [] },
   "chat.block_confirm": { screen: "CHAT", kind: "dialog_button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.settings_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios"] },
   "chat.wallpaper_open": { screen: "CHAT", kind: "menu_item", actions: ["tap", "dismiss"], values: null, platforms: ["web"] },
