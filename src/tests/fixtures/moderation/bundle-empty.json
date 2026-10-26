@@ -1,0 +1,24 @@
+{
+  "note": "No messages: empty messages[] and attachments[], default window.",
+  "input": {
+    "reportId": "rep_empty",
+    "conversationId": "conv_empty",
+    "messages": []
+  },
+  "bundle": {
+    "v": 1,
+    "reportId": "rep_empty",
+    "conversationId": "conv_empty",
+    "window": {
+      "maxMessages": 200,
+      "maxDays": 30
+    },
+    "messages": [],
+    "attachments": []
+  },
+  "canonical": "{\"v\":1,\"reportId\":\"rep_empty\",\"conversationId\":\"conv_empty\",\"window\":{\"maxMessages\":200,\"maxDays\":30},\"messages\":[],\"attachments\":[]}",
+  "canonicalByteLength": 133,
+  "canonicalBytesHex": "7b2276223a312c227265706f72744964223a227265705f656d707479222c22636f6e766572736174696f6e4964223a22636f6e765f656d707479222c2277696e646f77223a7b226d61784d65737361676573223a3230302c226d617844617973223a33307d2c226d65737361676573223a5b5d2c226174746163686d656e7473223a5b5d7d",
+  "sha256Hex": "256838f9f46c1e37e0e1c2936d70c5956f1ae40ac34a8cb4515c9d744660a1e5",
+  "sha256Base64": "JWg4+fRsHjfg4cKTbXDFlW8a5ArDSoy0UVyddEZgoeU="
+}

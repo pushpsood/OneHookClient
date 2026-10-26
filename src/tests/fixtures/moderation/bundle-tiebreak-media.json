@@ -1,0 +1,57 @@
+{
+  "note": "Equal sentAt tie-broken by messageId (a before b); attachments present (media opt-in).",
+  "input": {
+    "reportId": "rep_media",
+    "conversationId": "conv_media",
+    "messages": [
+      {
+        "messageId": "b",
+        "sentAt": "2026-10-26T09:30:00.500Z",
+        "senderSide": "reported",
+        "text": "two"
+      },
+      {
+        "messageId": "a",
+        "sentAt": "2026-10-26T09:30:00.500Z",
+        "senderSide": "reporter",
+        "text": "one"
+      }
+    ],
+    "attachments": [
+      "att_0001",
+      "att_0002"
+    ]
+  },
+  "bundle": {
+    "v": 1,
+    "reportId": "rep_media",
+    "conversationId": "conv_media",
+    "window": {
+      "maxMessages": 200,
+      "maxDays": 30
+    },
+    "messages": [
+      {
+        "messageId": "a",
+        "sentAt": "2026-10-26T09:30:00.500Z",
+        "senderSide": "reporter",
+        "text": "one"
+      },
+      {
+        "messageId": "b",
+        "sentAt": "2026-10-26T09:30:00.500Z",
+        "senderSide": "reported",
+        "text": "two"
+      }
+    ],
+    "attachments": [
+      "att_0001",
+      "att_0002"
+    ]
+  },
+  "canonical": "{\"v\":1,\"reportId\":\"rep_media\",\"conversationId\":\"conv_media\",\"window\":{\"maxMessages\":200,\"maxDays\":30},\"messages\":[{\"messageId\":\"a\",\"sentAt\":\"2026-10-26T09:30:00.500Z\",\"senderSide\":\"reporter\",\"text\":\"one\"},{\"messageId\":\"b\",\"sentAt\":\"2026-10-26T09:30:00.500Z\",\"senderSide\":\"reported\",\"text\":\"two\"}],\"attachments\":[\"att_0001\",\"att_0002\"]}",
+  "canonicalByteLength": 335,
+  "canonicalBytesHex": "7b2276223a312c227265706f72744964223a227265705f6d65646961222c22636f6e766572736174696f6e4964223a22636f6e765f6d65646961222c2277696e646f77223a7b226d61784d65737361676573223a3230302c226d617844617973223a33307d2c226d65737361676573223a5b7b226d6573736167654964223a2261222c2273656e744174223a22323032362d31302d32365430393a33303a30302e3530305a222c2273656e64657253696465223a227265706f72746572222c2274657874223a226f6e65227d2c7b226d6573736167654964223a2262222c2273656e744174223a22323032362d31302d32365430393a33303a30302e3530305a222c2273656e64657253696465223a227265706f72746564222c2274657874223a2274776f227d5d2c226174746163686d656e7473223a5b226174745f30303031222c226174745f30303032225d7d",
+  "sha256Hex": "975a5b39f428c09269cee0198040a6cc8a5c4387d5b4f86ebbd4dc541f29a870",
+  "sha256Base64": "l1pbOfQowJJpzuAZgECmzIpcQ4fVtPhuu9TcVB8pqHA="
+}

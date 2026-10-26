@@ -27,6 +27,13 @@ export interface BackendDeploymentConfig {
    * pins the token's `aud` to that value, so a mismatch is rejected.
    */
   readonly googleClientId: string;
+  /**
+   * Base URL of the admin portal's PUBLIC member-facing moderation surfaces (evidence presign /
+   * complete). Member-JWT authenticated via the portal gateway; see OneHookAdminPortal
+   * features/moderation README. The `{stage}` segment is baked per-stage here (same convention as
+   * `apiBaseUrl`) so it is never hardcoded in the report feature.
+   */
+  readonly portalModerationBaseUrl: string;
   readonly enableAnalytics: boolean;
   readonly enableDebug: boolean;
   readonly requestTimeoutMs: number;
@@ -50,6 +57,9 @@ export const BACKEND_DEPLOYMENTS = {
     cognitoDomain: '',
     // Mirrors OneHookBackend infra/config/auth.ts (gamma).
     googleClientId: '187849624492-jmmc973assosfgv3aaevh8fts2h0mtlr.apps.googleusercontent.com',
+    // Admin portal public moderation gateway for this stage (member-JWT): evidence presign/complete
+    // route under /api/p/{service}/{stage}/{feature}. {service}=onehook, {feature}=moderation.
+    portalModerationBaseUrl: 'https://admin.onehook.club/api/p/onehook/gamma/moderation',
     enableAnalytics: false,
     enableDebug: false,
     requestTimeoutMs: 30_000,

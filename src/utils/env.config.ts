@@ -19,6 +19,7 @@ interface RuntimeEnv extends ImportMetaEnv {
   readonly VITE_APP_ENV?: string;
   readonly VITE_BACKEND_STAGE?: string;
   readonly VITE_API_BASE_URL?: string;
+  readonly VITE_PORTAL_MODERATION_BASE_URL?: string;
   readonly VITE_GRAPHQL_URL?: string;
   readonly VITE_COGNITO_REGION?: string;
   readonly VITE_COGNITO_USER_POOL_ID?: string;
@@ -40,6 +41,7 @@ interface EnvConfig {
   backendStage: BackendStage;
   env: Environment;
   apiBaseUrl: string;
+  portalModerationBaseUrl: string;
   chatbotUrl: string;
   graphqlUrl: string;
   cognitoRegion: string;
@@ -141,6 +143,10 @@ export function createEnvConfig(envName: Environment = detectEnvironment()): Env
       env.VITE_API_BASE_URL,
       envName === 'development' ? '' : deployment.apiBaseUrl
     ),
+    portalModerationBaseUrl: normalizeUrl(
+      env.VITE_PORTAL_MODERATION_BASE_URL,
+      deployment.portalModerationBaseUrl
+    ),
     chatbotUrl: normalizeUrl(env.VITE_CHATBOT_URL, deployment.chatbotUrl),
     graphqlUrl: normalizeUrl(env.VITE_GRAPHQL_URL, deployment.graphqlUrl),
     cognitoRegion,
@@ -179,6 +185,7 @@ export const config: EnvConfig = createEnvConfig();
 export const backendStage = config.backendStage;
 export const env = config.env;
 export const apiBaseUrl = config.apiBaseUrl;
+export const portalModerationBaseUrl = config.portalModerationBaseUrl;
 export const chatbotUrl = config.chatbotUrl;
 export const graphqlUrl = config.graphqlUrl;
 export const cognitoRegion = config.cognitoRegion;

@@ -319,3 +319,56 @@ export const ReceivedLikesApi = {
   list: (): Promise<ReceivedLikesResponse> =>
     request<ReceivedLikesResponse>('GET', '/matching/likes'),
 };
+
+// ── Member reports (POST /matching/reports) ───────────────────────────────────
+
+/**
+ * Report category superset (OneHookBackend packages/matching `ReportCategory`). A new client sends
+ * these codes; the server maps them onto the legacy block `reason` allowlist for old-client compat.
+ */
+export type ReportCategoryCode =
+  | 'HARASSMENT'
+  | 'THREATS_VIOLENCE'
+  | 'SEXUAL_CONTENT_NONCONSENT'
+  | 'MINOR_SAFETY'
+  | 'SCAM_FRAUD'
+  | 'FAKE_IMPERSONATION'
+  | 'SPAM_PROMOTION'
+  | 'HATE'
+  | 'SELF_HARM_CONCERN'
+  | 'OFF_PLATFORM_HARM'
+  | 'OTHER';
+
+/** Body of `POST /matching/reports` (OneHookBackend matching `CreateReportRequest`). */
+export interface CreateReportRequest {
+  reportedUserId: string;
+  category: ReportCategoryCode;
+  /** <= 2000 chars; REQUIRED for OTHER. */
+  details?: string;
+  /** Defaults server-side to true, except false for SELF_HARM_CONCERN. */
+  alsoBlock?: boolean;
+  conversationId?: string;
+  /** Whether the reporter opted to share a decrypted copy of the chat. */
+  evidenceOffered: boolean;
+}
+
+/** `201` response of `POST /matching/reports` (OneHookBackend matching `CreateReportResponse`). */
+export interface CreateReportResponse {
+  /** Backend report UUID — the id the evidence presign/complete calls reference. */
+  reportId: string;
+  severity: string;
+  /**
+   * Whether the server will accept a decrypted-chat evidence upload for this report. False for
+   * MINOR_SAFETY (escalated immediately) and any `evidenceEligible:false` category.
+   */
+  evidenceAllowed: boolean;
+}
+
+export const ReportsApi = {
+  /**
+   * File a member report. Throws {@link ApiError} on failure; a `429` (rate limit) surfaces as
+   * `ApiError` with `status === 429` so the UI can show a friendly message.
+   */
+  create: (body: CreateReportRequest): Promise<CreateReportResponse> =>
+    request<CreateReportResponse>('POST', '/matching/reports', body),
+};
