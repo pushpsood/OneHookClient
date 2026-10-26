@@ -369,8 +369,8 @@ export function Privacy() {
                   seriousness of the reason, how many different members reported or blocked the same
                   person and how recently, how new the reported account is, and how reliable the
                   reporter&rsquo;s earlier reports proved to be. For that last point we keep a
-                  pseudonymous reliability measure for each reporter, which is deleted after a year
-                  without new reports. This only sets the order of the queue. A person on our team
+                  pseudonymous reliability measure for each reporter, which is deleted a year after it
+                  last changed. This only sets the order of the queue. A person on our team
                   makes every decision.
                 </p>
               </div>
