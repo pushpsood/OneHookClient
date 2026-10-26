@@ -20,7 +20,7 @@
  *
  * With reduced motion every screen is simply shown finished.
  */
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode, type RefObject } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   MotionGlobalConfig,
   animate,
@@ -375,39 +375,47 @@ export function scrollLimit(bands: Bands, index: number): number | null {
 }
 
 /**
- * Holds the page at `maxProgress` (see `scrollLimit`). The wheel, a finger drag and the keyboard are
- * stopped at the limit before they scroll (no overshoot); anything else (scrollbar drag, momentum,
- * End key) is brought back to it. The stage is pinned, so the correction itself is invisible.
+ * Holds the page at `maxProgress` (see `scrollLimit`). A finger drag and the keyboard are stopped at
+ * the limit before they scroll; everything else (mouse wheel, trackpad, scrollbar drag, momentum) is
+ * brought back to it. The stage is pinned, so the correction itself is invisible.
+ *
+ * The limit is read from the story's own scroll PROGRESS (the same `useScroll` value that drives the
+ * stage), never from hand-rolled viewport geometry. An earlier version mapped `maxProgress` back to a
+ * pixel `scrollY` from `getBoundingClientRect()`, `window.innerHeight` and the `lvh`-sized track
+ * height; that mapping diverged in Safari (its `innerHeight`/`lvh` relationship differs from
+ * Chrome's), so the computed cap landed at the top of the page and every wheel tick was cancelled —
+ * the page could not be scrolled at all. Progress is browser-agnostic, and the page is clamped back
+ * to the last position whose progress was still within the cap, so no geometry math is needed.
  */
 export function useScrollLimit({
-  trackRef,
-  headerHeight,
+  scroll,
   maxProgress,
   enabled,
 }: {
-  trackRef: RefObject<HTMLElement | null>;
-  headerHeight: number;
+  /** Story scroll progress (0..1) — the same MotionValue the stage is driven by. */
+  scroll: MotionValue<number>;
   maxProgress: number | null;
   enabled: boolean;
 }) {
   useEffect(() => {
     if (!enabled || maxProgress === null) return;
-    /** scrollY of the limit: progress 0 → track top meets the header, 1 → track bottom meets the viewport bottom */
-    const maxY = () => {
-      const track = trackRef.current;
-      if (!track) return Number.POSITIVE_INFINITY;
-      const r = track.getBoundingClientRect();
-      const top = window.scrollY + r.top - headerHeight;
-      return top + maxProgress * (r.height + headerHeight - window.innerHeight);
-    };
-    const atLimit = () => window.scrollY >= maxY() - 1;
+    const cap = maxProgress;
+    const atLimit = () => scroll.get() >= cap;
+    // The last scroll position whose story progress was still within the cap; the page is held here
+    // whenever progress runs past it.
+    let lastGoodY = window.scrollY;
     const clamp = () => {
-      const y = maxY();
-      if (window.scrollY > y + 1) window.scrollTo({ top: y, behavior: 'instant' });
+      if (scroll.get() > cap) {
+        if (window.scrollY !== lastGoodY) window.scrollTo(0, lastGoodY);
+      } else {
+        lastGoodY = window.scrollY;
+      }
     };
-    const onWheel = (e: WheelEvent) => {
-      if (e.deltaY > 0 && atLimit()) e.preventDefault();
-    };
+    // No wheel listener on purpose. A non-passive `wheel` listener makes Safari wait for the main
+    // thread on EVERY mouse-wheel tick (unphased events; trackpad gestures only block on their first
+    // event), and with this page's busy main thread the ticks stall or are dropped — the mouse wheel
+    // looked dead in Safari while the trackpad worked. The wheel is capped by `clamp` instead: the
+    // page is put back at the last in-cap position, which is invisible because the stage is pinned.
     let touchY = 0;
     const onTouchStart = (e: TouchEvent) => {
       touchY = e.touches[0]?.clientY ?? 0;
@@ -425,19 +433,21 @@ export function useScrollLimit({
       if (DOWN_KEYS.has(e.key) && !e.shiftKey && atLimit()) e.preventDefault();
     };
     clamp();
+    // Driven by the progress MotionValue's own change event (fired after Motion reads the fresh scroll
+    // position), plus the raw scroll event as a backstop for scrollbar drags.
+    const offProgress = scroll.on('change', clamp);
     window.addEventListener('scroll', clamp, { passive: true });
-    window.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('touchstart', onTouchStart, { passive: true });
     window.addEventListener('touchmove', onTouchMove, { passive: false });
     window.addEventListener('keydown', onKey);
     return () => {
+      offProgress();
       window.removeEventListener('scroll', clamp);
-      window.removeEventListener('wheel', onWheel);
       window.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('touchmove', onTouchMove);
       window.removeEventListener('keydown', onKey);
     };
-  }, [trackRef, headerHeight, maxProgress, enabled]);
+  }, [scroll, maxProgress, enabled]);
 }
 
 type StoryValue = {

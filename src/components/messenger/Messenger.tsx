@@ -2894,8 +2894,7 @@ export function Messenger() {
   // The page can't run ahead of the stage: at most to the end of the next screen's section while a
   // screen plays (the cap moves on as each screen comes up; none on the last screen).
   useScrollLimit({
-    trackRef: storyRef,
-    headerHeight: headerH,
+    scroll: scrollYProgress,
     maxProgress: scrollLimit(STORY_BANDS, index),
     enabled: !reduce,
   });
@@ -2918,12 +2917,19 @@ export function Messenger() {
 
   useEffect(() => {
     const root = document.documentElement;
-    const prev = { anchor: root.style.overflowAnchor, gutter: root.style.scrollbarGutter };
+    const prev = { anchor: root.style.overflowAnchor, gutter: root.style.scrollbarGutter, behavior: root.style.scrollBehavior };
     root.style.overflowAnchor = 'none';
     root.style.scrollbarGutter = 'stable';
+    // This page runs its own frame-accurate scroll manager (the scroll cap and its programmatic
+    // clamp in useScrollLimit). The global `html { scroll-behavior: smooth }` must be off while it
+    // is mounted: in Safari, smooth scroll-behavior animates every wheel tick and fights the clamp's
+    // scrollTo (Safari does not reliably honour scrollTo's `instant` over the CSS value), which pins
+    // the page and makes the mouse wheel look dead. Restored on unmount.
+    root.style.scrollBehavior = 'auto';
     return () => {
       root.style.overflowAnchor = prev.anchor;
       root.style.scrollbarGutter = prev.gutter;
+      root.style.scrollBehavior = prev.behavior;
     };
   }, []);
 
