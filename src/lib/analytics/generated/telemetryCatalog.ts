@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 d056181449f8f1338ba1f67fcca18da6873ef5d1ddecc63a861f39cdd2a8f286
+// telemetry-integrity: sha256 df6df589e003512e5d8bc9de08bf989cc28fe3bac66904d9ca22f6150de47642
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.5.0, hash 4ab81c4d5f20cdb7.
+// Catalog version 1.6.0, hash 435bb38a1852d74c.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.5.0";
-export const TELEMETRY_CATALOG_HASH = "4ab81c4d5f20cdb7";
+export const TELEMETRY_CATALOG_VERSION = "1.6.0";
+export const TELEMETRY_CATALOG_HASH = "435bb38a1852d74c";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -31,6 +31,7 @@ export const SignalType = {
   HOOKED_STATE_VIEW: "hooked_state_view",
   LIKES_YOU_VIEW: "likes_you_view",
   SAFETY_UI_OPEN: "safety_ui_open",
+  REPORT_FLOW: "report_flow",
 } as const;
 export type SignalType = (typeof SignalType)[keyof typeof SignalType];
 
@@ -211,6 +212,48 @@ export const HookedStateAction = {
   DISMISS: "dismiss",
 } as const;
 export type HookedStateAction = (typeof HookedStateAction)[keyof typeof HookedStateAction];
+
+/** Member-report reason category the user chose. Mirrors the backend ReportCategory taxonomy (packages/matching ReportCategory / MODERATION.md section 1) so telemetry segments by the same codes the report API records. Carries no free text. */
+export const ReportCategory = {
+  HARASSMENT: "HARASSMENT",
+  THREATS_VIOLENCE: "THREATS_VIOLENCE",
+  SEXUAL_CONTENT_NONCONSENT: "SEXUAL_CONTENT_NONCONSENT",
+  MINOR_SAFETY: "MINOR_SAFETY",
+  SCAM_FRAUD: "SCAM_FRAUD",
+  FAKE_IMPERSONATION: "FAKE_IMPERSONATION",
+  SPAM_PROMOTION: "SPAM_PROMOTION",
+  HATE: "HATE",
+  SELF_HARM_CONCERN: "SELF_HARM_CONCERN",
+  OFF_PLATFORM_HARM: "OFF_PLATFORM_HARM",
+  OTHER: "OTHER",
+} as const;
+export type ReportCategory = (typeof ReportCategory)[keyof typeof ReportCategory];
+
+/** Where in the app the member started the report flow from (not the reported content). */
+export const ReportSource = {
+  CHAT: "chat",
+  PROFILE: "profile",
+} as const;
+export type ReportSource = (typeof ReportSource)[keyof typeof ReportSource];
+
+/** Step in the member-report flow a report_flow signal records. The flow mixes presses, "shown" impressions and upload outcomes, so it is a signal (not a ui_interaction). Carries only the ReportCategory / ReportSource / evidence dimensions — never message text, user ids or report free text. */
+export const ReportEvent = {
+  REPORT_OPEN: "report.open",
+  REPORT_CATEGORY_SELECTED: "report.category_selected",
+  REPORT_NOT_REPORTABLE_SHOWN: "report.not_reportable_shown",
+  REPORT_NOT_REPORTABLE_BLOCK: "report.not_reportable_block",
+  REPORT_SELF_HARM_RESOURCES_SHOWN: "report.self_harm_resources_shown",
+  REPORT_EVIDENCE_TOGGLE: "report.evidence_toggle",
+  REPORT_ATTACHMENTS_TOGGLE: "report.attachments_toggle",
+  REPORT_EVIDENCE_PREVIEW: "report.evidence_preview",
+  REPORT_NUDGE_SHOWN: "report.nudge_shown",
+  REPORT_SUBMIT_WITH_EVIDENCE: "report.submit_with_evidence",
+  REPORT_SUBMIT_WITHOUT_EVIDENCE: "report.submit_without_evidence",
+  REPORT_SUBMIT_FAILED: "report.submit_failed",
+  REPORT_EVIDENCE_UPLOAD_SUCCEEDED: "report.evidence_upload_succeeded",
+  REPORT_EVIDENCE_UPLOAD_FAILED: "report.evidence_upload_failed",
+} as const;
+export type ReportEvent = (typeof ReportEvent)[keyof typeof ReportEvent];
 
 /** Registered UI element ids (`<screen>.<subject>`). Use with trackUi / data-track-id. */
 export const UiElement = {
