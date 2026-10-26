@@ -366,9 +366,12 @@ export function Privacy() {
                 <h4 className="font-bold mb-2">How reports are prioritised</h4>
                 <p className="opacity-70">
                   We use automated scoring to decide which reports to look at first, based on the
-                  seriousness of the reason, how many different members reported the same person and
-                  how recently, and how often a reporter&rsquo;s earlier reports were upheld. This only
-                  sets the order of the queue. A person on our team makes every decision.
+                  seriousness of the reason, how many different members reported or blocked the same
+                  person and how recently, how new the reported account is, and how reliable the
+                  reporter&rsquo;s earlier reports proved to be. For that last point we keep a
+                  pseudonymous reliability measure for each reporter, which is deleted after a year
+                  without new reports. This only sets the order of the queue. A person on our team
+                  makes every decision.
                 </p>
               </div>
               <div>
@@ -377,7 +380,9 @@ export function Privacy() {
                   Depending on what we find, we may dismiss the report, warn the member, limit their
                   account, suspend it for a period, or ban it. A ban needs the agreement of two members
                   of our team. A member whose account is limited, suspended or banned can appeal, and
-                  the appeal is decided by someone who did not take the original decision.
+                  the appeal is decided by someone who did not take the original decision. We record
+                  each account&rsquo;s standing (active, limited, suspended or banned) and use it to
+                  control signing in and who the account is shown to.
                 </p>
               </div>
               <div>
@@ -403,7 +408,8 @@ export function Privacy() {
                   </li>
                   <li>
                     Our record of a case keeps the reason, dates and outcome with pseudonymous
-                    identifiers, so we can recognise repeated abuse.
+                    identifiers, so we can recognise repeated abuse. It is deleted 365 days after the
+                    case is closed, unless the law requires us to keep it longer.
                   </li>
                 </ul>
               </div>
