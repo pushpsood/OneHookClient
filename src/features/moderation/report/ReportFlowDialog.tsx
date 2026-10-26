@@ -34,6 +34,18 @@ import {
   type SubmitDeps,
   type SubmitResult,
 } from './submit';
+import {
+  canSubmit as canSubmitDecision,
+  confirmationView,
+  detailsRequired as detailsRequiredFor,
+  detailsTooLong as detailsTooLongFor,
+  initialDialogState,
+  isEvidenceEligible,
+  nudgeMode,
+  selfHarmTelHref,
+  stepForCategory,
+  type ConfirmationView,
+} from './dialog-logic';
 import { selectEvidenceWindow, type SourceMessage } from './window-selection';
 
 type Step = 'category' | 'not_reportable' | 'self_harm' | 'form' | 'preview' | 'confirmation';
@@ -107,8 +119,7 @@ export function ReportFlowDialog({
   const meta: CategoryMeta | null = category ? getCategoryMeta(category) : null;
 
   // Evidence is only offered from a chat, with a non-MINOR_SAFETY category, when there is chat to share.
-  const evidenceEligible =
-    source === 'chat' && !!conversationId && !!meta && meta.evidenceEligible && !meta.minorSafety;
+  const evidenceEligible = isEvidenceEligible({ source, conversationId, meta });
 
   const previewWindow = useMemo(
     () => (evidenceEligible ? selectEvidenceWindow(sourceMessages ?? []) : []),
@@ -118,11 +129,12 @@ export function ReportFlowDialog({
   // Reset to a clean state whenever the dialog opens, and emit report.open.
   useEffect(() => {
     if (!open) return;
-    setStep('category');
-    setCategory(null);
-    setDetails('');
-    setAlsoBlock(true);
-    setShare(false);
+    const init = initialDialogState();
+    setStep(init.step);
+    setCategory(init.category);
+    setDetails(init.details);
+    setAlsoBlock(init.alsoBlock);
+    setShare(init.share); // NEVER pre-ticked
     setSubmitting(false);
     setError(null);
     setResult(null);
@@ -177,12 +189,11 @@ export function ReportFlowDialog({
       const m = getCategoryMeta(code);
       setAlsoBlock(m.alsoBlockDefault);
       trackReport(ReportEvent.REPORT_CATEGORY_SELECTED, { category: code, source });
-      if (m.selfHarm) {
+      const next = stepForCategory(m);
+      if (next === 'self_harm') {
         trackReport(ReportEvent.REPORT_SELF_HARM_RESOURCES_SHOWN, { category: code, source });
-        setStep('self_harm');
-      } else {
-        setStep('form');
       }
+      setStep(next);
     },
     [source]
   );
@@ -209,10 +220,9 @@ export function ReportFlowDialog({
     setStep('preview');
   }, [category, source]);
 
-  const detailsRequired = !!meta?.requiresDetails;
-  const detailsTooLong = details.length > DETAILS_MAX_CHARS;
-  const canSubmit =
-    !!meta && !submitting && !detailsTooLong && (!detailsRequired || details.trim().length > 0);
+  const detailsRequired = detailsRequiredFor(meta);
+  const detailsTooLong = detailsTooLongFor(details);
+  const canSubmit = canSubmitDecision({ meta, submitting, details });
 
   const handleSubmit = useCallback(async () => {
     if (!meta || !canSubmit) return;
@@ -247,10 +257,12 @@ export function ReportFlowDialog({
     setRetrying(true);
     try {
       const outcome = await uploadEvidence(result.reportId, conversationId ?? '', sourceMessages ?? [], deps);
-      trackReport(ReportEvent.REPORT_EVIDENCE_UPLOAD_SUCCEEDED, {
-        category: category ?? undefined,
-        source,
-      });
+      if (outcome === 'attached') {
+        trackReport(ReportEvent.REPORT_EVIDENCE_UPLOAD_SUCCEEDED, {
+          category: category ?? undefined,
+          source,
+        });
+      }
       setResult({ ...result, evidenceOutcome: outcome });
     } catch {
       trackReport(ReportEvent.REPORT_EVIDENCE_UPLOAD_FAILED, { category: category ?? undefined, source });
@@ -526,7 +538,7 @@ function SelfHarmStep({ onContinue }: { onContinue: () => void }) {
                 </p>
               </div>
               <a
-                href={`tel:${r.phone}`}
+                href={selfHarmTelHref(r)}
                 className="inline-flex items-center gap-1.5 px-3 py-2 bg-accent text-bg text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity shrink-0"
                 data-track-exempt="duplicate: tap-to-call a support line; the report flow is instrumented via the report_flow signal, not ui_interaction."
               >
@@ -638,7 +650,7 @@ function FormStep({
         <div className="rounded-xl border border-border p-3 space-y-3">
           {/* Nudge: ~1s non-looping shield; static when reduced motion */}
           <div className="flex items-start gap-2.5">
-            {reducedMotion ? (
+            {nudgeMode(reducedMotion) === 'static' ? (
               <Shield className="w-6 h-6 text-accent shrink-0" aria-hidden="true" />
             ) : (
               <motion.span
@@ -722,6 +734,10 @@ function ConfirmationStep({
   retrying: boolean;
   onRetryEvidence: () => void;
 }) {
+  const view: ConfirmationView = confirmationView({
+    blocked: result.blocked,
+    evidenceOutcome: result.evidenceOutcome,
+  });
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-accent">
@@ -729,13 +745,16 @@ function ConfirmationStep({
         <h3 className="text-base font-bold text-text">{S.confirmationHeading}</h3>
       </div>
       <p className="text-xs text-text-secondary leading-relaxed">{S.confirmationBody}</p>
-      {result.blocked && (
+      {view.blocked && (
         <p className="text-xs text-text-secondary leading-relaxed">{S.confirmationBlocked}</p>
       )}
-      {result.evidenceOutcome === 'attached' && (
+      {view.attached && (
         <p className="text-xs text-text-secondary leading-relaxed">{S.evidenceAttached}</p>
       )}
-      {result.evidenceOutcome === 'failed' && (
+      {view.terminalNote && (
+        <p className="text-xs text-text-secondary leading-relaxed">{S.evidenceTerminalNote}</p>
+      )}
+      {view.retry && (
         <div className="rounded-xl border border-border bg-surface p-3 space-y-2" role="alert">
           <p className="text-xs text-text leading-relaxed">{S.evidenceFailed}</p>
           <button

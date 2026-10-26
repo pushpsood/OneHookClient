@@ -94,6 +94,8 @@ export const REPORT_STRINGS = {
   evidenceFailed: "Your report was sent. We couldn't attach the chat.",
   evidenceRetry: 'Retry attaching the chat',
   evidenceRetrying: 'Attaching…',
+  evidenceTerminalNote:
+    "Your report was sent. This chat can't be attached to this report, and you don't need to do anything else.",
 
   // ── Errors ──
   rateLimited: "You've sent a lot of reports recently. Please try again in a little while.",
