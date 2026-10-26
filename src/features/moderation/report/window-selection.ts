@@ -58,7 +58,11 @@ export function selectEvidenceWindow(
   const cutoffMs = nowMs - maxDays * MS_PER_DAY;
 
   const eligible = messages.filter(
-    (m) => !m.undecryptable && typeof m.text === 'string' && m.sentAtMs >= cutoffMs
+    (m) =>
+      !m.undecryptable &&
+      typeof m.text === 'string' &&
+      !isFramedNonText(m.text) &&
+      m.sentAtMs >= cutoffMs
   );
 
   // Keep the most recent `maxMessages`: order by (sentAt, messageId) and take the tail.
@@ -79,4 +83,17 @@ export function selectEvidenceWindow(
 
   // Canonical oldest-first order (sentAt then messageId by UTF-16 code unit).
   return sortMessages(mapped);
+}
+
+/**
+ * Defence in depth: chat plaintext uses C0-control framing for structured payloads (U+0001
+ * attachment envelope with the media key, U+0002 call signal with SDP/ICE). Such a payload must
+ * never enter an evidence bundle even if an upstream mapper let it through. Tab, newline and
+ * carriage return are ordinary text.
+ */
+export function isFramedNonText(text: string): boolean {
+  if (text.length === 0) return false;
+  if (text.includes('\u0001') || text.includes('\u0002')) return true;
+  const c = text.charCodeAt(0);
+  return c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d;
 }

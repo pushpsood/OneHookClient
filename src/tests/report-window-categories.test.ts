@@ -62,6 +62,19 @@ describe('selectEvidenceWindow', () => {
     expect(out.map((m) => m.messageId)).toEqual(['ok']);
   });
 
+  it('skips framed structured payloads (attachment / call signal) but keeps ordinary text', () => {
+    const out = selectEvidenceWindow(
+      [
+        msg('ok', -1000, 'reporter', 'line one\nline two \u{1F600}'),
+        msg('att', -900, 'reported', '\u0001{"contentKey":"SECRET"}'),
+        msg('call', -800, 'reported', '\u0002{"sdp":"v=0"}'),
+        msg('ctl', -700, 'reported', '\u0003other'),
+      ],
+      { nowMs: NOW }
+    );
+    expect(out.map((m) => m.messageId)).toEqual(['ok']);
+  });
+
   it('applies the 30-day cap', () => {
     const out = selectEvidenceWindow(
       [
