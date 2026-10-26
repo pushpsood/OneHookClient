@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 df6df589e003512e5d8bc9de08bf989cc28fe3bac66904d9ca22f6150de47642
+// telemetry-integrity: sha256 4a2f9396c7806c61497f25a09d85dc8a6132b5f77141a1eb79dedfc196c24a24
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.6.0, hash 435bb38a1852d74c.
+// Catalog version 1.7.0, hash 9bb71db335ecaebe.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.6.0";
-export const TELEMETRY_CATALOG_HASH = "435bb38a1852d74c";
+export const TELEMETRY_CATALOG_VERSION = "1.7.0";
+export const TELEMETRY_CATALOG_HASH = "9bb71db335ecaebe";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -361,6 +361,8 @@ export const UiElement = {
   CHAT_PROFILE_OPEN: "chat.profile_open",
   CHAT_SAFETY_MENU_OPEN: "chat.safety_menu_open",
   CHAT_UNMATCH: "chat.unmatch",
+  CHAT_REPORT_OPEN: "chat.report_open",
+  CHAT_BLOCK_OPEN: "chat.block_open",
   CHAT_REPORT_SPAM: "chat.report_spam",
   CHAT_REPORT_BLOCK: "chat.report_block",
   CHAT_BLOCK_CONFIRM: "chat.block_confirm",
@@ -615,8 +617,10 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.profile_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.safety_menu_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.unmatch": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["ios", "android"] },
-  "chat.report_spam": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
-  "chat.report_block": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.report_open": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.block_open": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.report_spam": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: [] },
+  "chat.report_block": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: [] },
   "chat.block_confirm": { screen: "CHAT", kind: "dialog_button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.settings_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios"] },
   "chat.wallpaper_open": { screen: "CHAT", kind: "menu_item", actions: ["tap", "dismiss"], values: null, platforms: ["web"] },
