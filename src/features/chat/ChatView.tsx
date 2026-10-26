@@ -477,7 +477,7 @@ export function ChatView({
                                 setChatReportOpen(true);
                               }}
                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
-                              {...trackProps(UiElement.CHAT_REPORT_SPAM)}
+                              {...trackProps(UiElement.CHAT_REPORT_OPEN)}
                             >
                               Report
                             </button>
@@ -490,7 +490,7 @@ export function ChatView({
                                 setReportReason('OTHER');
                               }}
                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
-                              {...trackProps(UiElement.CHAT_REPORT_BLOCK)}
+                              {...trackProps(UiElement.CHAT_BLOCK_OPEN)}
                             >
                               Block
                             </button>
@@ -646,7 +646,7 @@ export function ChatView({
                               setChatReportOpen(true);
                             }}
                             className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
-                            {...trackProps(UiElement.CHAT_REPORT_SPAM)}
+                            {...trackProps(UiElement.CHAT_REPORT_OPEN)}
                           >
                             Report
                           </button>
@@ -659,7 +659,7 @@ export function ChatView({
                               setReportReason('OTHER');
                             }}
                             className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
-                            {...trackProps(UiElement.CHAT_REPORT_BLOCK)}
+                            {...trackProps(UiElement.CHAT_BLOCK_OPEN)}
                           >
                             Block
                           </button>
@@ -1052,6 +1052,7 @@ function MatchConversation({
     markAsDelivered,
     markAsRead,
     refetch,
+    loadEvidenceWindow,
     hasUndecryptable,
     historyHorizon,
   } = useChatMessages(matchId, peerId);
@@ -1087,6 +1088,29 @@ function MatchConversation({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+
+  // When the report dialog opens, page + decrypt the COMPLETE evidence window (the live `messages`
+  // snapshot is a single oldest-first page and can omit the most recent messages in a long chat).
+  // Until it resolves, the snapshot is used as a non-blocking fallback. Reset on close so a decrypted
+  // copy never lingers.
+  const [fullEvidence, setFullEvidence] = useState<SourceMessage[] | null>(null);
+  useEffect(() => {
+    if (!reportOpen) {
+      setFullEvidence(null);
+      return;
+    }
+    let cancelled = false;
+    void loadEvidenceWindow()
+      .then((w) => {
+        if (!cancelled) setFullEvidence(w);
+      })
+      .catch(() => {
+        /* non-fatal: fall back to the single-page snapshot */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reportOpen, loadEvidenceWindow]);
 
   // Voice / video calling goes through the ONE app-level controller (OneHookBackend/docs/
   // voice-video-calls.md §10): the ring modal and in-call surface are owned by CallProvider at the
@@ -1389,7 +1413,7 @@ function MatchConversation({
           reportedUserId={peerId}
           reportedName={peerName}
           conversationId={matchId}
-          sourceMessages={evidenceMessages}
+          sourceMessages={fullEvidence ?? evidenceMessages}
           onRequestBlock={onReportPeer}
           onRequestUnmatch={onRequestUnmatch}
         />

@@ -203,7 +203,7 @@ export function AttachmentBubble({
         <button
           type="button"
           onClick={onReportPeerMedia}
-          {...trackProps(UiElement.CHAT_REPORT_BLOCK)}
+          {...trackProps(UiElement.CHAT_REPORT_OPEN)}
           className="inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] font-black opacity-60 hover:opacity-100 transition-opacity"
         >
           <Flag className="w-3 h-3" aria-hidden="true" />
