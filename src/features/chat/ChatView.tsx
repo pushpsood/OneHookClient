@@ -81,6 +81,8 @@ import {
   AttachmentDecodeError,
   type AttachmentKind,
 } from '../../lib/chat-attachments';
+import { ReportFlowDialog } from '../../features/moderation/report/ReportFlowDialog';
+import type { SourceMessage } from '../../features/moderation/report/window-selection';
 import { probeImage, probeVideo } from '../../lib/attachment-media';
 import type { AttachmentObjectUrlCache } from '../../lib/attachment-transport';
 import type { OutgoingAttachment, AttachmentTransferState } from '../../hooks/use-api';
@@ -138,6 +140,11 @@ export function ChatView({
   const [profileOpen, setProfileOpen] = useState(false);
   const [reportReason, setReportReason] = useState<BlockReason | null>(null);
   const [reporting, setReporting] = useState(false);
+  // New member report flow (moderation Phase 2). Chat-sourced reports render inside the conversation
+  // (where the decrypted messages live, for the optional evidence share); profile-sourced reports
+  // render here without evidence.
+  const [chatReportOpen, setChatReportOpen] = useState(false);
+  const [profileReportOpen, setProfileReportOpen] = useState(false);
 
   const [portalNode, setPortalNode] = useState<HTMLElement | null>(() => {
     if (typeof document !== 'undefined') {
@@ -308,6 +315,26 @@ export function ChatView({
     await loadMatches();
   };
 
+  // Standalone unmatch (ends the connection without a block) — used by the report flow's
+  // "This isn't a safety issue" redirect. Uses the existing release-hook call.
+  const runUnmatch = async () => {
+    if (!activeMatch?.matchId) return;
+    try {
+      await StateApi.releaseHook(activeMatch.matchId, 'OTHER');
+    } catch {
+      showToast('We couldn’t unmatch just now. Please try again.', 'error');
+      return;
+    }
+    const remaining = matches.filter((m) => m.matchId !== activeMatch.matchId);
+    const next: Selection = remaining[0]?.matchId ?? MR_ONEHOOK;
+    setSelection(next);
+    onSelectMatch?.(next === MR_ONEHOOK ? null : next);
+    setReporting(false);
+    showToast('Unmatched.', 'success');
+    if (onRefetchState) await onRefetchState();
+    await loadMatches();
+  };
+
   // Rows for the conversation picker: Mr.OneHook pinned first, then matches.
   const pickerRows: (SortableConversation & {
     photo?: string;
@@ -447,12 +474,12 @@ export function ChatView({
                               disabled={reporting}
                               onClick={() => {
                                 setShieldOpen(false);
-                                void runReportAndBlock('SPAM');
+                                setChatReportOpen(true);
                               }}
                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
                               {...trackProps(UiElement.CHAT_REPORT_SPAM)}
                             >
-                              Report spam
+                              Report
                             </button>
                             <button
                               type="button"
@@ -465,7 +492,7 @@ export function ChatView({
                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
                               {...trackProps(UiElement.CHAT_REPORT_BLOCK)}
                             >
-                              Report &amp; block
+                              Block
                             </button>
                           </>
                         )}
@@ -616,12 +643,12 @@ export function ChatView({
                             disabled={reporting}
                             onClick={() => {
                               setShieldOpen(false);
-                              void runReportAndBlock('SPAM');
+                              setChatReportOpen(true);
                             }}
                             className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
                             {...trackProps(UiElement.CHAT_REPORT_SPAM)}
                           >
-                            Report spam
+                            Report
                           </button>
                           <button
                             type="button"
@@ -634,7 +661,7 @@ export function ChatView({
                             className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
                             {...trackProps(UiElement.CHAT_REPORT_BLOCK)}
                           >
-                            Report &amp; block
+                            Block
                           </button>
                         </>
                       )}
@@ -713,6 +740,9 @@ export function ChatView({
           currentUserId={currentUser.id}
           wallpaper={wallpaper}
           onReportPeer={() => setReportReason('OTHER')}
+          reportOpen={chatReportOpen}
+          onCloseReport={() => setChatReportOpen(false)}
+          onRequestUnmatch={() => void runUnmatch()}
         />
       ) : (
         <EmptyState onNavigateToDiscovery={onNavigateToDiscovery} onOpenPicker={() => setPickerOpen(true)} />
@@ -755,7 +785,28 @@ export function ChatView({
         peerName={peerName}
         peerPhoto={peerPhoto}
         distanceKm={activeDistance ?? null}
+        onReport={
+          !isMrOneHook && activeMatch?.peerId
+            ? () => {
+                setProfileOpen(false);
+                setProfileReportOpen(true);
+              }
+            : undefined
+        }
       />
+
+      {/* ── REPORT FLOW (profile entry; no evidence — evidence is chat-only) ── */}
+      {activeMatch?.peerId && (
+        <ReportFlowDialog
+          open={profileReportOpen}
+          onClose={() => setProfileReportOpen(false)}
+          source="profile"
+          reportedUserId={activeMatch.peerId}
+          reportedName={peerName}
+          onRequestBlock={() => setReportReason('OTHER')}
+          onRequestUnmatch={() => void runUnmatch()}
+        />
+      )}
 
       {/* ── REPORT & BLOCK (reason picker) ────────────────────────────────── */}
       <ReportBlockModal
@@ -974,6 +1025,9 @@ function MatchConversation({
   currentUserId,
   wallpaper,
   onReportPeer,
+  reportOpen,
+  onCloseReport,
+  onRequestUnmatch,
 }: {
   key?: string;
   matchId: string;
@@ -982,6 +1036,9 @@ function MatchConversation({
   currentUserId: string;
   wallpaper: ChatWallpaper;
   onReportPeer?: () => void;
+  reportOpen?: boolean;
+  onCloseReport?: () => void;
+  onRequestUnmatch?: () => void;
 }) {
   const {
     messages,
@@ -999,6 +1056,33 @@ function MatchConversation({
     historyHorizon,
   } = useChatMessages(matchId, peerId);
   const [input, setInput] = useState('');
+
+  // Snapshot of decrypted messages for the optional evidence share. Text comes from the SAME local
+  // decrypt the chat UI uses (the E2EE hook); attachments/undecryptable/system messages map to a
+  // null/undecryptable entry so the window selector skips them. Never leaves the device unless the
+  // reporter ticks the (never pre-ticked) share box and submits.
+  const evidenceMessages: SourceMessage[] = useMemo(
+    () =>
+      messages.map((m) => {
+        let text: string | null = null;
+        if (!m.undecryptable) {
+          try {
+            const decoded = decodeMessagePlaintext(m.ciphertext);
+            text = decoded.type === 'attachment' ? null : decoded.text;
+          } catch {
+            text = null;
+          }
+        }
+        return {
+          messageId: m.messageId,
+          sentAtMs: m.timestamp,
+          senderSide: m.senderId === 'me' ? 'reporter' : 'reported',
+          text,
+          undecryptable: m.undecryptable,
+        };
+      }),
+    [messages]
+  );
   const { showToast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
@@ -1296,6 +1380,20 @@ function MatchConversation({
         onClose={() => setRecoveryOpen(false)}
         onRecovered={() => void refetch()}
       />
+
+      {peerId && (
+        <ReportFlowDialog
+          open={!!reportOpen}
+          onClose={() => onCloseReport?.()}
+          source="chat"
+          reportedUserId={peerId}
+          reportedName={peerName}
+          conversationId={matchId}
+          sourceMessages={evidenceMessages}
+          onRequestBlock={onReportPeer}
+          onRequestUnmatch={onRequestUnmatch}
+        />
+      )}
     </>
   );
 }
@@ -2047,6 +2145,7 @@ function ProfileInspectorModal({
   peerName,
   peerPhoto,
   distanceKm,
+  onReport,
 }: {
   open: boolean;
   onClose: () => void;
@@ -2055,6 +2154,7 @@ function ProfileInspectorModal({
   peerName: string;
   peerPhoto: string;
   distanceKm: number | null;
+  onReport?: () => void;
 }) {
   return (
     <AnimatePresence>
@@ -2132,6 +2232,16 @@ function ProfileInspectorModal({
                     &ldquo;{peerProfile.bio}&rdquo;
                   </p>
                 )}
+                {onReport && (
+                  <button
+                    type="button"
+                    onClick={onReport}
+                    className="w-full mt-2 py-3 border border-border text-sm font-semibold rounded-xl hover:bg-surface-hover transition-colors text-red-500 cursor-pointer"
+                    data-track-exempt="duplicate: opens the member report flow from the profile; reported via the report_flow signal (report.open)."
+                  >
+                    Report
+                  </button>
+                )}
               </>
             )}
           </div>
@@ -2174,7 +2284,7 @@ function ReportBlockModal({
           <div className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-6 shadow-2xl rounded-2xl">
             <div className="flex items-center gap-3 text-red-500">
               <AlertTriangle className="w-6 h-6" />
-              <h3 className="text-xl font-bold text-text">Report &amp; block</h3>
+              <h3 className="text-xl font-bold text-text">Block</h3>
             </div>
             <p className="text-xs text-text-secondary leading-relaxed">
               Blocking {peerName} ends this connection and prevents further contact. Your chat history
@@ -2214,7 +2324,7 @@ function ReportBlockModal({
                 {...trackProps(UiElement.CHAT_BLOCK_CONFIRM)}
                 className="flex-1 py-3 bg-red-600 text-white text-xs font-semibold rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
-                {submitting ? <LoadingSpinner size="sm" /> : 'Block & report'}
+                {submitting ? <LoadingSpinner size="sm" /> : 'Block'}
               </button>
             </div>
           </div>

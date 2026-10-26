@@ -19,7 +19,7 @@ import { ReportCategory } from '../../../lib/analytics/generated/telemetryCatalo
 
 export { ReportCategory };
 
-export type ReportSeverityTier = 'critical' | 'high' | 'standard';
+export type ReportSeverity = 'critical' | 'high' | 'standard';
 
 export interface CategoryMeta {
   code: ReportCategory;
@@ -27,7 +27,7 @@ export interface CategoryMeta {
   title: string;
   /** One-line description shown under the title. */
   description: string;
-  tier: ReportSeverityTier;
+  tier: ReportSeverity;
   /** Default for the "Also block this person" toggle. */
   alsoBlockDefault: boolean;
   /** Whether the decrypted-chat evidence option may be offered for this category. */
