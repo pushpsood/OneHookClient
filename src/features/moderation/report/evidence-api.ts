@@ -83,6 +83,42 @@ export interface RetryOptions {
 
 const FINALIZE_RETRY_CODE = 'EVIDENCE_FINALIZE_RETRY';
 
+/**
+ * Evidence for this report is already recorded server-side (presign returns `409` with this code
+ * once evidence exists, and `complete` is idempotent on `evidenceId`). Either way the evidence IS
+ * attached, so this is a success, not a failure.
+ */
+export const EVIDENCE_ALREADY_COMPLETED_CODE = 'EVIDENCE_ALREADY_COMPLETED';
+
+/**
+ * Codes that mean the server will NEVER accept evidence for this report, so retrying cannot help.
+ * The UI closes the evidence affordance with a calm, final note (no Retry):
+ *   - EVIDENCE_DISABLED    : evidence not allowed for this category (e.g. MINOR_SAFETY).
+ *   - EVIDENCE_NOT_OFFERED : the report was not filed with `evidenceOffered`.
+ *   - REPORT_TOO_OLD       : past the server's evidence window (`reportMaxAgeHours`).
+ *   - NOT_REPORTER         : the caller is not the report's reporter.
+ */
+export const EVIDENCE_TERMINAL_CODES: readonly string[] = [
+  'EVIDENCE_DISABLED',
+  'EVIDENCE_NOT_OFFERED',
+  'REPORT_TOO_OLD',
+  'NOT_REPORTER',
+];
+
+/**
+ * Map an evidence transport error to an evidence outcome, or `null` when it is a transient/retryable
+ * failure the caller should surface with a Retry. Pure (no I/O) so it is unit-testable.
+ *   - `'attached'` : evidence already recorded (409 EVIDENCE_ALREADY_COMPLETED).
+ *   - `'terminal'` : a code where retry can never succeed (hide Retry, show a calm final note).
+ *   - `null`       : anything else (network, 5xx, S3 PUT rejection, exhausted finalize retry).
+ */
+export function classifyEvidenceError(err: unknown): 'attached' | 'terminal' | null {
+  if (!(err instanceof EvidenceError) || !err.code) return null;
+  if (err.code === EVIDENCE_ALREADY_COMPLETED_CODE) return 'attached';
+  if (EVIDENCE_TERMINAL_CODES.includes(err.code)) return 'terminal';
+  return null;
+}
+
 function resolveBaseUrl(t: EvidenceTransport): string {
   return (t.baseUrl ?? portalModerationBaseUrl).replace(/\/+$/, '');
 }

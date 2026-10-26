@@ -32,13 +32,24 @@ import {
   presignEvidence,
   putEvidenceBytes,
   completeEvidence,
+  classifyEvidenceError,
   type EvidenceTransport,
   type RetryOptions,
 } from './evidence-api';
 import { getMemberIdToken } from './member-auth';
 import { trackReport, ReportEvent, type ReportCategory, type ReportSource } from './telemetry';
 
-export type EvidenceOutcome = 'skipped' | 'not_allowed' | 'empty' | 'attached' | 'failed';
+/**
+ * Outcome of the optional decrypted-chat evidence attach:
+ *   - `skipped`     : the reporter did not opt in.
+ *   - `not_allowed` : the server said evidence is not accepted for this report (evidenceAllowed:false).
+ *   - `empty`       : opted in, but there was nothing in the window to share.
+ *   - `attached`    : evidence recorded (including a 409 EVIDENCE_ALREADY_COMPLETED / idempotent complete).
+ *   - `terminal`    : the server will never accept evidence here (disabled / not-offered / too-old /
+ *                     not-reporter) — a calm, final state with NO Retry.
+ *   - `failed`      : a transient failure — the report is filed, Retry is offered.
+ */
+export type EvidenceOutcome = 'skipped' | 'not_allowed' | 'empty' | 'attached' | 'failed' | 'terminal';
 
 export interface ReportSubmission {
   reportedUserId: string;
@@ -91,16 +102,23 @@ export function buildReportBody(sub: ReportSubmission): CreateReportRequest {
 
 /**
  * Upload the decrypted-chat evidence for an already-filed report. Builds the window + canonical
- * bundle, hashes it, presigns, PUTs the exact bytes, and completes (with 503 retry). Throws on
- * failure (the caller decides whether that fails the report — it must NOT). Returns the outcome
- * `'attached'`, or `'empty'` when there is nothing to share.
+ * bundle, hashes it, presigns, PUTs the exact bytes, and completes (with 503 retry).
+ *
+ * Returns the outcome:
+ *   - `'attached'` : recorded (also when presign returns 409 EVIDENCE_ALREADY_COMPLETED, or complete
+ *                    is idempotent — the evidence already exists server-side).
+ *   - `'empty'`    : there was nothing in the window to share.
+ *   - `'terminal'` : the server will never accept evidence here — the caller hides Retry.
+ *
+ * Throws only on a transient/retryable failure (network, 5xx, S3 PUT rejection, exhausted finalize
+ * retry); the caller must NOT let that fail the already-filed report, and may offer Retry.
  */
 export async function uploadEvidence(
   reportId: string,
   conversationId: string,
   messages: SourceMessage[],
   deps: SubmitDeps = {}
-): Promise<Extract<EvidenceOutcome, 'attached' | 'empty'>> {
+): Promise<Extract<EvidenceOutcome, 'attached' | 'empty' | 'terminal'>> {
   const nowMs = deps.nowMs ?? (() => Date.now());
   const transport = deps.evidence ?? defaultEvidenceTransport();
   const includesMedia = false; // no media in this release (docs/MODERATION.md §9.3)
@@ -112,41 +130,51 @@ export async function uploadEvidence(
   });
   if (window.length === 0) return 'empty';
 
-  const bundle = buildBundle({
-    reportId,
-    conversationId,
-    messages: window,
-    attachments: [],
-  });
-  const sha256 = await bundleSha256Hex(bundle);
-  const sizeBytes = canonicalByteLength(bundle);
-  const bytes = canonicalBytes(bundle);
+  try {
+    const bundle = buildBundle({
+      reportId,
+      conversationId,
+      messages: window,
+      attachments: [],
+    });
+    const sha256 = await bundleSha256Hex(bundle);
+    const sizeBytes = canonicalByteLength(bundle);
+    const bytes = canonicalBytes(bundle);
 
-  const presign = await presignEvidence(transport, {
-    reportId,
-    sizeBytes,
-    sha256,
-    messageCount: window.length,
-    includesMedia,
-  });
+    const presign = await presignEvidence(transport, {
+      reportId,
+      sizeBytes,
+      sha256,
+      messageCount: window.length,
+      includesMedia,
+    });
 
-  // The presigned PUT requires the exact checksum header; if the server didn't echo it, compute it
-  // from our hash so S3's enforcement still matches our bytes.
-  const headers = { ...presign.upload.headers };
-  if (!headers['x-amz-checksum-sha256']) headers['x-amz-checksum-sha256'] = hexToBase64(sha256);
+    // The presigned PUT requires the exact checksum header; if the server didn't echo it, compute it
+    // from our hash so S3's enforcement still matches our bytes.
+    const headers = { ...presign.upload.headers };
+    if (!headers['x-amz-checksum-sha256']) headers['x-amz-checksum-sha256'] = hexToBase64(sha256);
 
-  await putEvidenceBytes(transport.fetchImpl, { ...presign.upload, headers }, bytes);
+    await putEvidenceBytes(transport.fetchImpl, { ...presign.upload, headers }, bytes);
 
-  const messageIds = window.map((m) => m.messageId);
-  const firstSentAt = Date.parse(window[0].sentAt);
-  const lastSentAt = Date.parse(window[window.length - 1].sentAt);
+    const messageIds = window.map((m) => m.messageId);
+    const firstSentAt = Date.parse(window[0].sentAt);
+    const lastSentAt = Date.parse(window[window.length - 1].sentAt);
 
-  await completeEvidence(
-    transport,
-    { reportId, evidenceId: presign.evidenceId, messageIds, firstSentAt, lastSentAt },
-    deps.evidenceRetry
-  );
-  return 'attached';
+    // `complete` is idempotent on evidenceId: a success (idempotent:true or false) means the evidence
+    // is recorded, i.e. attached.
+    await completeEvidence(
+      transport,
+      { reportId, evidenceId: presign.evidenceId, messageIds, firstSentAt, lastSentAt },
+      deps.evidenceRetry
+    );
+    return 'attached';
+  } catch (err) {
+    // 409 EVIDENCE_ALREADY_COMPLETED => attached; terminal codes => terminal (no Retry). Anything
+    // else is transient and rethrows so the caller can offer Retry.
+    const classified = classifyEvidenceError(err);
+    if (classified) return classified;
+    throw err;
+  }
 }
 
 /**
@@ -159,12 +187,9 @@ export async function submitReport(sub: ReportSubmission, deps: SubmitDeps = {})
   const emit = deps.telemetry ?? trackReport;
 
   const evidenceOffered = sub.shareEvidence;
-  emit(evidenceOffered ? ReportEvent.REPORT_SUBMIT_WITH_EVIDENCE : ReportEvent.REPORT_SUBMIT_WITHOUT_EVIDENCE, {
-    category: sub.category,
-    source: sub.source,
-    evidence: evidenceOffered,
-  });
 
+  // File the report FIRST. Telemetry for the submit outcome is emitted only once the result is
+  // known: submit_with/without_evidence after the report is created (201), submit_failed otherwise.
   let response: CreateReportResponse;
   try {
     response = await createReport(buildReportBody(sub));
@@ -172,6 +197,12 @@ export async function submitReport(sub: ReportSubmission, deps: SubmitDeps = {})
     emit(ReportEvent.REPORT_SUBMIT_FAILED, { category: sub.category, source: sub.source });
     throw err;
   }
+
+  emit(evidenceOffered ? ReportEvent.REPORT_SUBMIT_WITH_EVIDENCE : ReportEvent.REPORT_SUBMIT_WITHOUT_EVIDENCE, {
+    category: sub.category,
+    source: sub.source,
+    evidence: evidenceOffered,
+  });
 
   const result: SubmitResult = {
     reportId: response.reportId,
@@ -194,6 +225,8 @@ export async function submitReport(sub: ReportSubmission, deps: SubmitDeps = {})
       sub.messages ?? [],
       deps
     );
+    // Only a genuine attach is a telemetry success; 'empty'/'terminal' uploaded nothing and are
+    // not failures either, so they emit no upload event.
     if (result.evidenceOutcome === 'attached') {
       emit(ReportEvent.REPORT_EVIDENCE_UPLOAD_SUCCEEDED, { category: sub.category, source: sub.source });
     }
