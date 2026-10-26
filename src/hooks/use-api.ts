@@ -29,10 +29,14 @@ import {
   encodeKeyMaterial,
   encryptAttachment,
   frameAttachment,
+  decodeMessagePlaintext,
   type AttachmentEnvelope,
   type AttachmentKind,
 } from '../lib/chat-attachments';
 import { ChatApi } from '../api/chat';
+import type { ChatMessageExtended } from '../api/chat';
+import { collectWindowPages } from '../features/moderation/report/window-loader';
+import type { SourceMessage } from '../features/moderation/report/window-selection';
 import {
   Coordinates,
   isValidCoordinate,
@@ -574,6 +578,44 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     }
   }, [matchId, myId, decryptInbound, encryptionManager, recipientId]);
 
+  // Page the FULL evidence window (last 200 messages / 30 days — docs/MODERATION.md §2) for the
+  // optional decrypted-chat share. `getMessages` returns one oldest-first DynamoDB page per call, so
+  // the live `messages` snapshot (a single page) can omit the most recent messages in a long chat.
+  // This pages forward to completeness (capped) and decrypts locally with the SAME path the UI uses,
+  // so the window the reporter previews/uploads is correct. Nothing leaves the device here.
+  const loadEvidenceWindow = useCallback(async (): Promise<SourceMessage[]> => {
+    if (!matchId) return [];
+    const raw = await collectWindowPages<ChatMessageExtended>(
+      {
+        fetchPage: (after) => ChatMessagingApi.getMessages(matchId, after),
+        getTimestamp: (m) => Number(m.timestamp),
+        getId: (m) => String(m.messageId),
+      },
+      {}
+    );
+    const out: SourceMessage[] = [];
+    for (const m of raw) {
+      const decrypted = await decryptInbound(m.ciphertext);
+      let text: string | null = null;
+      if (!decrypted.undecryptable) {
+        try {
+          const decoded = decodeMessagePlaintext(decrypted.text);
+          text = decoded.type === 'attachment' ? null : decoded.text;
+        } catch {
+          text = null;
+        }
+      }
+      out.push({
+        messageId: m.messageId,
+        sentAtMs: Number(m.timestamp),
+        senderSide: m.senderId === myId ? 'reporter' : 'reported',
+        text,
+        undecryptable: decrypted.undecryptable,
+      });
+    }
+    return out;
+  }, [matchId, myId, decryptInbound]);
+
   useEffect(() => {
     void fetchMessages();
   }, [fetchMessages]);
@@ -862,6 +904,8 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     markAsDelivered,
     markAsRead,
     refetch: fetchMessages,
+    /** Page + decrypt the FULL evidence window (last 200 / 30 days) for the optional chat share. */
+    loadEvidenceWindow,
     /** True when at least one message needs a history key this device does not have yet. */
     hasUndecryptable: messages.some((m) => m.undecryptable),
     /** Epoch start after a reset; messages older than this are permanently unreadable here. */
