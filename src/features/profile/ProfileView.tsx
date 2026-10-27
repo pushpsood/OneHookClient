@@ -25,6 +25,8 @@ import { useAppStore } from '../../store/app-store';
 import { useToast } from '../../components/common/Toast';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { MediaImage } from '../../components/common/MediaImage';
+import { DateOfBirthField, LockedDateOfBirth } from '../../components/onboarding/DateOfBirthField';
+import { DOB_LOCKED_HINT, DOB_PROVISIONAL_HINT, ageOn, validateDob } from '../../utils/dob';
 import { pictureTransformStyle } from '../../utils/photo-transform';
 import { useMediaSrc } from '../../utils/media-url';
 import { ModerationBadge } from '../../components/ui/ModerationBadge';
@@ -275,13 +277,21 @@ export function ProfileView({
   const [basic, setBasic] = useState({
     displayName: user.displayName || user.name || '',
     bio: user.bio || '',
-    age: String(user.age || '25'),
     work: user.work || '',
     education: user.education || '',
     hometown: user.hometown || '',
     currentLocation: user.currentLocation || '',
     height: user.height ? String(user.height) : '',
   });
+
+  // Date of birth is read-only. The one exception: an existing member whose date is a provisional
+  // estimate may enter their real date ONCE (the server then locks it).
+  const dobIsProvisional = Boolean(user.birthDetails?.provisional);
+  const lockedDob = user.birthDetails?.date && !dobIsProvisional ? user.birthDetails.date : '';
+  const [realDob, setRealDob] = useState('');
+  const [realDobConfirmed, setRealDobConfirmed] = useState(false);
+  const realDobReady = dobIsProvisional && realDob !== '' && realDobConfirmed && !validateDob(realDob);
+  const displayAge = (realDobReady ? ageOn(realDob) : null) ?? user.age;
 
   const [optional, setOptional] = useState({
     maxDistanceKm: String(prefs?.maxDistanceKm || '50'),
@@ -337,7 +347,6 @@ export function ProfileView({
       setBasic({
         displayName: user.displayName || user.name || '',
         bio: user.bio || '',
-        age: String(user.age || '25'),
         work: user.work || '',
         education: user.education || '',
         hometown: user.hometown || '',
@@ -600,7 +609,9 @@ export function ProfileView({
     const profilePayload: Record<string, unknown> = {
       displayName: trimmedDisplayName,
       bio: trimmedBio,
-      age: numberOrUndefined(basic.age) || 18,
+      // Age is derived server-side from the immutable birth date and is never sent. A provisional
+      // date may be replaced once by the real one, and only after the member confirmed it.
+      ...(realDobReady ? { birthDetails: { date: realDob } } : {}),
       gender: gender || 'MALE',
       interestedIn: interestedInGenders.length > 0 ? interestedInGenders : ['FEMALE'],
       pictures: photos,
@@ -670,7 +681,8 @@ export function ProfileView({
         name: trimmedDisplayName,
         displayName: trimmedDisplayName,
         bio: trimmedBio,
-        age: numberOrUndefined(basic.age) || 18,
+        age: displayAge,
+        ...(realDobReady ? { birthDetails: { date: realDob } } : {}),
         gender,
         interestedIn: interestedInGenders,
         pictures: photos,
@@ -740,7 +752,7 @@ export function ProfileView({
     id: user.id,
     name: basic.displayName || user.name || 'Anonymous',
     displayName: basic.displayName || user.name || 'Anonymous',
-    age: basic.age ? Number(basic.age) : user.age || 25,
+    age: displayAge || 25,
     bio: basic.bio || user.bio || '',
     work: basic.work || user.work || '',
     education: basic.education || user.education || '',
@@ -836,7 +848,7 @@ export function ProfileView({
           <div className="text-center space-y-1">
             <div className="flex items-center justify-center gap-2">
               <h2 className="text-lg font-semibold text-text">
-                {basic.displayName || 'Anonymous'}, {basic.age || '—'}
+                {basic.displayName || 'Anonymous'}, {displayAge ?? '—'}
               </h2>
               {user.verified && (
                 <CheckCircle2 className="w-4 h-4 text-ig-blue fill-ig-blue" />
@@ -1161,16 +1173,27 @@ export function ProfileView({
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Age *">
-                <input
-                  value={basic.age}
-                  type="number"
-                  min="18"
-                  max="99"
-                  onChange={(e) => setBasic((prev) => ({ ...prev, age: e.target.value }))}
-                  className="field-input"
+            {lockedDob ? (
+              <Field label="Date of birth">
+                <LockedDateOfBirth isoDate={lockedDob} hint={DOB_LOCKED_HINT} />
+              </Field>
+            ) : dobIsProvisional ? (
+              <div className="space-y-2">
+                <p className="text-sm font-bold">{DOB_PROVISIONAL_HINT}</p>
+                <DateOfBirthField
+                  value={realDob}
+                  onChange={setRealDob}
+                  confirmed={realDobConfirmed}
+                  onConfirmedChange={setRealDobConfirmed}
                 />
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Age">
+                <div className="field-input opacity-80" aria-readonly>
+                  {displayAge ?? '—'}
+                </div>
               </Field>
               <Field label="Height (cm)">
                 <input
