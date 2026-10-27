@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import type { DiscoveryCandidate, UserProfile } from '../../types';
 import type { ApiError } from '../../lib/api-client';
 import type { LikeTargetType } from '../../api/rest';
-import { MatchingApi } from '../../api/matching';
+import { MatchingApi, type DiscoveryCategory } from '../../api/matching';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { DiscoveryCard } from './DiscoveryCard';
 import { CommentComposer } from './CommentComposer';
@@ -25,6 +25,9 @@ export function DiscoveryView({
   onRetry,
   onPass,
   onLike,
+  category = 'ALL',
+  availableCategories = ['ALL'],
+  onCategoryChange,
 }: {
   key?: string;
   candidates: DiscoveryCandidate[];
@@ -44,6 +47,10 @@ export function DiscoveryView({
     likeKind?: 'LIKE' | 'ROSE'
   ) => Promise<boolean>;
   onNavigateToProfile?: () => void;
+  /** Applied discovery category and the ones this member may pick (from the backend). */
+  category?: DiscoveryCategory;
+  availableCategories?: DiscoveryCategory[];
+  onCategoryChange?: (category: DiscoveryCategory) => void;
 }) {
   // The element being commented on (composer open). `kind` distinguishes a normal like from a rose.
   const [activeComposer, setActiveComposer] = useState<{
@@ -129,6 +136,12 @@ export function DiscoveryView({
     advance(candidateId);
   };
 
+  // Super+ members get a category selector; free members (availableCategories = ['ALL']) see none.
+  const selector =
+    onCategoryChange && availableCategories.length > 1 ? (
+      <CategorySelector value={category} options={availableCategories} onChange={onCategoryChange} />
+    ) : null;
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-bg text-text">
@@ -157,7 +170,8 @@ export function DiscoveryView({
 
   if (!currentCandidate) {
     return (
-      <div className="h-full flex items-center justify-center bg-bg text-text p-6">
+      <div className="h-full flex flex-col items-center justify-center bg-bg text-text p-6 gap-6">
+        {selector}
         <div className="max-w-sm w-full text-center space-y-3">
           <h2 className="text-lg font-semibold text-text">You&rsquo;re All Caught Up</h2>
           <p className="text-sm text-text-secondary">Check back soon for new people to meet.</p>
@@ -169,6 +183,7 @@ export function DiscoveryView({
   return (
     <div className="h-full overflow-y-auto bg-bg text-text">
       <div className="w-full max-w-[500px] mx-auto px-0 sm:px-4 py-4">
+        {selector && <div className="px-4 sm:px-0 pb-3">{selector}</div>}
         <AnimatePresence mode="wait">
           <motion.div
             key={currentCandidate.id}
@@ -200,6 +215,46 @@ export function DiscoveryView({
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+const CATEGORY_LABELS: Record<DiscoveryCategory, string> = {
+  ALL: 'For you',
+  PROFILE_MATCH: 'Matches your preferences',
+  ONEHOOK_SUGGESTED: 'Mr. OneHook picks',
+  SIMILAR: 'Similar to your likes',
+};
+
+/** Discovery category chips (Super+). Options come from the backend's availableCategories. */
+function CategorySelector({
+  value,
+  options,
+  onChange,
+}: {
+  value: DiscoveryCategory;
+  options: DiscoveryCategory[];
+  onChange: (c: DiscoveryCategory) => void;
+}) {
+  return (
+    <div role="tablist" aria-label="Discovery category" className="flex gap-2 overflow-x-auto no-scrollbar">
+      {options.map((option) => (
+        <button
+          key={option}
+          type="button"
+          role="tab"
+          aria-selected={option === value}
+          onClick={() => option !== value && onChange(option)}
+          {...trackProps(UiElement.DISCOVER_CATEGORY_SELECT, { value: option.toLowerCase() })}
+          className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
+            option === value
+              ? 'bg-ig-blue text-white border-ig-blue'
+              : 'bg-surface border-border text-text-secondary hover:text-text'
+          }`}
+        >
+          {CATEGORY_LABELS[option] ?? option}
+        </button>
+      ))}
     </div>
   );
 }

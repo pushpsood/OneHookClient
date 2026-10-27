@@ -26,6 +26,7 @@ import {
   MEMBER_CHAT_PATH,
   type MemberChatAvailability,
   parseMemberChatResponse,
+  matchSuggestionNote,
   type MemberChatResponse,
   type MemberSessionMetadata,
   type MrOneHookMessage,
@@ -362,7 +363,12 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         return;
       }
 
-      setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
+      // A "find me ..." request: say what happened to the suggestion (added to Discover, needs Super, or
+      // could not be saved) under the reply.
+      const content = result.matchSuggestion
+        ? `${result.reply}\n\n${matchSuggestionNote(result.matchSuggestion)}`
+        : result.reply;
+      setMessages((prev) => [...prev, { role: 'assistant', content }]);
       setMood(result.mood || 'Happy');
     },
     [applySession, matchId],

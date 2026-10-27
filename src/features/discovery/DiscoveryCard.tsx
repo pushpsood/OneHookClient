@@ -35,6 +35,11 @@ export interface DiscoveryProfileData {
   verified?: boolean;
   score?: number;
   recommendationReason?: string;
+  /** 'ONEHOOK_INTELLIGENCE' | 'MR_ONEHOOK' (from the discover API). */
+  matchFinder?: string;
+  matchFinderLabel?: string;
+  /** Why this candidate is shown (from the discover API). */
+  reasoning?: string;
   photos?: string[];
   pictures?: string[];
   pictureTransforms?: Record<string, string>;
@@ -630,10 +635,19 @@ export function DiscoveryCard({
 
   return (
     <article className={`w-full max-w-[470px] mx-auto bg-surface-card sm:border sm:border-border sm:rounded-xl flex flex-col overflow-hidden select-none ${className}`}>
-      {/* Recommendation banner */}
-      {((candidate.score && candidate.score >= 0.9) || candidate.recommendationReason) && (
-        <div className="bg-ig-blue/5 border-b border-border px-4 py-3 text-[11px] text-text-secondary leading-relaxed italic">
-          {candidate.recommendationReason || 'Handpicked for you — high compatibility and shared vibe.'}
+      {/* Match finder: who found this person and why. Mr. OneHook = from a OneHook suggestion (asked or
+          inferred); OneHook Intelligence = profile details match the member's preferences. */}
+      {(candidate.matchFinderLabel || candidate.reasoning || candidate.recommendationReason) && (
+        <div
+          className={`border-b border-border px-4 py-3 text-[11px] leading-relaxed ${
+            candidate.matchFinder === 'MR_ONEHOOK' ? 'bg-ig-blue/10 text-text' : 'bg-ig-blue/5 text-text-secondary'
+          }`}
+          data-match-finder={candidate.matchFinder || undefined}
+        >
+          {candidate.matchFinderLabel && (
+            <span className="font-semibold not-italic mr-1.5">{candidate.matchFinderLabel}</span>
+          )}
+          <span className="italic">{candidate.reasoning || candidate.recommendationReason}</span>
         </div>
       )}
 

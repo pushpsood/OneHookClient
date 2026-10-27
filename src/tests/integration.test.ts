@@ -34,6 +34,8 @@ describe('Matching Pipeline: Gale-Shapley + Collaborative Filtering', () => {
       candidates: [],
       count: 0,
       algorithm: 'gale-shapley+cf',
+      category: 'ALL',
+      availableCategories: ['ALL'],
     };
     expect(response.algorithm).toBe('gale-shapley+cf');
   });
@@ -50,16 +52,21 @@ describe('Matching Pipeline: Gale-Shapley + Collaborative Filtering', () => {
   });
 
   it('cold start: empty candidate list is a valid response', () => {
-    const response: DiscoverResponse = { candidates: [], count: 0, algorithm: 'gale-shapley+cf' };
+    const response: DiscoverResponse = {
+      candidates: [], count: 0, algorithm: 'gale-shapley+cf', category: 'ALL', availableCategories: ['ALL'],
+    };
     expect(response.candidates).toHaveLength(0);
     expect(response.count).toBe(0);
   });
 
   it('top candidate score is highest in a sorted result set', () => {
+    const finder = {
+      matchFinder: 'ONEHOOK_INTELLIGENCE', matchFinderLabel: 'OneHook Intelligence', reasoning: 'r',
+    } as const;
     const candidates: RankedCandidate[] = [
-      { userId: 'best', score: 0.95, distanceKm: 5 },
-      { userId: 'good', score: 0.72, distanceKm: 5 },
-      { userId: 'ok',   score: 0.41, distanceKm: 5 },
+      { ...finder, userId: 'best', score: 0.95, distanceKm: 5 },
+      { ...finder, userId: 'good', score: 0.72, distanceKm: 5 },
+      { ...finder, userId: 'ok',   score: 0.41, distanceKm: 5 },
     ];
     const top = candidates[0];
     candidates.forEach((c) => expect(top.score).toBeGreaterThanOrEqual(c.score));

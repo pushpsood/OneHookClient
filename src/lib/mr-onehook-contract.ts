@@ -155,10 +155,32 @@ export interface MemberSessionMetadata {
   messageCount: number;
 }
 
+/**
+ * Outcome of a "find me ..." request. When the member asks Mr OneHook to find someone, the backend records
+ * a OneHook suggestion; people who fit it then appear in Discover as "Mr. OneHook" cards with `reasoning`.
+ */
+export interface MemberMatchSuggestion {
+  status: 'RECORDED' | 'PREMIUM_REQUIRED' | 'UNAVAILABLE';
+  reasoning: string;
+}
+
+/** One-line note shown under Mr OneHook's reply for a suggestion outcome. */
+export function matchSuggestionNote(suggestion: MemberMatchSuggestion): string {
+  switch (suggestion.status) {
+    case 'RECORDED':
+      return `Added to your Discover feed: ${suggestion.reasoning}`;
+    case 'PREMIUM_REQUIRED':
+      return 'Upgrade to Super to have Mr. OneHook find people for you.';
+    default:
+      return "I couldn't save that to your Discover feed right now. Please try again later.";
+  }
+}
+
 export interface MemberChatResponse {
   reply: string;
   mood: MrOneHookMood;
   needsMoreContext: boolean;
+  matchSuggestion?: MemberMatchSuggestion;
   contextRequest?: MemberContextRequest;
   contextUsed?: MemberContextUsed;
   requestId?: string;
@@ -238,6 +260,15 @@ export function parseMemberChatResponse(data: unknown): MemberChatResponse {
   if (typeof data.requestId === 'string') response.requestId = data.requestId;
   const session = parseSessionMetadata(data.session);
   if (session) response.session = session;
+  if (isRecord(data.matchSuggestion)
+    && (data.matchSuggestion.status === 'RECORDED'
+      || data.matchSuggestion.status === 'PREMIUM_REQUIRED'
+      || data.matchSuggestion.status === 'UNAVAILABLE')) {
+    response.matchSuggestion = {
+      status: data.matchSuggestion.status,
+      reasoning: typeof data.matchSuggestion.reasoning === 'string' ? data.matchSuggestion.reasoning : '',
+    };
+  }
   return response;
 }
 

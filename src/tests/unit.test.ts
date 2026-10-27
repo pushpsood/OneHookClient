@@ -31,22 +31,28 @@ describe('MatchingApi: Unit Tests', () => {
   });
 });
 
+const finder = {
+  matchFinder: 'ONEHOOK_INTELLIGENCE', matchFinderLabel: 'OneHook Intelligence', reasoning: 'r',
+} as const;
+
 describe('DiscoverResponse: Ranked Candidates', () => {
   it('discover response shape includes algorithm field', () => {
     const response: DiscoverResponse = {
       candidates: [
-        { userId: 'abc123', score: 0.847, distanceKm: 5 },
-        { userId: 'def456', score: 0.731, distanceKm: 5 },
+        { ...finder, userId: 'abc123', score: 0.847, distanceKm: 5 },
+        { ...finder, userId: 'def456', score: 0.731, distanceKm: 5 },
       ],
       count: 2,
       algorithm: 'gale-shapley+cf',
+      category: 'ALL',
+      availableCategories: ['ALL'],
     };
     expect(response.algorithm).toBe('gale-shapley+cf');
     expect(response.count).toBe(2);
   });
 
   it('ranked candidates have userId and score fields', () => {
-    const candidate: RankedCandidate = { userId: 'user1', score: 0.75, distanceKm: 5 };
+    const candidate: RankedCandidate = { ...finder, userId: 'user1', score: 0.75, distanceKm: 5 };
     expect(candidate.userId).toBe('user1');
     expect(candidate.score).toBeGreaterThanOrEqual(0);
     expect(candidate.score).toBeLessThanOrEqual(1);
@@ -54,9 +60,9 @@ describe('DiscoverResponse: Ranked Candidates', () => {
 
   it('candidates are ordered by score descending', () => {
     const candidates: RankedCandidate[] = [
-      { userId: 'a', score: 0.9, distanceKm: 5 },
-      { userId: 'b', score: 0.7, distanceKm: 5 },
-      { userId: 'c', score: 0.5, distanceKm: 5 },
+      { ...finder, userId: 'a', score: 0.9, distanceKm: 5 },
+      { ...finder, userId: 'b', score: 0.7, distanceKm: 5 },
+      { ...finder, userId: 'c', score: 0.5, distanceKm: 5 },
     ];
     for (let i = 0; i < candidates.length - 1; i++) {
       expect(candidates[i].score).toBeGreaterThanOrEqual(candidates[i + 1].score);
@@ -64,12 +70,12 @@ describe('DiscoverResponse: Ranked Candidates', () => {
   });
 
   it('score of 0 is valid for cold-start candidates', () => {
-    const candidate: RankedCandidate = { userId: 'newUser', score: 0, distanceKm: 5 };
+    const candidate: RankedCandidate = { ...finder, userId: 'newUser', score: 0, distanceKm: 5 };
     expect(candidate.score).toBe(0);
   });
 
   it('score of 1 is valid for top mutual-affinity candidates', () => {
-    const candidate: RankedCandidate = { userId: 'topUser', score: 1, distanceKm: 5 };
+    const candidate: RankedCandidate = { ...finder, userId: 'topUser', score: 1, distanceKm: 5 };
     expect(candidate.score).toBe(1);
   });
 });

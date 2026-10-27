@@ -94,6 +94,12 @@ export type DiscoveryCandidate = CandidateDto & {
   education?: string;
   hometown?: string;
   interests?: string[];
+  /** Who found this candidate: 'ONEHOOK_INTELLIGENCE' or 'MR_ONEHOOK'. */
+  matchFinder?: string;
+  /** Display name of matchFinder ("OneHook Intelligence" / "Mr. OneHook"). */
+  matchFinderLabel?: string;
+  /** Why this candidate is shown. */
+  reasoning?: string;
 };
 
 export type RankedCandidate = CandidateDto & {
