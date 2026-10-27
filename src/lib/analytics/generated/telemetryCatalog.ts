@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 34a4918a54cc60e7ee0259d51cd8fba1a6167c89465599a00f3f8ef937c44004
+// telemetry-integrity: sha256 58537cc25dd8d2b5efc5013938a7736b405cb73c3dde1478ad852430db1e082c
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.8.0, hash 9a56f9fef0ed4ae7.
+// Catalog version 1.9.0, hash 7f0a0b33ce88bee5.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.8.0";
-export const TELEMETRY_CATALOG_HASH = "9a56f9fef0ed4ae7";
+export const TELEMETRY_CATALOG_VERSION = "1.9.0";
+export const TELEMETRY_CATALOG_HASH = "7f0a0b33ce88bee5";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -705,7 +705,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "profile_edit.prompt_remove": { screen: "PROFILE_EDIT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "profile_edit.voice_add": { screen: "PROFILE_EDIT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "profile_edit.voice_remove": { screen: "PROFILE_EDIT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
-  "profile_edit.choice_select": { screen: "PROFILE_EDIT", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios"] },
+  "profile_edit.choice_select": { screen: "PROFILE_EDIT", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.save": { screen: "PREFERENCES", kind: "button", actions: ["submit"], values: null, platforms: ["ios", "android"] },
   "preferences.upgrade_open": { screen: "PREFERENCES", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "preferences.locked_filter_tap": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },

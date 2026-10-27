@@ -26,6 +26,7 @@ import { useToast } from '../../components/common/Toast';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { MediaImage } from '../../components/common/MediaImage';
 import { DateOfBirthField, LockedDateOfBirth } from '../../components/onboarding/DateOfBirthField';
+import { BirthTimePlaceFields, birthDetailsPayload, sameTimePlace, type BirthTimePlace } from '../../components/onboarding/BirthTimePlaceFields';
 import { DOB_LOCKED_HINT, DOB_PROVISIONAL_HINT, ageOn, validateDob } from '../../utils/dob';
 import { pictureTransformStyle } from '../../utils/photo-transform';
 import { useMediaSrc } from '../../utils/media-url';
@@ -292,6 +293,19 @@ export function ProfileView({
   const [realDobConfirmed, setRealDobConfirmed] = useState(false);
   const realDobReady = dobIsProvisional && realDob !== '' && realDobConfirmed && !validateDob(realDob);
   const displayAge = (realDobReady ? ageOn(realDob) : null) ?? user.age;
+  // Birth time and place: optional, editable any time (only the date is locked).
+  const storedExtra: BirthTimePlace = {
+    time: user.birthDetails?.time ?? undefined,
+    timeZone: user.birthDetails?.timeZone ?? undefined,
+    latitude: user.birthDetails?.latitude ?? undefined,
+    longitude: user.birthDetails?.longitude ?? undefined,
+    placeName: user.birthDetails?.placeName ?? undefined,
+  };
+  const [birthExtra, setBirthExtra] = useState<BirthTimePlace>(storedExtra);
+  const birthDateForSave = realDobReady ? realDob : lockedDob;
+  const birthExtraChanged = !sameTimePlace(birthExtra, storedExtra) || birthExtra.placeName !== storedExtra.placeName;
+  const birthDetailsToSend =
+    birthDateForSave && (realDobReady || birthExtraChanged) ? birthDetailsPayload(birthDateForSave, birthExtra) : undefined;
 
   const [optional, setOptional] = useState({
     maxDistanceKm: String(prefs?.maxDistanceKm || '50'),
@@ -611,7 +625,7 @@ export function ProfileView({
       bio: trimmedBio,
       // Age is derived server-side from the immutable birth date and is never sent. A provisional
       // date may be replaced once by the real one, and only after the member confirmed it.
-      ...(realDobReady ? { birthDetails: { date: realDob } } : {}),
+      ...(birthDetailsToSend ? { birthDetails: birthDetailsToSend } : {}),
       gender: gender || 'MALE',
       interestedIn: interestedInGenders.length > 0 ? interestedInGenders : ['FEMALE'],
       pictures: photos,
@@ -682,7 +696,7 @@ export function ProfileView({
         displayName: trimmedDisplayName,
         bio: trimmedBio,
         age: displayAge,
-        ...(realDobReady ? { birthDetails: { date: realDob } } : {}),
+        ...(birthDetailsToSend ? { birthDetails: birthDetailsToSend } : {}),
         gender,
         interestedIn: interestedInGenders,
         pictures: photos,
@@ -1188,6 +1202,12 @@ export function ProfileView({
                 />
               </div>
             ) : null}
+
+            {(lockedDob || realDobReady) && (
+              <Field label="Birth time and place">
+                <BirthTimePlaceFields value={birthExtra} onChange={setBirthExtra} surface="profile" />
+              </Field>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Age">

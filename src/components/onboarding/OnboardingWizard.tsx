@@ -22,6 +22,7 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 import { UserState } from '../../types';
 import { MediaImage } from '../common/MediaImage';
 import { DateOfBirthField } from './DateOfBirthField';
+import { BirthTimePlaceFields, birthDetailsPayload, type BirthTimePlace } from './BirthTimePlaceFields';
 import { ageOn, onboardingGateMessage, validateDob } from '../../utils/dob';
 import { useMediaSrc, isMediaKey } from '../../utils/media-url';
 import { getCognitoAuth } from '../../lib/cognito-auth';
@@ -201,6 +202,7 @@ export function OnboardingWizard() {
   const [birthDate, setBirthDate] = useState(storedDob);
   const [dobConfirmed, setDobConfirmed] = useState(Boolean(storedDob));
   const age = birthDate ? ageOn(birthDate) ?? 0 : 0;
+  const [birthExtra, setBirthExtra] = useState<BirthTimePlace>({});
   const [gender, setGender] = useState(currentUser?.gender || 'MALE');
   const [interestedInGenders, setInterestedInGenders] = useState<string[]>(
     currentUser?.interestedIn && currentUser.interestedIn.length > 0 ? currentUser.interestedIn : ['FEMALE']
@@ -437,7 +439,7 @@ export function OnboardingWizard() {
         displayName: displayName.trim(),
         bio: bio.trim(),
         // Age is derived by the server from birthDetails.date; `age` is no longer sent.
-        birthDetails: { date: birthDate },
+        birthDetails: birthDetailsPayload(birthDate, birthExtra),
         gender: gender || 'MALE',
         interestedIn: interestedInGenders.length > 0 ? interestedInGenders : ['FEMALE'],
         pictures: cleanedPictures,
@@ -472,7 +474,7 @@ export function OnboardingWizard() {
         name: displayName.trim(),
         displayName: displayName.trim(),
         age,
-        birthDetails: { date: birthDate },
+        birthDetails: birthDetailsPayload(birthDate, birthExtra),
         gender,
         interestedIn: interestedInGenders,
         bio: bio.trim(),
@@ -616,6 +618,13 @@ export function OnboardingWizard() {
                 onConfirmedChange={setDobConfirmed}
               />
             )}
+
+            <details className="group">
+              <summary className="cursor-pointer text-sm font-bold">Add birth time and place (optional)</summary>
+              <div className="pt-3">
+                <BirthTimePlaceFields value={birthExtra} onChange={setBirthExtra} />
+              </div>
+            </details>
 
             <div className="space-y-3">
               <label className="text-[10px] uppercase tracking-[0.3em] font-black opacity-50 block">

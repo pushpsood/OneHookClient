@@ -80,7 +80,11 @@ export function Privacy() {
             <h3 className="text-2xl font-bold mb-3 mt-6">Account Information</h3>
             <ul className="list-disc list-inside space-y-2 opacity-70">
               <li>Email address</li>
-              <li>Name and date of birth</li>
+              <li>Name and date of birth (required; your age is calculated from it and is never stored separately)</li>
+              <li>
+                Birth time, time zone and birthplace (optional; see{' '}
+                <a href="#birth-details" className="underline" data-track-exempt="duplicate: in-page anchor; the privacy screen view is already tracked">Date of birth and traditional compatibility</a>)
+              </li>
               <li>Location (geographic area only)</li>
               <li>Profile photos, videos, and audio (encrypted storage)</li>
               <li>Profile details, bio, and interests</li>
@@ -135,6 +139,40 @@ export function Privacy() {
                   Important account notifications, policy updates, security alerts (opt-out
                   available for non-critical)
                 </p>
+              </div>
+              <div id="birth-details" className="scroll-mt-28">
+                <h4 className="font-bold mb-2">✓ Date of Birth and Traditional Compatibility</h4>
+                <div className="opacity-70 space-y-2">
+                  <p>
+                    <strong>Date of birth.</strong> You give it once, at sign-up. We use it to show your age
+                    (calculated fresh every time, never stored as a separate number), to keep OneHook adults-only
+                    (18+), and for age preferences in matching. Other members see your age, never your date of
+                    birth. You cannot change it yourself; if it is wrong, our support team can correct it after
+                    checking proof such as a government ID, at most twice per account, and each correction is
+                    recorded with the reason.
+                  </p>
+                  <p>
+                    <strong>Birth time, time zone and birthplace (optional).</strong> If you add them, together
+                    with your date of birth they are used for one purpose: estimating traditional compatibility
+                    between members (for example Kundali, Western natal charts, Bazi and Tzolk&apos;in). The
+                    result slightly changes the order in which profiles are suggested to you and to others; it
+                    never hides anyone and is never shown as a score. You can add, change or remove them at any
+                    time in your profile.
+                  </p>
+                  <p>
+                    <strong>How it is handled.</strong> We store the coordinates of your birthplace rounded to
+                    about 1 km, plus the place name you picked. Birth details are visible only to you. They are
+                    not shared with other members, not sent to our AI recommendation service, and removed from our
+                    analytics, which keep only your age at the time of an event. From these details we compute a
+                    short coded summary (a few bytes) that is used only for matching. Birthplace search is
+                    answered by Amazon Location Service; what you type is not stored.
+                  </p>
+                  <p>
+                    By entering your date of birth you consent to these uses; by adding birth time or place you
+                    consent to their use for traditional compatibility. You can withdraw that consent by removing
+                    the optional details from your profile.
+                  </p>
+                </div>
               </div>
               <div>
                 <h4 className="font-bold mb-2">✗ We Do NOT Use Your Data For</h4>
@@ -578,6 +616,14 @@ export function Privacy() {
                 </p>
               </div>
               <div>
+                <strong>Date of Birth and Birth Details:</strong>
+                <p className="opacity-70">
+                  Kept while your account is active and deleted with it, together with the matching summary
+                  computed from them and any record of a support correction. Removing your birth time or place
+                  deletes them and their summary straight away.
+                </p>
+              </div>
+              <div>
                 <strong>Video Applications:</strong>
                 <p className="opacity-70">
                   Application videos and transcripts are deleted 90 days after a decision, or 30
@@ -626,7 +672,9 @@ export function Privacy() {
                 <strong>Right to Access:</strong> Request a copy of all your personal data we hold
               </li>
               <li>
-                <strong>Right to Correction:</strong> Update or correct inaccurate information
+                <strong>Right to Correction:</strong> Update or correct inaccurate information. Your date of
+                birth is corrected by our support team on request, with proof (see{' '}
+                <a href="#birth-details" className="underline" data-track-exempt="duplicate: in-page anchor; the privacy screen view is already tracked">section 3</a>)
               </li>
               <li>
                 <strong>Right to Deletion:</strong> Request permanent deletion of your account and
@@ -726,6 +774,9 @@ export function Privacy() {
                 <strong>Video Applications:</strong> Amazon Transcribe, Amazon Rekognition and Amazon
                 SageMaker, hosted
                 in AWS (India region)
+              </li>
+              <li>
+                <strong>Birthplace Search:</strong> Amazon Location Service, hosted in AWS (India region)
               </li>
               <li>
                 <strong>Analytics:</strong> Hosted in AWS (India region)
