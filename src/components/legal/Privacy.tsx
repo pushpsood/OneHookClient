@@ -43,7 +43,7 @@ export function Privacy() {
             Privacy Policy
           </h1>
           <p className="text-lg opacity-60">
-            Last updated: October 26, 2026
+            Last updated: October 27, 2026
             <br />
             Effective from: May 23, 2026
           </p>
@@ -395,6 +395,41 @@ export function Privacy() {
                 </p>
               </div>
               <div>
+                <h4 className="font-bold mb-2">Child sexual abuse and exploitation</h4>
+                <p className="opacity-70">
+                  OneHook is for adults aged 18 and over. We have zero tolerance for child sexual
+                  abuse material, the grooming or sexual exploitation of a child, and any attempt to
+                  contact a minor for sexual purposes. If we become aware of it, whether from a report,
+                  our own review or a request from the authorities:
+                </p>
+                <ul className="list-disc list-inside space-y-1 opacity-70 mt-2">
+                  <li>
+                    We remove the content we hold, ban the accounts involved and do not tell them
+                    about our report.
+                  </li>
+                  <li>
+                    We report it to law enforcement in India as the Protection of Children from
+                    Sexual Offences Act, 2012 and the Information Technology Act, 2000 require,
+                    including the police and the National Cyber Crime Reporting Portal. We may also
+                    report it to the National Center for Missing &amp; Exploited Children (NCMEC),
+                    which can share reports with law enforcement in other countries.
+                  </li>
+                  <li>
+                    We preserve the related information we hold, such as account and profile
+                    details, photos and reports, for at least 180 days,
+                    or longer if a court or authorised agency asks us to, and share it with the
+                    authorities. Only our designated safety lead can access it, and it is used for
+                    nothing else, including training any model.
+                  </li>
+                </ul>
+                <p className="opacity-70 mt-2">
+                  Your chats are end-to-end encrypted, so we cannot see their content unless you
+                  choose to share it. If you come across such material, do not screenshot, save,
+                  forward or download it, because that can itself be a crime. Report the member in the
+                  app instead. You can also report directly at cybercrime.gov.in or by calling 1930.
+                </p>
+              </div>
+              <div>
                 <h4 className="font-bold mb-2">How long we keep it</h4>
                 <ul className="list-disc list-inside space-y-1 opacity-70">
                   <li>
@@ -420,7 +455,8 @@ export function Privacy() {
                   obligations. You can ask for the information we hold about you, but we will not
                   reveal who reported you or share an attached chat where that could put the person
                   who reported you at risk. We may share information with law enforcement where the
-                  law requires it or to prevent imminent harm.
+                  law requires it or to prevent imminent harm, and we always report suspected child
+                  sexual abuse or exploitation (see above).
                 </p>
               </div>
             </div>
@@ -498,7 +534,8 @@ export function Privacy() {
               </li>
               <li>
                 <strong>Safety & Security:</strong> To prevent fraud, abuse, or to protect user
-                safety, including with law enforcement to prevent imminent harm (see section 5)
+                safety, including with law enforcement to prevent imminent harm and to report
+                suspected child sexual abuse or exploitation (see section 5)
               </li>
               <li>
                 <strong>Service Providers:</strong> Only with vendors who sign strict data
@@ -552,6 +589,14 @@ export function Privacy() {
                 <p className="opacity-70">
                   A chat attached to a report is deleted 180 days after the case is closed, including
                   when the reporter has deleted their account (see section 5)
+                </p>
+              </div>
+              <div>
+                <strong>Child Safety Reports:</strong>
+                <p className="opacity-70">
+                  Information related to suspected child sexual abuse or exploitation is preserved
+                  for at least 180 days, or longer if a court or authorised agency requires it
+                  (see section 5)
                 </p>
               </div>
               <div>
@@ -743,7 +788,7 @@ export function Privacy() {
           {/* Footer */}
           <div className="pt-8 mt-12 border-t border-border">
             <p className="text-sm opacity-50 text-center">
-              © 2026 OneHook. Your privacy is our priority. Last updated October 26, 2026.
+              © 2026 OneHook. Your privacy is our priority. Last updated October 27, 2026.
             </p>
           </div>
         </motion.div>
