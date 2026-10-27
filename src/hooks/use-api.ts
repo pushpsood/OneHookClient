@@ -14,7 +14,7 @@ import { MessageStatus } from 'onehook-api-client/graphql';
 import { PreferencesApi } from '../api/preferences';
 import { StateApi } from '../api/state';
 import { ProfileApi } from '../api/profile';
-import { MatchingApi, type ProfileSection } from '../api/matching';
+import { MatchingApi, type DiscoveryCategory, type ProfileSection } from '../api/matching';
 import type { LikeTargetType, ReceivedLike } from '../api/rest';
 import { ChatMessagingApi } from '../api/chat';
 import { ChatEncryptionManager } from '../lib/chat-encryption';
@@ -170,12 +170,28 @@ function toDiscoveryCandidate(
     distanceKm: candidate.distanceKm,
     score: candidate.score,
     photos: [],
+    ...finderOf(candidate),
+  };
+}
+
+/** The match-finder attribution the backend puts on every card; survives profile hydration. */
+function finderOf(candidate: DiscoverResponse['candidates'][number]) {
+  return {
+    matchFinder: candidate.matchFinder,
+    matchFinderLabel: candidate.matchFinderLabel,
+    reasoning: candidate.reasoning,
+    suggestionBasis: candidate.suggestionBasis,
+    suggestionId: candidate.suggestionId,
   };
 }
 
 export function useCandidates(activeCoords?: Coordinates) {
   const { currentUser, setCandidates } = useAppStore();
   const [candidatesList, setCandidatesList] = useState<DiscoveryCandidate[]>([]);
+  // Discovery category (Super+ may narrow the feed). availableCategories comes from the backend, so the
+  // selector never hard-codes tier rules.
+  const [category, setCategory] = useState<DiscoveryCategory>('ALL');
+  const [availableCategories, setAvailableCategories] = useState<DiscoveryCategory[]>(['ALL']);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -220,8 +236,11 @@ export function useCandidates(activeCoords?: Coordinates) {
           throw new ApiError('Authentication required to discover candidates', 401, 'UNAUTHORIZED');
         }
 
-        const res = await MatchingApi.discover(userId, lat, lon);
+        const res = await MatchingApi.discover(userId, lat, lon, category);
         if (!active) return;
+        if (Array.isArray(res?.availableCategories) && res.availableCategories.length > 0) {
+          setAvailableCategories(res.availableCategories);
+        }
 
         if (res && Array.isArray(res.candidates) && res.candidates.length > 0) {
           const candidatePromises = res.candidates.map(async (candidate) => {
@@ -247,6 +266,7 @@ export function useCandidates(activeCoords?: Coordinates) {
                   distance: candidate.distanceKm,
                   distanceKm: candidate.distanceKm,
                   score: candidate.score,
+                  ...finderOf(candidate),
                 } as DiscoveryCandidate;
               }
             } catch (pErr) {
@@ -296,7 +316,7 @@ export function useCandidates(activeCoords?: Coordinates) {
     return () => {
       active = false;
     };
-  }, [uid, lat, lon, refreshKey, setCandidates]);
+  }, [uid, lat, lon, refreshKey, category, setCandidates]);
 
   const refresh = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
@@ -307,6 +327,9 @@ export function useCandidates(activeCoords?: Coordinates) {
     loading,
     error,
     refresh,
+    category,
+    availableCategories,
+    setCategory,
   };
 }
 

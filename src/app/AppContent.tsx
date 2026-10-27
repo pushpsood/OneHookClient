@@ -103,6 +103,9 @@ export function AppContent() {
     loading: candidatesLoading,
     error: candidatesError,
     refresh: refreshCandidates,
+    category: discoveryCategory,
+    availableCategories,
+    setCategory: setDiscoveryCategory,
   } = useCandidates(userCoords);
   const { pass, like, loading: swipeLoading } = useSwipe();
   const { showToast } = useToast();
@@ -309,6 +312,9 @@ export function AppContent() {
               >
                 <DiscoveryView
                   candidates={candidates}
+                  category={discoveryCategory}
+                  availableCategories={availableCategories}
+                  onCategoryChange={setDiscoveryCategory}
                   loading={candidatesLoading}
                   error={candidatesError}
                   currentUser={currentUser}

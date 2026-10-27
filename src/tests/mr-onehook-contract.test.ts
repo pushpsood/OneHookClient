@@ -5,6 +5,7 @@ import {
   isSessionErrorCode,
   MEMBER_CHAT_PATH,
   parseMemberChatResponse,
+  matchSuggestionNote,
   PUBLIC_PRODUCT_CHAT_PATH,
 } from '../lib/mr-onehook-contract';
 import type { SelectedExcerpt } from '../lib/mr-onehook-excerpts';
@@ -212,5 +213,24 @@ describe('isSessionErrorCode', () => {
     expect(isSessionErrorCode('CHAT_SESSION_NOT_FOUND')).toBe(true);
     expect(isSessionErrorCode('AI_RATE_LIMITED')).toBe(false);
     expect(isSessionErrorCode(undefined)).toBe(false);
+  });
+});
+
+describe('matchSuggestion — "find me ..." outcome', () => {
+  it('parses a valid suggestion outcome and ignores unknown statuses', () => {
+    const ok = parseMemberChatResponse({
+      reply: 'On it.', mood: 'Happy', matchSuggestion: { status: 'RECORDED', reasoning: 'You asked for a reader' },
+    });
+    expect(ok.matchSuggestion).toEqual({ status: 'RECORDED', reasoning: 'You asked for a reader' });
+    expect(parseMemberChatResponse({ reply: 'x', mood: 'Happy', matchSuggestion: { status: 'NOPE' } }).matchSuggestion)
+      .toBeUndefined();
+    expect(parseMemberChatResponse({ reply: 'x', mood: 'Happy' }).matchSuggestion).toBeUndefined();
+  });
+
+  it('renders a note for each outcome', () => {
+    expect(matchSuggestionNote({ status: 'RECORDED', reasoning: 'You asked for a reader' }))
+      .toBe('Added to your Discover feed: You asked for a reader');
+    expect(matchSuggestionNote({ status: 'PREMIUM_REQUIRED', reasoning: '' })).toMatch(/Upgrade to Super/);
+    expect(matchSuggestionNote({ status: 'UNAVAILABLE', reasoning: '' })).toMatch(/try again later/);
   });
 });

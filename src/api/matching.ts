@@ -10,6 +10,19 @@ import {
   type RoseQuota,
 } from './rest';
 
+/** Discovery categories (mirrors the backend `DiscoveryCategory`). */
+export type DiscoveryCategory = 'ALL' | 'PROFILE_MATCH' | 'ONEHOOK_SUGGESTED' | 'SIMILAR';
+
+export interface DiscoverFeed {
+  candidates: RankedCandidate[];
+  count: number;
+  algorithm: string;
+  /** The category the backend applied. */
+  category?: DiscoveryCategory;
+  /** Categories this member's tier may pick; just ['ALL'] for free members. */
+  availableCategories?: DiscoveryCategory[];
+}
+
 export type ProfileSection =
   | 'PHOTOS'
   | 'BIO'
@@ -25,16 +38,21 @@ export const MatchingApi = {
     return (sdkClient as any).indexLocation({ userId, lat, lon });
   },
 
-  discover: async (userId: string, lat: number, lon: number) => {
-    const timeoutPromise = new Promise<{ candidates: RankedCandidate[]; count: number; algorithm: string }>((_, reject) =>
+  /**
+   * The discover feed. Without `category` every tier gets the mixed deck (OneHook Intelligence +
+   * Mr. OneHook). Super+ may pass a category; the backend answers 403 PREMIUM_REQUIRED otherwise.
+   */
+  discover: async (userId: string, lat: number, lon: number, category?: DiscoveryCategory) => {
+    const timeoutPromise = new Promise<DiscoverFeed>((_, reject) =>
       setTimeout(() => reject(new Error('Discover request timed out. Please check your connection and try again.')), 10000)
     );
     const discoverPromise = (async () => {
-      return (await (sdkClient as any).discover({ userId, lat, lon })) as unknown as {
-        candidates: RankedCandidate[];
-        count: number;
-        algorithm: string;
-      };
+      return (await (sdkClient as any).discover({
+        userId,
+        lat,
+        lon,
+        ...(category && category !== 'ALL' ? { category } : {}),
+      })) as unknown as DiscoverFeed;
     })();
     return Promise.race([discoverPromise, timeoutPromise]);
   },

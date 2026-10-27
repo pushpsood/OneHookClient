@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 ba978d01fe927413a36fd8f2b3d8d595ed4c72a84bc4ad1c5a9e880a72aa4c97
+// telemetry-integrity: sha256 34a4918a54cc60e7ee0259d51cd8fba1a6167c89465599a00f3f8ef937c44004
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.7.0, hash 4a3328962531236a.
+// Catalog version 1.8.0, hash 9a56f9fef0ed4ae7.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.7.0";
-export const TELEMETRY_CATALOG_HASH = "4a3328962531236a";
+export const TELEMETRY_CATALOG_VERSION = "1.8.0";
+export const TELEMETRY_CATALOG_HASH = "9a56f9fef0ed4ae7";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -335,6 +335,7 @@ export const UiElement = {
   DISCOVER_LIKES_YOU_OPEN: "discover.likes_you_open",
   DISCOVER_ADD_HOOK_OPEN: "discover.add_hook_open",
   DISCOVER_RETRY: "discover.retry",
+  DISCOVER_CATEGORY_SELECT: "discover.category_select",
   DISCOVER_ADD_HOOK_SUBMIT: "discover.add_hook_submit",
   DISCOVER_UPGRADE_OPEN: "discover.upgrade_open",
   LIKE_COMPOSER_SEND: "like_composer.send",
@@ -591,6 +592,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "discover.likes_you_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios", "android"] },
   "discover.add_hook_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "discover.retry": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "discover.category_select": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: ["all", "profile_match", "onehook_suggested", "similar"], platforms: ["web", "ios", "android"] },
   "discover.add_hook_submit": { screen: "DISCOVER", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios"] },
   "discover.upgrade_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "like_composer.send": { screen: "LIKE_COMPOSER", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },

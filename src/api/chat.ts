@@ -30,7 +30,7 @@ export type PresenceState = 'ONLINE' | 'OFFLINE';
  * as a JSON string the client parses into a map of `reactorUserId -> reaction ciphertext`; each value
  * is E2E-encrypted exactly like a message body.
  */
-export interface ChatMessageExtended extends ChatMessage {
+export interface ChatMessageExtended extends Omit<ChatMessage, 'contentType'> {
   contentType?: MessageContentType | null;
   replyToMessageId?: string | null;
   replyToTimestamp?: number | null;
