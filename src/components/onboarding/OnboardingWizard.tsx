@@ -21,6 +21,8 @@ import { useToast } from '../common/Toast';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { UserState } from '../../types';
 import { MediaImage } from '../common/MediaImage';
+import { DateOfBirthField } from './DateOfBirthField';
+import { ageOn, onboardingGateMessage, validateDob } from '../../utils/dob';
 import { useMediaSrc, isMediaKey } from '../../utils/media-url';
 import { getCognitoAuth } from '../../lib/cognito-auth';
 import { UiElement, trackProps, trackUi, trackScreenView, Screen } from '../../lib/analytics/analytics';
@@ -32,8 +34,6 @@ const STEP_INDEX: Record<string, number> = { basics: 0, photos: 1, prompts: 2, l
  * Selectable ages. The lower bound is the platform minimum, so an under-18 value cannot be entered at
  * all rather than being rejected after the fact.
  */
-const AGE_OPTIONS = Array.from({ length: 82 }, (_, i) => i + 18);
-
 /** Heights in cm, covering the adult range. Picked, not typed. */
 const HEIGHT_OPTIONS = Array.from({ length: 91 }, (_, i) => i + 130);
 
@@ -194,7 +194,13 @@ export function OnboardingWizard() {
   const [uploadingAudio, setUploadingAudio] = useState(false);
 
   const [displayName, setDisplayName] = useState(currentUser?.name || currentUser?.displayName || '');
-  const [age, setAge] = useState(currentUser?.age || 25);
+  // Date of birth, captured once and never editable afterwards (the backend derives age from it).
+  // A member returning to the wizard with a real date already stored keeps it, locked.
+  const storedDob =
+    currentUser?.birthDetails?.date && !currentUser.birthDetails.provisional ? currentUser.birthDetails.date : '';
+  const [birthDate, setBirthDate] = useState(storedDob);
+  const [dobConfirmed, setDobConfirmed] = useState(Boolean(storedDob));
+  const age = birthDate ? ageOn(birthDate) ?? 0 : 0;
   const [gender, setGender] = useState(currentUser?.gender || 'MALE');
   const [interestedInGenders, setInterestedInGenders] = useState<string[]>(
     currentUser?.interestedIn && currentUser.interestedIn.length > 0 ? currentUser.interestedIn : ['FEMALE']
@@ -376,8 +382,13 @@ export function OnboardingWizard() {
       showToast('Please enter your name.', 'error');
       return;
     }
-    if (!age || age < 18) {
-      showToast('You must be at least 18 years old.', 'error');
+    const dobError = validateDob(birthDate);
+    if (dobError) {
+      showToast(dobError, 'error');
+      return;
+    }
+    if (!dobConfirmed) {
+      showToast('Please confirm your date of birth. It cannot be changed later.', 'error');
       return;
     }
     setStep('photos');
@@ -425,7 +436,8 @@ export function OnboardingWizard() {
       const profilePayload: Record<string, unknown> = {
         displayName: displayName.trim(),
         bio: bio.trim(),
-        age: Number(age) || 18,
+        // Age is derived by the server from birthDetails.date; `age` is no longer sent.
+        birthDetails: { date: birthDate },
         gender: gender || 'MALE',
         interestedIn: interestedInGenders.length > 0 ? interestedInGenders : ['FEMALE'],
         pictures: cleanedPictures,
@@ -459,7 +471,8 @@ export function OnboardingWizard() {
         id: uid,
         name: displayName.trim(),
         displayName: displayName.trim(),
-        age: Number(age) || 18,
+        age,
+        birthDetails: { date: birthDate },
         gender,
         interestedIn: interestedInGenders,
         bio: bio.trim(),
@@ -492,7 +505,13 @@ export function OnboardingWizard() {
       // what is happening and that retrying is the next step, rather than implying their profile was
       // rejected — and keep them in the wizard with their input intact so "Finish" simply works later.
       const status = (err as any)?.status ?? (err as any)?.$metadata?.httpStatusCode;
-      if (status === 409) {
+      const gate = status === 409 ? onboardingGateMessage((err as any)?.message) : null;
+      if (gate) {
+        showToast(gate, 'error');
+      } else if (status === 400 && /birthDetails|at least 18/.test((err as any)?.message ?? '')) {
+        showToast((err as any).message, 'error');
+        setStep('basics');
+      } else if (status === 409) {
         showToast(
           "Your account is still finishing setup — your profile is saved. Please tap Finish again in a few moments.",
           'error'
@@ -582,23 +601,21 @@ export function OnboardingWizard() {
                   placeholder="How you want to be introduced"
                 />
               </Field>
-              <Field label="Age *">
-                {/* Chosen, not typed: a select cannot produce 5, 200 or an empty box, which removes a
-                    whole class of "check your age" errors that only appear after submitting. */}
-                <select
-                  value={age}
-                  onChange={(e) => setAge(Number(e.target.value))}
-                  className="field-input"
-                  aria-label="Age"
-                >
-                  {AGE_OPTIONS.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              {storedDob ? (
+                <Field label="Date of birth">
+                  <div className="field-input opacity-80">{storedDob} (age {age})</div>
+                </Field>
+              ) : null}
             </div>
+
+            {!storedDob && (
+              <DateOfBirthField
+                value={birthDate}
+                onChange={setBirthDate}
+                confirmed={dobConfirmed}
+                onConfirmedChange={setDobConfirmed}
+              />
+            )}
 
             <div className="space-y-3">
               <label className="text-[10px] uppercase tracking-[0.3em] font-black opacity-50 block">
