@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { UserProfile } from '../../types';
 import { ProfileApi } from '../../api/profile';
+import { CurrentSuggestionCard } from './CurrentSuggestionCard';
 import { usePreferences } from '../../hooks/use-api';
 import { useAppStore } from '../../store/app-store';
 import { useToast } from '../../components/common/Toast';
@@ -174,7 +175,7 @@ export function ProfileView({
     ? subscriptionTierDisplayName(userState.subscriptionTier)
     : '—';
   const { showToast } = useToast();
-  const { prefs, save: savePreferences, saving } = usePreferences(user.id);
+  const { prefs, save: savePreferences, saving, refetch: refetchPreferences } = usePreferences(user.id);
   const fieldStatus = user.fieldModerationStatus || {};
 
   // Owner-only photo stats (identity from the JWT server-side) + full-screen viewer for own photos.
@@ -1380,6 +1381,11 @@ export function ProfileView({
                 />
               </Field>
             </div>
+
+            <CurrentSuggestionCard
+              suggestion={prefs?.currentSuggestion}
+              onRemoved={() => void refetchPreferences()}
+            />
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Relationship Goal">

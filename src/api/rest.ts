@@ -165,6 +165,17 @@ export const BlocksApi = {
     request('DELETE', `/matching/blocks/${encodeURIComponent(blockedUserId)}`),
 };
 
+// ── Mr. OneHook suggestion ────────────────────────────────────────────────────
+
+/**
+ * The member's own OneHook suggestion (what they last asked Mr. OneHook for). One at a time: a new request
+ * replaces it, and only the member removes it. The current one comes with the preferences
+ * (`currentSuggestion`).
+ */
+export const SuggestionApi = {
+  remove: (): Promise<void> => request('DELETE', '/matching/suggestions'),
+};
+
 // ── Chat settings ─────────────────────────────────────────────────────────────
 
 export type LastSeenVisibility = 'EVERYONE' | 'MATCHES' | 'NOBODY';

@@ -30,10 +30,19 @@ describe('endpoint paths', () => {
 });
 
 describe('classifyMemberChatAvailability — entitlement/auth gating', () => {
-  it('classifies 403 INSUFFICIENT_PERMISSION as NOT_ENTITLED', () => {
-    expect(classifyMemberChatAvailability(403, 'INSUFFICIENT_PERMISSION')).toBe('NOT_ENTITLED');
-    // Status alone is enough even if the code is absent/changed.
-    expect(classifyMemberChatAvailability(403, undefined)).toBe('NOT_ENTITLED');
+  it('classifies 402 MESSAGE_LIMIT_REACHED as LIMIT_REACHED (free tier daily allowance)', () => {
+    expect(classifyMemberChatAvailability(402, 'MESSAGE_LIMIT_REACHED')).toBe('LIMIT_REACHED');
+    expect(classifyMemberChatAvailability(402, undefined)).toBe('LIMIT_REACHED');
+  });
+
+  it('no longer has a group/permission gate: a 403 is not an availability outcome', () => {
+    expect(classifyMemberChatAvailability(403, 'INSUFFICIENT_PERMISSION')).toBeUndefined();
+    expect(classifyMemberChatAvailability(403, undefined)).toBeUndefined();
+  });
+
+  it('parses remainingMessages for free members', () => {
+    expect(parseMemberChatResponse({ reply: 'x', mood: 'Happy', remainingMessages: 3 }).remainingMessages).toBe(3);
+    expect(parseMemberChatResponse({ reply: 'x', mood: 'Happy' }).remainingMessages).toBeUndefined();
   });
 
   it('classifies 401 auth codes as NOT_AUTHENTICATED', () => {

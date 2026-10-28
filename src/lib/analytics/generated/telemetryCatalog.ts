@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 58537cc25dd8d2b5efc5013938a7736b405cb73c3dde1478ad852430db1e082c
+// telemetry-integrity: sha256 f28411e1bad31e806a4ac986fa0ffda82791c4c11dd8cb802e9c5e256587016e
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.9.0, hash 7f0a0b33ce88bee5.
+// Catalog version 1.10.0, hash 1d9a5b9cd896cae9.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.9.0";
-export const TELEMETRY_CATALOG_HASH = "7f0a0b33ce88bee5";
+export const TELEMETRY_CATALOG_VERSION = "1.10.0";
+export const TELEMETRY_CATALOG_HASH = "1d9a5b9cd896cae9";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -452,6 +452,7 @@ export const UiElement = {
   PREFERENCES_SAVE: "preferences.save",
   PREFERENCES_UPGRADE_OPEN: "preferences.upgrade_open",
   PREFERENCES_LOCKED_FILTER_TAP: "preferences.locked_filter_tap",
+  PREFERENCES_SUGGESTION_REMOVE: "preferences.suggestion_remove",
   SETTINGS_EMAIL_MANAGE: "settings.email_manage",
   SETTINGS_PHONE_UPDATE: "settings.phone_update",
   SETTINGS_GOOGLE_LINK: "settings.google_link",
@@ -709,6 +710,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "preferences.save": { screen: "PREFERENCES", kind: "button", actions: ["submit"], values: null, platforms: ["ios", "android"] },
   "preferences.upgrade_open": { screen: "PREFERENCES", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "preferences.locked_filter_tap": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "preferences.suggestion_remove": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "settings.email_manage": { screen: "SETTINGS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "settings.phone_update": { screen: "SETTINGS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios", "android"] },
   "settings.google_link": { screen: "SETTINGS", kind: "toggle", actions: ["toggle"], values: ["link", "unlink"], platforms: ["web", "ios", "android"] },
