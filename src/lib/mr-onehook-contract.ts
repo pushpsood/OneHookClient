@@ -181,6 +181,8 @@ export interface MemberChatResponse {
   mood: MrOneHookMood;
   needsMoreContext: boolean;
   matchSuggestion?: MemberMatchSuggestion;
+  /** Free tier only: messages left today (the server counts; absent for Super and above). */
+  remainingMessages?: number;
   contextRequest?: MemberContextRequest;
   contextUsed?: MemberContextUsed;
   requestId?: string;
@@ -260,6 +262,9 @@ export function parseMemberChatResponse(data: unknown): MemberChatResponse {
   if (typeof data.requestId === 'string') response.requestId = data.requestId;
   const session = parseSessionMetadata(data.session);
   if (session) response.session = session;
+  if (typeof data.remainingMessages === 'number' && Number.isFinite(data.remainingMessages)) {
+    response.remainingMessages = Math.max(0, Math.floor(data.remainingMessages));
+  }
   if (isRecord(data.matchSuggestion)
     && (data.matchSuggestion.status === 'RECORDED'
       || data.matchSuggestion.status === 'PREMIUM_REQUIRED'
@@ -323,10 +328,9 @@ export function isSessionErrorCode(code: unknown): boolean {
  * Why a member request was refused in a way the UI must treat as terminal (not a transient "try
  * again"). These map to the backend auth/permission gate on `POST .../product-connection-chat`:
  *
- *   • NOT_ENTITLED      — HTTP 403 `INSUFFICIENT_PERMISSION`: the signed-in member is not entitled to
- *                         Mr.OneHook (not in the `mr-onehook` group / lacks the `context.chat`
- *                         permission). Retrying will not help; the entry point should be hidden or
- *                         disabled and a clear "not available for your account" message shown.
+ *   • LIMIT_REACHED     — HTTP 402 `MESSAGE_LIMIT_REACHED`: a free (Must) member has used today's 10
+ *                         messages. Every member can chat; this resets at the next UTC midnight or on
+ *                         upgrading to Super.
  *   • NOT_AUTHENTICATED — HTTP 401 `AUTH_REQUIRED` / `INVALID_ACCESS_TOKEN`: the session is missing or
  *                         expired; prompt the user to sign in again.
  *   • NOT_CONFIGURED    — HTTP 404 `ENDPOINT_NOT_FOUND` / 503 `CONTEXT_NOT_CONFIGURED`: the feature is
@@ -334,11 +338,11 @@ export function isSessionErrorCode(code: unknown): boolean {
  */
 export type MemberChatAvailability =
   | 'AVAILABLE'
-  | 'NOT_ENTITLED'
+  | 'LIMIT_REACHED'
   | 'NOT_AUTHENTICATED'
   | 'NOT_CONFIGURED';
 
-const NOT_ENTITLED_CODES: ReadonlySet<string> = new Set(['INSUFFICIENT_PERMISSION']);
+const LIMIT_REACHED_CODES: ReadonlySet<string> = new Set(['MESSAGE_LIMIT_REACHED']);
 const NOT_AUTHENTICATED_CODES: ReadonlySet<string> = new Set([
   'AUTH_REQUIRED',
   'INVALID_ACCESS_TOKEN',
@@ -353,8 +357,7 @@ const NOT_CONFIGURED_CODES: ReadonlySet<string> = new Set([
  * undefined when the failure is NOT one of these (i.e. a transient/server error, OR a
  * recognised-but-unrelated per-request error such as a validation/session code the caller handles
  * elsewhere). The structured `error` code is authoritative; the HTTP status is only a fallback when
- * no recognised code is present, so a bare 403 is treated as not-entitled only when the server sent
- * no code at all.
+ * no recognised code is present.
  */
 export function classifyMemberChatAvailability(
   status: number,
@@ -362,13 +365,13 @@ export function classifyMemberChatAvailability(
 ): Exclude<MemberChatAvailability, 'AVAILABLE'> | undefined {
   const code = typeof errorCode === 'string' ? errorCode : '';
   if (code) {
-    if (NOT_ENTITLED_CODES.has(code)) return 'NOT_ENTITLED';
+    if (LIMIT_REACHED_CODES.has(code)) return 'LIMIT_REACHED';
     if (NOT_AUTHENTICATED_CODES.has(code)) return 'NOT_AUTHENTICATED';
     if (NOT_CONFIGURED_CODES.has(code)) return 'NOT_CONFIGURED';
     // A recognised-but-unrelated code (session/validation) is not a feature-availability outcome.
     return undefined;
   }
-  if (status === 403) return 'NOT_ENTITLED';
+  if (status === 402) return 'LIMIT_REACHED';
   if (status === 401) return 'NOT_AUTHENTICATED';
   if (status === 404) return 'NOT_CONFIGURED';
   return undefined;

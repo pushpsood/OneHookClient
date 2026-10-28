@@ -1717,8 +1717,8 @@ function MrOneHookChatBody({
         disabled={loading || pendingReview !== null || unavailable}
         placeholder={
           unavailable
-            ? availability === 'NOT_ENTITLED'
-              ? 'Mr.OneHook isn’t available on your account yet.'
+            ? availability === 'LIMIT_REACHED'
+              ? 'Today’s free messages are used up. Upgrade to Super or come back tomorrow.'
               : availability === 'NOT_AUTHENTICATED'
                 ? 'Sign in again to chat with Mr.OneHook.'
                 : 'Mr.OneHook is temporarily unavailable.'
@@ -1726,7 +1726,11 @@ function MrOneHookChatBody({
               ? 'Review the excerpts above first…'
               : 'Say something to Mr.OneHook…'
         }
-        footerRight="OneHook AI · Always Here"
+        footerRight={
+          typeof chat.remainingMessages === 'number'
+            ? `${chat.remainingMessages} free message${chat.remainingMessages === 1 ? '' : 's'} left today`
+            : 'OneHook AI · Always Here'
+        }
       />
     </>
   );

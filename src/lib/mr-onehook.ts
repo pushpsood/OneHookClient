@@ -42,8 +42,8 @@ const SERVER_ERROR_COPY =
 const NETWORK_ERROR_COPY =
   "Hmm, I can't connect right now. Check your connection and try again in a moment.";
 // Terminal availability copy — shown once, not retryable, and used to gate the entry point.
-const NOT_ENTITLED_COPY =
-  'Mr.OneHook isn’t available on your account yet. It’s rolling out gradually — check back soon.';
+const LIMIT_REACHED_COPY =
+  'You’ve used today’s 10 free messages with Mr.OneHook. Upgrade to Super to keep chatting, or come back tomorrow.';
 const NOT_AUTHENTICATED_COPY =
   'Please sign in again to chat with Mr.OneHook.';
 const NOT_CONFIGURED_COPY =
@@ -51,8 +51,8 @@ const NOT_CONFIGURED_COPY =
 
 function availabilityCopy(outcome: Exclude<MemberChatAvailability, 'AVAILABLE'>): string {
   switch (outcome) {
-    case 'NOT_ENTITLED':
-      return NOT_ENTITLED_COPY;
+    case 'LIMIT_REACHED':
+      return LIMIT_REACHED_COPY;
     case 'NOT_AUTHENTICATED':
       return NOT_AUTHENTICATED_COPY;
     case 'NOT_CONFIGURED':
@@ -110,6 +110,8 @@ export interface UseMrOneHookChat {
    * stop accepting input once this is anything else.
    */
   availability: MemberChatAvailability;
+  /** Free tier: messages left today, from the last reply (undefined for Super+ or before the first reply). */
+  remainingMessages?: number;
   send: (text: string) => Promise<void>;
   confirmReview: () => Promise<void>;
   cancelReview: () => void;
@@ -206,6 +208,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   const [session, setSession] = useState<MemberSessionMetadata | null>(null);
   const [pendingReview, setPendingReview] = useState<PendingExcerptReview | null>(null);
   const [availability, setAvailability] = useState<MemberChatAvailability>('AVAILABLE');
+  const [remainingMessages, setRemainingMessages] = useState<number | undefined>(undefined);
 
   const sessionIdRef = useRef<string | undefined>(loadSessionId(userId, scope));
   const resolveRef = useRef<LocalExcerptResolver | undefined>(resolveLocalExcerpts);
@@ -370,6 +373,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         : result.reply;
       setMessages((prev) => [...prev, { role: 'assistant', content }]);
       setMood(result.mood || 'Happy');
+      setRemainingMessages(result.remainingMessages);
     },
     [applySession, matchId],
   );
@@ -448,6 +452,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     session,
     pendingReview,
     availability,
+    remainingMessages,
     send,
     confirmReview,
     cancelReview,
