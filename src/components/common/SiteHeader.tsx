@@ -10,6 +10,9 @@ function isMobileDevice(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
+/** The long-form story pages share one header layout (see `fitTitles`). */
+export const STORY_PAGE_TITLES = ['Science', 'Messenger'] as const;
+
 /**
  * Lightweight top header used on standalone pages (login, redeem, legal pages). The brand
  * mark returns to the landing page. On mobile devices an "Open in app" action
@@ -17,8 +20,18 @@ function isMobileDevice(): boolean {
  * 
  * @param pageTitle - Optional page title to display in the center (e.g., "Privacy", "Terms", "Pricing")
  * @param onApply - Optional callback for Apply button (e.g., on Careers page). Shows button next to close button.
+ * @param fitTitles - Sibling pages that should share one header layout. The full-or-compact choice is
+ *   made for the widest of these titles, so every page in the group switches at the same width.
  */
-export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply?: () => void }) {
+export function SiteHeader({
+  pageTitle,
+  onApply,
+  fitTitles,
+}: {
+  pageTitle?: string;
+  onApply?: () => void;
+  fitTitles?: readonly string[];
+}) {
   const navigate = useNavigate();
   const mobile = isMobileDevice();
 
@@ -30,6 +43,7 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
   const actionsRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const measureTitleRef = useRef<HTMLDivElement>(null);
+  const fitKey = (fitTitles ?? []).join('|');
   const [compact, setCompact] = useState(false);
   useLayoutEffect(() => {
     const row = rowRef.current;
@@ -42,7 +56,11 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
       const actionsLeft = actionsRef.current?.getBoundingClientRect().left ?? rowBox.right;
       const GAP = 16;
       const markRight = left + measure.scrollWidth;
-      const titleW = measureTitleRef.current?.scrollWidth ?? 0;
+      // The widest of the measured titles (this page's, plus any sibling pages sharing the layout).
+      const titleW = Math.max(
+        0,
+        ...[...(measureTitleRef.current?.children ?? [])].map((el) => (el as HTMLElement).scrollWidth)
+      );
       let next: boolean;
       if (titleW) {
         const centre = rowBox.left + rowBox.width / 2;
@@ -64,7 +82,7 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
       ro.disconnect();
       window.removeEventListener('resize', check);
     };
-  }, [pageTitle]);
+  }, [pageTitle, fitKey]);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-white/80 backdrop-blur-md">
@@ -75,7 +93,11 @@ export function SiteHeader({ pageTitle, onApply }: { pageTitle?: string; onApply
         </div>
         {pageTitle && (
           <div ref={measureTitleRef} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 w-max whitespace-nowrap text-xs sm:text-sm font-black uppercase tracking-[0.2em]">
-            {pageTitle}
+            {[pageTitle, ...(fitTitles ?? [])].map((t, i) => (
+              <div key={`${i}-${t}`} className="w-max">
+                {t}
+              </div>
+            ))}
           </div>
         )}
         <div className="flex min-w-0 items-center gap-3 pr-3">

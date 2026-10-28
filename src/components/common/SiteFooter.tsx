@@ -114,7 +114,7 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
                 How it works
               </button>
               <button onClick={() => goToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })} className="hover:opacity-100 transition-opacity">
-                Mr.OneHook
+                Intelligence
               </button>
             </span>
           </div>

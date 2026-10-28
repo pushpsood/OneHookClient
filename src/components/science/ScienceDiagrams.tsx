@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { Activity, Eye, Hand, MessageCircle, UserRound } from 'lucide-react';
-import { BRAND, ENGINE_META, pillClass } from './ScienceUi';
+import { Activity, CalendarHeart, Eye, Hand, MessageCircle, Sparkles, UserRound } from 'lucide-react';
+import { BRAND, ENGINE_META, ENGINE_ORDER, pillClass } from './ScienceUi';
 import { ROUTES, type EngineId, type SignalKind } from './science-model';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
-const ENGINE_ORDER: EngineId[] = ['engagement', 'rhythm', 'meaning'];
-
 /* ──────────────────────────────────────────────────────────────────────────────
- * Constellation — three concentric orbits of signals around the OneHook logo.
+ * Constellation — six concentric orbits of signals around the OneHook logo.
  * Radially symmetric: each orbit is one mind, points evenly spaced, orbits counter-rotate.
  * Used twice (hero: orbiting; finale: collapsing into the logo) so the page opens and
  * closes on the same image.
@@ -20,8 +18,9 @@ export const CX = W / 2;
 export const CY = H / 2;
 export const LOGO = 128;
 
+// Six rings between the logo (radius 74 with its hairline) and the halo (outer + 20 < H / 2).
 export const ORBITS = ENGINE_ORDER.map((engine, i) => {
-  const radius = 125 + i * 68;
+  const radius = 104 + i * 30;
   const count = 12 + i * 6;
   return {
     engine,
@@ -46,7 +45,7 @@ export function Constellation({ converge, beating = false, className = '' }: { c
   const reduce = useReducedMotion();
   const outer = ORBITS[ORBITS.length - 1].radius;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={className} role="img" aria-label="Three orbits of signals converging on the OneHook logo">
+    <svg viewBox={`0 0 ${W} ${H}`} className={className} role="img" aria-label="Six orbits of signals converging on the OneHook logo">
       <defs>
         <radialGradient id="sci-halo" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.22" />
@@ -134,7 +133,7 @@ export function Constellation({ converge, beating = false, className = '' }: { c
 
 /* ──────────────────────────────────────────────────────────────────────────────
  * Pipeline — the journey of one signal. Symmetric about the event bus (the logo hub):
- * three equally spaced stages in, three engines out, mirrored above and below the lane.
+ * three equally spaced stages in, six minds out, stacked evenly about the lane.
  * ────────────────────────────────────────────────────────────────────────────── */
 
 const LANE_Y = 220;
@@ -145,15 +144,18 @@ const STAGES = [
   { id: 'ingest', x: 370, label: 'Ingest', sub: 'checked' },
 ] as const;
 const HUB_SUB = 'in your order';
-const ENGINE_X = 890;
-const ENGINE_Y: Record<EngineId, number> = { engagement: LANE_Y - 80, rhythm: LANE_Y, meaning: LANE_Y + 80 };
+const ENGINE_X = 845;
+/** Six minds stacked down the right edge, 40 apart and centred on the lane; names sit to their right. */
+const ENGINE_Y = Object.fromEntries(ENGINE_ORDER.map((e, i) => [e, LANE_Y + (i - (ENGINE_ORDER.length - 1) / 2) * 40])) as Record<EngineId, number>;
 
 export const SIGNALS: { kind: SignalKind; label: string; Icon: typeof Eye; caption: string }[] = [
   { kind: 'view', label: 'Profile view', Icon: Eye, caption: 'Only one mind is listening. Which one?' },
-  { kind: 'swipe', label: 'Swipe', Icon: Hand, caption: 'Two minds hear this one, for different reasons.' },
+  { kind: 'swipe', label: 'Swipe', Icon: Hand, caption: 'Three minds hear this one. Taste keeps only the likes.' },
   { kind: 'session', label: 'Session', Icon: Activity, caption: 'When you come and go says more than you think.' },
   { kind: 'chat', label: 'Message sent', Icon: MessageCircle, caption: 'That you replied, and when. Never the words.' },
   { kind: 'profile', label: 'Profile edit', Icon: UserRound, caption: 'Only your words matter here.' },
+  { kind: 'ask', label: 'Asked Mr OneHook', Icon: Sparkles, caption: 'Only what you asked him. Never your chats with matches.' },
+  { kind: 'birth', label: 'Birth details', Icon: CalendarHeart, caption: 'Only Tradition hears this. Nobody else ever sees your birth date.' },
 ];
 
 function enginePath(engine: EngineId): string {
@@ -161,10 +163,10 @@ function enginePath(engine: EngineId): string {
   return `M${HUB_X + 48} ${LANE_Y} C ${HUB_X + 190} ${LANE_Y}, ${ENGINE_X - 190} ${y}, ${ENGINE_X - 20} ${y}`;
 }
 
-/** The "+" chip: there are more signals than the five shown, and some reach every mind. */
+/** The "+" chip: there are more signals than the ones shown, and some reach every mind. */
 export type DiagramSignal = SignalKind | 'more';
 export const MORE_SIGNALS_CAPTION = 'And many more. Some reach every mind.';
-const ALL_ENGINES: readonly EngineId[] = ['engagement', 'rhythm', 'meaning'];
+const ALL_ENGINES: readonly EngineId[] = ENGINE_ORDER;
 
 /** Engines light up once the packet has travelled; re-runs on every "send". */
 function useLitEngines(kind: DiagramSignal, pulse: number, reduce: boolean | null) {
@@ -183,8 +185,23 @@ function useLitEngines(kind: DiagramSignal, pulse: number, reduce: boolean | nul
 }
 
 /** A mind on the diagram, drawn like the stage nodes: a small ring with a centre dot and its name
- *  underneath. It lights up in the mind's colour when the signal arrives. */
-function EngineNode({ cx, cy, engine, on, fontSize }: { cx: number; cy: number; engine: EngineId; on: boolean; fontSize: number }) {
+ *  underneath (or to the right, where the minds are stacked). It lights up in the mind's colour
+ *  when the signal arrives. */
+function EngineNode({
+  cx,
+  cy,
+  engine,
+  on,
+  fontSize,
+  label = 'below',
+}: {
+  cx: number;
+  cy: number;
+  engine: EngineId;
+  on: boolean;
+  fontSize: number;
+  label?: 'below' | 'right';
+}) {
   const meta = ENGINE_META[engine];
   return (
     <g>
@@ -204,7 +221,15 @@ function EngineNode({ cx, cy, engine, on, fontSize }: { cx: number; cy: number; 
         animate={{ r: on ? 5 : 3.5, fill: on ? meta.deep : '#8F96A0' }}
         transition={{ type: 'spring', stiffness: 260, damping: 18 }}
       />
-      <text x={cx} y={cy + 18 + fontSize + 8} textAnchor="middle" fill={on ? meta.deep : BRAND.ink} fontSize={fontSize} fontWeight={600} style={{ transition: 'fill 350ms' }}>
+      <text
+        x={label === 'right' ? cx + 28 : cx}
+        y={label === 'right' ? cy + fontSize * 0.36 : cy + 18 + fontSize + 8}
+        textAnchor={label === 'right' ? 'start' : 'middle'}
+        fill={on ? meta.deep : BRAND.ink}
+        fontSize={fontSize}
+        fontWeight={600}
+        style={{ transition: 'fill 350ms' }}
+      >
         {meta.name}
       </text>
     </g>
@@ -234,7 +259,7 @@ const V_X = 180;
 const V_STAGE_Y = [34, 96, 158];
 const V_HUB_Y = 246;
 const V_ENGINE_Y = 350;
-const V_ENGINE_X: Record<EngineId, number> = { engagement: 86, rhythm: 180, meaning: 274 };
+const V_ENGINE_X: Record<EngineId, number> = { engagement: 36, rhythm: 93.6, meaning: 151.2, taste: 208.8, wish: 266.4, tradition: 324 };
 const V_GAP = 30; // space between a dot and its two labels
 
 function PipelineDiagramVertical({ kind, pulse, caption }: { kind: DiagramSignal; pulse: number; caption: string }) {
@@ -287,7 +312,7 @@ function PipelineDiagramVertical({ kind, pulse, caption }: { kind: DiagramSignal
         const meta = ENGINE_META[e];
         return (
           <g key={e}>
-            <EngineNode cx={V_ENGINE_X[e]} cy={V_ENGINE_Y} engine={e} on={on} fontSize={14} />
+            <EngineNode cx={V_ENGINE_X[e]} cy={V_ENGINE_Y} engine={e} on={on} fontSize={10} />
           </g>
         );
       })}
@@ -373,7 +398,7 @@ function PipelineDiagramWide({ kind, pulse, caption }: { kind: DiagramSignal; pu
         const meta = ENGINE_META[e];
         return (
           <g key={e}>
-            <EngineNode cx={ENGINE_X} cy={ENGINE_Y[e]} engine={e} on={on} fontSize={14} />
+            <EngineNode cx={ENGINE_X} cy={ENGINE_Y[e]} engine={e} on={on} fontSize={14} label="right" />
           </g>
         );
       })}

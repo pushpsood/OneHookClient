@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from 'motion/react';
+import { hideMrOneHook } from '../Chatbot/ChatbotWidget';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import {
   Accent,
@@ -9,14 +10,15 @@ import {
 } from './ScienceUi';
 
 const OVERVIEW_DETAILS: Record<ScienceChapterId, { body: string; color: string }> = {
-  signal: { body: 'What does a pause on a profile really say?', color: ENGINE_META.engagement.deep },
-  journey: { body: 'Where does that moment go next?', color: '#806328' },
-  minds: { body: 'Why three small minds, not one big algorithm?', color: ENGINE_META.meaning.deep },
-  time: { body: 'Can timing reveal what you really want?', color: ENGINE_META.rhythm.deep },
-  'mr-onehook': { body: 'Who helps you think it through?', color: ENGINE_META.engagement.deep },
-  promises: { body: 'What is OneHook never allowed to do?', color: '#5E6670' },
+  signal: { body: 'A quiet moment becomes a signal.', color: ENGINE_META.engagement.deep },
+  journey: { body: 'It travels only where it belongs.', color: ENGINE_META.rhythm.deep },
+  minds: { body: 'Six small questions listen.', color: ENGINE_META.meaning.deep },
+  time: { body: 'Moments become a pattern.', color: ENGINE_META.rhythm.deep },
+  'mr-onehook': { body: 'A request becomes an introduction.', color: ENGINE_META.wish.deep },
+  promises: { body: 'Your boundaries hold around it all.', color: '#5E6670' },
 };
 
+/** A connected story index, not a second set of chapter cards. */
 export function ScienceOverview({
   chapters,
   onSelect,
@@ -28,9 +30,10 @@ export function ScienceOverview({
 
   return (
     <section
+      {...hideMrOneHook}
       id="science-overview"
       aria-labelledby="science-overview-title"
-      className="relative scroll-mt-20 overflow-hidden bg-[#FAFAF8] px-5 py-12 sm:px-6 sm:py-16"
+      className="relative isolate scroll-mt-[69px] overflow-hidden px-5 pb-[6.5rem] pt-14 sm:px-6 sm:pb-36 sm:pt-20 lg:pb-40"
     >
       <div
         aria-hidden="true"
@@ -48,64 +51,58 @@ export function ScienceOverview({
         transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
         className="relative mx-auto max-w-6xl"
       >
-        {/* The heading spans the full container width; only the supporting line stays narrow. */}
-        <div className="text-center">
+        <div className="relative text-center">
           <Kicker>The complete story</Kicker>
           <h2
             id="science-overview-title"
             className="mt-4 text-3xl font-light leading-[1.1] tracking-[-0.025em] sm:text-5xl"
           >
-            Six chapters. One <Accent>transparent system</Accent>
+            One moment. One <Accent>continuous story</Accent>
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-base font-light leading-relaxed text-black/55">
-            Six questions. Pick the one you are most curious about.
+            Start at the beginning, or enter wherever you are curious.
           </p>
         </div>
 
-        <ol className="mx-auto mt-8 grid max-w-[20rem] gap-3 sm:max-w-none sm:grid-cols-2 lg:grid-cols-3">
-          {chapters.map((chapter) => {
-            const details = OVERVIEW_DETAILS[chapter.id];
-            return (
-              <li key={chapter.id} className="h-full">
-                <button
-                  type="button"
-                  onClick={() => onSelect(chapter.id)}
-                  {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_chapter' })}
-                  className="group flex h-full w-full flex-col items-center rounded-[20px] border border-black/[0.08] bg-white px-5 py-5 text-center sm:p-6 shadow-[0_24px_60px_-48px_rgba(10,11,16,0.5)] transition-all hover:-translate-y-1 hover:border-black/15 hover:shadow-[0_32px_70px_-45px_rgba(10,11,16,0.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1F3A6B]/40 motion-reduce:transform-none"
-                  aria-label={`Chapter ${chapter.number}, ${chapter.title}: ${details.body}`}
-                >
-                  {/* Number between two hairlines, with the chapter name on its own line below. */}
-                  <span className="flex w-full items-center gap-3" aria-hidden="true">
-                    <span className="h-px flex-1 bg-black/[0.08]" />
-                    <span className="text-xs font-normal tabular-nums tracking-[0.08em]" style={{ color: details.color }}>
+        <div className="relative mt-10">
+          <ol className="relative mx-auto grid max-w-4xl grid-cols-3 gap-y-2 py-2">
+            {chapters.map((chapter) => {
+              const details = OVERVIEW_DETAILS[chapter.id];
+              return (
+                <li key={chapter.id} className="relative min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(chapter.id)}
+                    {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'science_chapter' })}
+                    className="group relative flex h-full min-h-36 w-full flex-col items-center rounded-2xl px-1.5 py-5 text-center transition-colors hover:bg-black/[0.018] sm:px-4 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1F3A6B]/35 sm:min-h-40"
+                    aria-label={`Chapter ${chapter.number}, ${chapter.title}: ${details.body}`}
+                  >
+                    <span
+                      className="relative z-10 grid h-8 w-8 place-items-center rounded-full border bg-white font-mono text-[10px] transition-transform duration-300 group-hover:scale-110"
+                      style={{ borderColor: `${details.color}66`, color: details.color }}
+                      aria-hidden="true"
+                    >
                       {chapter.number}
                     </span>
-                    <span className="h-px flex-1 bg-black/[0.08]" />
-                  </span>
-                  <h3 className="mt-3 text-lg font-light tracking-[-0.01em] text-[#0A0B10]">
-                    <span className="sr-only">Chapter {chapter.number}: </span>
-                    {chapter.title}
-                  </h3>
-                  <p className="mt-1.5 text-sm font-light leading-relaxed text-black/55">
-                    {details.body}
-                  </p>
-                  <span
-                    className="mt-auto inline-flex items-center gap-1.5 pt-4 text-[9px] font-semibold uppercase tracking-[0.24em]"
-                    style={{ color: details.color }}
-                  >
-                    Explore chapter
-                    <span aria-hidden="true" className="text-xs transition-transform group-hover:translate-y-0.5">
-                      ↓
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-        <p className="mx-auto mt-6 max-w-xl text-center text-xs font-light italic leading-relaxed text-black/45">
-          Illustration only. The real system is far more complex than this.
-        </p>
+                    <h3 className="mt-4 text-sm font-light tracking-[-0.01em] text-[#0A0B10] sm:text-base">
+                      <span className="sr-only">Chapter {chapter.number}: </span>
+                      {chapter.title}
+                    </h3>
+                    <p className="mt-1.5 max-w-[13rem] text-[11px] sm:text-xs font-light leading-relaxed text-black/45">
+                      {details.body}
+                    </p>
+                    <motion.span
+                      aria-hidden="true"
+                      className="mt-auto h-1 w-1 rounded-full"
+                      style={{ background: details.color }}
+                      whileHover={reduce ? undefined : { scale: 2.2 }}
+                    />
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       </motion.div>
     </section>
   );

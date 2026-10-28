@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -16,27 +15,28 @@ import {
   useReducedMotion,
   useSpring,
 } from 'motion/react';
-import { BRAND, ENGINE_META } from './ScienceUi';
-import { CX, CY, LOGO, ORBITS, SPOKES } from './ScienceDiagrams';
-import { Orbit, PulseSpark, type Pulse } from './ScienceHero';
+import { AURORA, ENGINE_ORDER } from './ScienceUi';
+import { CX, CY, ORBITS } from './ScienceDiagrams';
+import { ScienceDisc, useScienceHeroDisc, type Pulse } from './ScienceHero';
 import type { EngineId } from './science-model';
 
-const ENGINES: EngineId[] = ['engagement', 'rhythm', 'meaning'];
-const OUTER = ORBITS[ORBITS.length - 1].radius;
-
+const ENGINES: EngineId[] = ENGINE_ORDER;
 /**
- * The science hero's orbit animation (aurora, three rotating minds, the OneHook logo and travelling
- * signals), as a decorative background for another section.
+ * The science hero's tilted orbit disc (aurora, six rotating minds, the OneHook logo and travelling
+ * signals), as a decorative background for another section. Its geometry (size, lean, logo) is the
+ * one the /science hero computes for the same screen, so in focus it looks exactly like the hero.
  *
  * - Its centre (the logo) follows the pointer anywhere over `pointerTarget`, on a soft spring, and
  *   eases back to the middle of the section when the pointer leaves.
- * - It sits blurred and dimmed, so it reads as texture behind the foreground content.
- * - `revealed` brings it into focus (blur clears, orbits lift) and pins its centre on `anchor`
- *   (the "Explore the science" button), whether reached by pointer or keyboard.
+ * - It sits blurred and dimmed, so it reads as texture behind the foreground content. While
+ *   blurred the rings hold still: a moving layer under a blur is re-blurred on every frame.
+ * - `revealed` brings it into focus (blur clears, rings spin) and pins its centre on
+ *   `anchor` (the "Explore the science" button), whether reached by pointer or keyboard.
  * - Signals fire on their own while the section is on screen, so it never looks static.
  *
+ * Every moving part is a composited layer (CSS spin, transform-only following), as on the hero.
  * Purely decorative: aria-hidden, pointer-events none. Reduced motion: static, no blur transition
- * animation, no parallax and no autoplay.
+ * animation and no autoplay.
  */
 export function ScienceOrbitBackdrop({
   revealed,
@@ -56,8 +56,7 @@ export function ScienceOrbitBackdrop({
   const reduce = useReducedMotion() ?? false;
   const rootRef = useRef<HTMLDivElement>(null);
   const inView = useInView(rootRef, { amount: 0.15 });
-  const [logoScope, animateLogo] = useAnimate<SVGGElement>();
-  const ids = useId().replace(/:/g, '');
+  const [logoScope, animateLogo] = useAnimate<HTMLDivElement>();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [pulses, setPulses] = useState<Pulse[]>([]);
   const nextId = useRef(1);
@@ -77,16 +76,16 @@ export function ScienceOrbitBackdrop({
     return () => ro.disconnect();
   }, []);
 
-  // The system travels with the pointer, so keep it compact relative to the section.
-  const orbitScale = size.w && size.h ? Math.min(size.h * 0.38, size.w * 0.32) / OUTER : 1;
-  const logoScale = Math.min(1.2, Math.max(0.7, orbitScale));
+  // The /science hero's own disc for this screen (measured from an invisible copy of the hero).
+  const { layout: hero, frame } = useScienceHeroDisc();
+  const disc = { cx: 0, cy: 0, tilt: hero.tilt, orbitScale: hero.orbitScale, logoR: hero.logoR };
 
-  // Centre of the system, in section pixels (the SVG viewBox is the section's own pixel box).
+  // Centre of the system, in section pixels.
   const centerX = useMotionValue(0);
   const centerY = useMotionValue(0);
   const cx = useSpring(centerX, { stiffness: 110, damping: 22, mass: 0.7 });
   const cy = useSpring(centerY, { stiffness: 110, damping: 22, mass: 0.7 });
-  // Parallax is replaced by following the pointer; the orbits still take the motion values.
+  // Parallax is replaced by following the pointer; the rings still take motion values.
   const still = useMotionValue(0);
 
   const home = useCallback(() => {
@@ -163,7 +162,9 @@ export function ScienceOrbitBackdrop({
       () => {
         if (document.visibilityState !== 'visible') return;
         const o =
-          ORBITS.find((orb) => orb.engine === ENGINES[Math.floor(Math.random() * 3)]) ?? ORBITS[0];
+          ORBITS.find(
+            (orb) => orb.engine === ENGINES[Math.floor(Math.random() * ENGINES.length)]
+          ) ?? ORBITS[0];
         const a = Math.random() * Math.PI * 2;
         setPulses((ps) => [
           ...ps.slice(-8),
@@ -180,111 +181,45 @@ export function ScienceOrbitBackdrop({
     return () => window.clearInterval(t);
   }, [reduce, inView, revealed]);
 
+  const spin = !reduce && inView && revealed;
+
   return (
-    <div
-      ref={rootRef}
-      aria-hidden="true"
-      className={`pointer-events-none absolute inset-0 overflow-hidden transition-[filter,opacity] duration-700 ease-out motion-reduce:transition-none ${className}`}
-      style={{
-        ...style,
-        filter: revealed ? 'blur(0px)' : 'blur(10px)',
-        opacity: revealed ? 0.9 : 0.6,
-      }}
-    >
-      {!reduce && (
-        <motion.div
-          className="absolute left-1/2 top-1/2 h-[90vmin] w-[90vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-50 blur-2xl"
-          style={{
-            background: `conic-gradient(from 0deg, ${ENGINE_META.engagement.soft}, ${ENGINE_META.rhythm.soft}, ${ENGINE_META.meaning.soft}, ${ENGINE_META.engagement.soft})`,
-          }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 60, repeat: Infinity, ease: 'linear' }}
-        />
-      )}
-
-      {size.w > 0 && (
-        <svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${size.w} ${size.h}`}>
-          <defs>
-            <radialGradient id={`${ids}-halo`} cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.2" />
-              <stop offset="45%" stopColor={BRAND.silver} stopOpacity="0.05" />
-              <stop offset="100%" stopColor={BRAND.ink} stopOpacity="0" />
-            </radialGradient>
-            <radialGradient id={`${ids}-light`} cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.16" />
-              <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-
-          <motion.g style={{ x: cx, y: cy }}>
-            <g transform={`scale(${orbitScale}) translate(${-CX} ${-CY})`}>
-              <circle cx={CX} cy={CY} r={OUTER + 24} fill={`url(#${ids}-halo)`} />
-              {SPOKES.map((a, i) => (
-                <line
-                  key={i}
-                  x1={CX + Math.cos(a) * (ORBITS[0].radius - 22)}
-                  y1={CY + Math.sin(a) * (ORBITS[0].radius - 22)}
-                  x2={CX + Math.cos(a) * (OUTER + 14)}
-                  y2={CY + Math.sin(a) * (OUTER + 14)}
-                  stroke="rgba(255,255,255,0.05)"
-                />
-              ))}
-              <circle r={150} fill={`url(#${ids}-light)`} cx={CX} cy={CY} />
-              {ORBITS.map((o, i) => (
-                <g key={o.engine}>
-                  <Orbit
-                    index={i}
-                    sx={still}
-                    sy={still}
-                    reduce={reduce}
-                    dim={false}
-                    lift={revealed}
-                  />
-                </g>
-              ))}
-              {pulses.map((p) => (
-                <g key={p.id}>
-                  <PulseSpark pulse={p} reduce={reduce} onArrive={onArrive} />
-                </g>
-              ))}
-            </g>
-          </motion.g>
-
-          <motion.g style={{ x: cx, y: cy }}>
-            <g transform={`scale(${logoScale}) translate(${-CX} ${-CY})`}>
-              <g>
-                <g ref={logoScope} style={{ transformOrigin: 'center', transformBox: 'fill-box' }}>
-                  <circle
-                    cx={CX}
-                    cy={CY}
-                    r={LOGO / 2 + 10}
-                    fill="none"
-                    stroke="rgba(255,255,255,0.18)"
-                  />
-                  {!reduce && (
-                    <motion.circle
-                      cx={CX}
-                      cy={CY}
-                      fill="none"
-                      stroke="rgba(255,255,255,0.25)"
-                      initial={{ r: LOGO / 2 + 10, opacity: 0.5 }}
-                      animate={{ r: LOGO / 2 + 40, opacity: 0 }}
-                      transition={{ duration: 2.8, repeat: Infinity, ease: 'easeOut' }}
-                    />
-                  )}
-                  <image
-                    href={BRAND.logo}
-                    x={CX - LOGO / 2}
-                    y={CY - LOGO / 2}
-                    width={LOGO}
-                    height={LOGO}
-                  />
-                </g>
-              </g>
-            </g>
-          </motion.g>
-        </svg>
-      )}
-    </div>
+    <>
+      {frame}
+      <div
+        ref={rootRef}
+        aria-hidden="true"
+        className={`pointer-events-none absolute inset-0 overflow-hidden transition-[filter,opacity] duration-700 ease-out motion-reduce:transition-none ${className}`}
+        style={{
+          ...style,
+          filter: revealed ? 'blur(0px)' : 'blur(10px)',
+          opacity: revealed ? 1 : 0.6,
+        }}
+      >
+        {size.w > 0 && hero.ready && (
+          <motion.div className="absolute left-0 top-0" style={{ x: cx, y: cy }}>
+            {/* The hero's aurora, centred on the disc. Static: a moving blurred layer would be
+                re-blurred on every frame. */}
+            {!reduce && (
+              <div
+                className="absolute h-[120vmin] w-[120vmin] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-3xl"
+                style={{ background: AURORA }}
+              />
+            )}
+            <ScienceDisc
+              layout={disc}
+              sx={still}
+              sy={still}
+              spin={spin}
+              reduce={reduce}
+              pulses={pulses}
+              onArrive={onArrive}
+              logoScope={logoScope}
+              shade="var(--color-accent)"
+            />
+          </motion.div>
+        )}
+      </div>
+    </>
   );
 }

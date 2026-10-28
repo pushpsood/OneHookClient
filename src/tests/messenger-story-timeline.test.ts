@@ -4,10 +4,10 @@ import {
   bandIndex,
   createStoryPlayer,
   MIN_SHOW_MS,
-  SHOW_MAX_MS,
-  SHOW_MIN_MS,
-  showDwellMs,
+  isRepeatedAttempt,
   isStoryComplete,
+  NUDGE_AFTER_MS,
+  NUDGE_RESET_MS,
   makeEqualBands,
   scrollLimit,
   storyTrackHeight,
@@ -22,7 +22,6 @@ const mid = (i: number) => (i + 0.5) / 8;
 /** A player on fake time: runs complete when the clock passes their duration. */
 function harness(startAt = 0) {
   let p = startAt;
-  let speed = 0; // screens per second
   const value = () => ({ v: 0, set(x: number) { this.v = x; } });
   const play = Array.from({ length: 8 }, value);
   const line = Array.from({ length: 8 }, value);
@@ -34,7 +33,6 @@ function harness(startAt = 0) {
     play,
     line,
     progress: () => p,
-    speed: () => speed,
     now: () => Date.now(),
     run: (target, duration, onComplete) => {
       const id = setTimeout(() => {
@@ -55,14 +53,10 @@ function harness(startAt = 0) {
     line,
     changes,
     skips,
-    /** The reader scrolls to progress `to`, currently at `screensPerSecond`. */
-    scrollTo(to: number, screensPerSecond = speed) {
+    /** The reader scrolls to progress `to`. */
+    scrollTo(to: number) {
       p = to;
-      speed = screensPerSecond;
       player.onScroll();
-    },
-    setSpeed(screensPerSecond: number) {
-      speed = screensPerSecond;
     },
   };
 }
@@ -105,24 +99,40 @@ describe('Messenger story timeline', () => {
     expect(h.changes.at(-1)).toEqual({ index: 2, instant: false });
   });
 
-  it('switches straight back without animating when scrolling up, and never replays', () => {
+  it('scrolling back up leaves the stage on the furthest screen, finished, and never replays it', () => {
     const h = harness(mid(2));
     h.player.begin();
     vi.advanceTimersByTime(6100);
     h.scrollTo(mid(3));
     expect(h.changes.at(-1)).toEqual({ index: 3, instant: false });
-    // up, mid-animation (after its 2 s): screen 4 counts as loaded, screen 3 shows finished
-    vi.advanceTimersByTime(MIN_SHOW_MS);
-    h.scrollTo(mid(2));
-    expect(h.changes.at(-1)).toEqual({ index: 2, instant: true });
+    vi.advanceTimersByTime(300); // mid-way through screen 4's first play
+    const before = h.changes.length;
+    // up: the page shows the loaded screens; the stage stays on screen 4 and finishes it at once
+    h.scrollTo(mid(1));
+    expect(h.player.index).toBe(3);
     expect(h.play[3].v).toBe(1);
     expect(h.player.playingScene).toBeNull();
-    expect(h.skips.at(-1)).toBe(true);
-    // down again: screen 4 has loaded once already, so it is simply shown (after screen 3's 2 s)
+    // back down to it: nothing replays, nothing switches
     h.scrollTo(mid(3));
-    vi.advanceTimersByTime(MIN_SHOW_MS);
-    expect(h.changes.at(-1)).toEqual({ index: 3, instant: true });
-    expect(h.player.playingScene).toBeNull();
+    expect(h.player.index).toBe(3);
+    expect(h.changes.length).toBe(before);
+  });
+
+  it('after scrolling back, the next new screen still gets the first-play rules', () => {
+    const h = harness(mid(2));
+    h.player.begin();
+    vi.advanceTimersByTime(6100);
+    h.scrollTo(mid(3));
+    vi.advanceTimersByTime(300);
+    h.scrollTo(mid(0));
+    h.scrollTo(mid(4)); // screen 4 has been on stage only 0.3 s: it keeps its minimum time
+    expect(h.player.index).toBe(3);
+    vi.advanceTimersByTime(MIN_SHOW_MS - 300 - 1);
+    expect(h.player.index).toBe(3);
+    vi.advanceTimersByTime(1);
+    expect(h.player.index).toBe(4);
+    expect(h.changes.at(-1)).toEqual({ index: 4, instant: false }); // a first play, animated
+    expect(h.player.playingScene).toBe(4);
   });
 
   it('never skips a screen: a fast scroll from the top plays every screen in order, each in full', () => {
@@ -147,63 +157,14 @@ describe('Messenger story timeline', () => {
     expect(h.changes.every((c) => !c.instant)).toBe(true); // all first visits: all played
   });
 
-  it('once loaded, how long each screen stays follows the scroll speed, never under the minimum', () => {
-    expect(showDwellMs(0)).toBe(SHOW_MAX_MS); // not moving: the full time
-    expect(showDwellMs(0.25)).toBe(SHOW_MAX_MS);
-    expect(showDwellMs(1)).toBe(1000); // a screen a second: a second each
-    expect(showDwellMs(-1)).toBe(1000); // up is the same as down
-    expect(showDwellMs(10)).toBe(SHOW_MIN_MS); // however fast: never below the minimum
-  });
-
-  it('a fast scroll through loaded screens steps one by one, each for the minimum', () => {
-    const h = harness(mid(0));
-    h.player.begin();
-    h.scrollTo(mid(5));
-    vi.advanceTimersByTime(60_000); // screens 1–6 have all played
-    expect(h.player.index).toBe(5);
-    h.changes.length = 0;
-
-    h.scrollTo(mid(1), 6); // fast, all the way up
-    expect(h.player.index).toBe(4); // one step, at once
-    for (const expected of [3, 2, 1]) {
-      vi.advanceTimersByTime(SHOW_MIN_MS - 1);
-      expect(h.player.index).toBe(expected + 1);
-      vi.advanceTimersByTime(1);
-      expect(h.player.index).toBe(expected);
-    }
-    expect(h.changes.map((c) => c.index)).toEqual([4, 3, 2, 1]);
-    expect(h.changes.every((c) => c.instant)).toBe(true); // shown finished, never replayed
-  });
-
-  it('a slower scroll gives each loaded screen longer, and speeding up mid-wait moves on sooner', () => {
-    const h = harness(mid(0));
-    h.player.begin();
-    h.scrollTo(mid(5));
-    vi.advanceTimersByTime(60_000);
-    h.scrollTo(mid(2), 0.8); // gently up: 1 / 0.8 = 1.25 s a screen
-    expect(h.player.index).toBe(4);
-    vi.advanceTimersByTime(1249);
-    expect(h.player.index).toBe(4);
-    vi.advanceTimersByTime(1);
-    expect(h.player.index).toBe(3);
-    // 300 ms into screen 4, the reader speeds up: it only needs the minimum now
-    vi.advanceTimersByTime(300);
-    h.scrollTo(mid(2), 8);
-    vi.advanceTimersByTime(SHOW_MIN_MS - 300 - 1);
-    expect(h.player.index).toBe(3);
-    vi.advanceTimersByTime(1);
-    expect(h.player.index).toBe(2);
-  });
-
-  it('first plays are not shortened by scroll speed', () => {
+  it('first plays are never shortened by scrolling on', () => {
     const h = harness(mid(6));
     h.player.begin();
-    h.scrollTo(mid(7), 10); // screen 8 has never played: screen 7 plays its full 3.9 s first
+    h.scrollTo(mid(7)); // screen 8 has never played: screen 7 plays its full 3.9 s first
     vi.advanceTimersByTime(3899);
     expect(h.player.index).toBe(6);
     vi.advanceTimersByTime(1);
     expect(h.player.index).toBe(7);
-    expect(MIN_SHOW_MS).toBeGreaterThan(SHOW_MIN_MS);
   });
 
   it('runs the progress line on the same clock: animation done at 70%, the rest is look time', () => {
@@ -226,6 +187,14 @@ describe('Messenger story timeline', () => {
     expect(bandIndex(bands, scrollLimit(bands, 5)!)).toBe(6);
     expect(scrollLimit(bands, 6)!).toBeLessThan(1);
     expect(scrollLimit(bands, 7)).toBeNull();
+  });
+
+  it('only counts repeated, sustained scroll attempts against the hold as "trying repeatedly"', () => {
+    expect(isRepeatedAttempt([])).toBe(false);
+    expect(isRepeatedAttempt([0, 16, 32, 48])).toBe(false); // one quick flick
+    expect(isRepeatedAttempt([0, 200, 400, NUDGE_AFTER_MS])).toBe(true); // kept trying
+    // a pause longer than the reset starts the count again
+    expect(isRepeatedAttempt([0, NUDGE_AFTER_MS, NUDGE_AFTER_MS + NUDGE_RESET_MS + 1])).toBe(false);
   });
 
   it('stops cleanly', () => {

@@ -1475,7 +1475,7 @@ export function Landing() {
   useEffect(() => {
     const updateStroke = () => {
       const convo = convoRef.current;
-      const mascot = document.getElementById('mascot-core'); // Targets the 260x260 container
+      const mascot = document.getElementById('mascot-core'); // Targets the mascot's square container
       const container = pageContainerRef.current;
       const features = document.getElementById('features');
       if (!convo || !mascot || !container || !features) return;
@@ -1548,7 +1548,7 @@ export function Landing() {
 
   // Scroll-spy: highlight the nav item for whichever section the reader is in. Active = the LAST
   // section whose top has crossed ~38% of the viewport height (document order:
-  // philosophy -> how-it-works -> Mr.OneHook -> get-app). Above the first section nothing highlights.
+  // philosophy -> how-it-works -> Intelligence -> get-app). Above the first section nothing highlights.
   useEffect(() => {
     const ids = ['philosophy', 'features', 'under-the-hood', 'get-app'];
     let raf = 0;
@@ -1935,7 +1935,7 @@ export function Landing() {
                 <span className="h-4 w-px" />
                 <span className={deskNav('')}>Philosophy</span>
                 <span className={deskNav('')}>How it works</span>
-                <span className={deskNav('')}>Mr.OneHook</span>
+                <span className={deskNav('')}>Intelligence</span>
                 <span className={deskNav('')}>Get the app</span>
                 <span className="h-4 w-px" />
                 <span className={deskNav('')}>Pricing</span>
@@ -1993,7 +1993,7 @@ export function Landing() {
                   onClick={() => scrollToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })}
                   className={deskNav('under-the-hood')}
                 >
-                  Mr.OneHook
+                  Intelligence
                 </button>
                 <button
                   onClick={() => scrollToSection('get-app')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'get_app' })}
@@ -2034,7 +2034,7 @@ export function Landing() {
                         How it works
                       </button>
                       <button onClick={() => scrollToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })} className={mobNav('under-the-hood')}>
-                        Mr.OneHook
+                        Intelligence
                       </button>
                       <button onClick={() => scrollToSection('get-app')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'get_app' })} className={mobNav('get-app')}>
                         Get the app
@@ -2105,7 +2105,7 @@ export function Landing() {
                     onClick={() => scrollToSection('under-the-hood')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'under_the_hood' })}
                     className={mobNav('under-the-hood')}
                   >
-                    Mr.OneHook
+                    Intelligence
                   </button>
                   <button
                     onClick={() => scrollToSection('get-app')} {...trackProps(UiElement.LANDING_SECTION_NAV, { value: 'get_app' })}
@@ -2837,13 +2837,13 @@ export function Landing() {
               <div className="max-w-6xl mx-auto px-6 sm:px-12 lg:px-16">
                 <section className="relative pb-16 lg:pb-20 pt-10">
                   <div className="max-w-3xl relative mx-auto text-center">
-                    <Kicker chapter="03" className="mb-5 text-white/60">Mr.OneHook</Kicker>
+                    <Kicker chapter="03" className="mb-5 text-white/60">Intelligence</Kicker>
 
                     <h2 className={SECTION_TITLE}>
                       The <Accent tone="silver">science</Accent> of one good match.
                     </h2>
                     <p className={`${SECTION_LEAD} mt-6 text-white/70`}>
-                      Mr.OneHook does the hard work under the hood, so all you see is one person worth meeting.
+                      OneHook Intelligence does the hard work under the hood, so all you see is one person worth meeting.
                     </p>
                   </div>
 
@@ -2957,19 +2957,24 @@ export function Landing() {
                 className="relative flex flex-col items-center justify-center gap-6 mx-auto z-10 w-full"
                 id="mascot-container"
               >
-                {/* Message Above Mascot */}
-                <div className="rounded-2xl border-2 border-accent bg-white px-6 py-4 text-center text-[11px] font-black uppercase leading-relaxed tracking-[0.14em] text-accent shadow-2xl">
-                  Click to watch me explain more about onehook.club
-                </div>
+                {/* Message above the mascot: also opens the explainer video */}
+                <button
+                  type="button"
+                  onClick={() => setShowMascotVideo(true)}
+                  {...trackProps(UiElement.LANDING_DEMO_INTERACT, { value: 'mascot' })}
+                  className="rounded-2xl border-2 border-accent bg-white px-6 py-4 text-center text-[11px] font-black uppercase leading-relaxed tracking-[0.14em] text-accent shadow-2xl transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2"
+                >
+                  Click to watch Mr.OneHook explain more about onehook.club
+                </button>
 
                 {/* The Mascot */}
                 <div
                   id="mascot-core"
-                  className="relative w-[260px] h-[260px] flex items-center justify-center shrink-0"
+                  className="relative flex h-[var(--mascot)] w-[var(--mascot)] shrink-0 items-center justify-center [--mascot:clamp(84px,28vw,180px)]"
                   ref={mascotRef}
                 >
                   <AlienScanner
-                    className="w-[260px] h-[260px] shrink-0"
+                    className="h-[var(--mascot)] w-[var(--mascot)] shrink-0"
                     primaryColor="#ff69b4"
                     scanColor="#0052CC"
                     onClick={() => setShowMascotVideo((open) => !open)}
@@ -2979,7 +2984,8 @@ export function Landing() {
                 </div>
 
                 {/* Social Links Below Mascot */}
-                <div className="flex w-max items-center justify-center gap-2 rounded-xl border border-accent bg-white/90 backdrop-blur-sm px-5 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-accent shadow-lg">
+                {/* On narrow screens the sparkle's lower labels sit either side of this pill: start it below them. */}
+                <div className="flex w-max items-center justify-center gap-2 rounded-xl border border-accent bg-white/90 backdrop-blur-sm px-5 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-accent shadow-lg max-sm:mt-10">
                   MR.ONEHOOK'S SOCIALS:
                   <a
                     href="https://www.instagram.com/mr.onehook"

@@ -5,14 +5,14 @@
  *
  * 1. The story track is split into equal bands, one per screen; the scroll position decides which
  *    screen the stage is heading for.
- * 2. The stage never skips: it walks there ONE SCREEN AT A TIME, however far or fast the reader scrolls.
- * 3. The first time a screen arrives going FORWARD, its choreography plays at its own authored pace
- *    (a 0..1 playhead animated over the screen's seconds), and the stage stays on it until that is
- *    done. Scroll speed never changes the pace or cuts it short.
- * 4. A screen plays once. Arriving on it again — or arriving by scrolling UP — switches to its
- *    finished state (playhead at 1, entrance/exit animations skipped). How long it stays up follows
- *    the reader's scroll speed (about the time they take to scroll one screen), never less than
- *    SHOW_MIN_MS, so a fast scroll through loaded screens still shows each one.
+ * 2. The stage only ever moves FORWARD, onto screens that have not played yet, one at a time. The
+ *    first time a screen arrives, its choreography plays at its own authored pace (a 0..1 playhead
+ *    animated over the screen's seconds), and the stage stays on it until that is done (at least
+ *    MIN_SHOW_MS). Scroll speed never changes the pace or cuts it short.
+ * 3. Screens that have played are a normal page. Scrolling back above the stage's screen, the page
+ *    itself shows them, finished, sliding with the scroll (the Messenger page renders that strip);
+ *    the stage stays on the furthest screen and simply finishes it. Scrolling back down meets the
+ *    stage again exactly where it was.
  *
  * Cost: a playhead only changes during its one playthrough, so finished screens do no per-frame work;
  * there is no follower loop and no scroll-driven re-computation of choreography. Screens shown
@@ -20,7 +20,7 @@
  *
  * With reduced motion every screen is simply shown finished.
  */
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   MotionGlobalConfig,
   animate,
@@ -33,11 +33,23 @@ import {
 
 /** A screen that is playing for the first time stays at least this long (its animation usually longer). */
 export const MIN_SHOW_MS = 2000;
-/** A loaded screen stays about as long as the reader takes to scroll one screen, within these bounds. */
+/** After the last screen's first play, the footer opens no sooner than this, so it is seen finished. */
 export const SHOW_MIN_MS = 700;
-export const SHOW_MAX_MS = 2000;
-/** Scroll speed is measured over this recent window. */
-const SPEED_WINDOW_MS = 400;
+/** Stopped scroll attempts spread over at least this long count as "trying repeatedly". */
+export const NUDGE_AFTER_MS = 600;
+/** Attempts further apart than this start a new count. */
+export const NUDGE_RESET_MS = 1500;
+
+/**
+ * Whether stopped scroll attempts (timestamps, oldest first) amount to the reader trying repeatedly:
+ * attempts with no gap over NUDGE_RESET_MS, spanning at least NUDGE_AFTER_MS. One wheel tick or a
+ * single short swipe never qualifies.
+ */
+export function isRepeatedAttempt(times: readonly number[]): boolean {
+  let start = times.length - 1;
+  while (start > 0 && times[start] - times[start - 1] <= NUDGE_RESET_MS) start -= 1;
+  return times.length > 0 && times[times.length - 1] - times[start] >= NUDGE_AFTER_MS;
+}
 /** The scroll cap sits this far inside the next section, so the cap itself never selects the one after. */
 const LIMIT_EPSILON = 0.0005;
 /** A 'show' switch skips every animation started this soon after it (covers AnimatePresence's
@@ -98,76 +110,6 @@ export function arrivalMode(prev: number, next: number, played: ReadonlySet<numb
   return next > prev && !played.has(next) ? 'play' : 'show';
 }
 
-/**
- * How long a loaded screen stays on stage at a scroll speed of `screensPerSecond`: the time it takes
- * to scroll one screen at that speed, kept between SHOW_MIN_MS and SHOW_MAX_MS.
- */
-export function showDwellMs(screensPerSecond: number): number {
-  const speed = Math.abs(screensPerSecond);
-  if (!(speed > 0)) return SHOW_MAX_MS;
-  return Math.min(SHOW_MAX_MS, Math.max(SHOW_MIN_MS, 1000 / speed));
-}
-
-/**
- * The reader's recent scroll speed, in screens per second, over the last SPEED_WINDOW_MS. It counts
- * scroll INTENT, not only movement: wheel and finger input are measured even when the scroll cap
- * blocks them, so pushing against the cap still reads as fast. Scroll movement from elsewhere
- * (scrollbar, keys, momentum after a swipe) is measured from the page itself.
- */
-export function useScrollSpeed(enabled: boolean) {
-  const meter = useMemo(() => {
-    const samples: { at: number; px: number }[] = [];
-    return {
-      add(px: number, at = performance.now()) {
-        samples.push({ at, px: Math.abs(px) });
-        while (samples.length && at - samples[0].at > SPEED_WINDOW_MS) samples.shift();
-      },
-      screensPerSecond(at = performance.now()) {
-        while (samples.length && at - samples[0].at > SPEED_WINDOW_MS) samples.shift();
-        const px = samples.reduce((sum, x) => sum + x.px, 0);
-        const screen = typeof window === 'undefined' ? 1 : window.innerHeight || 1;
-        return px / screen / (SPEED_WINDOW_MS / 1000);
-      },
-    };
-  }, []);
-  useEffect(() => {
-    if (!enabled) return;
-    let lastY = window.scrollY;
-    let lastInput = 0; // wheel/touch already counted: their scroll movement isn't counted twice
-    let touchY = 0;
-    const onWheel = (e: WheelEvent) => {
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
-      meter.add(e.deltaY * unit);
-      lastInput = performance.now();
-    };
-    const onTouchStart = (e: TouchEvent) => {
-      touchY = e.touches[0]?.clientY ?? 0;
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      const y = e.touches[0]?.clientY ?? touchY;
-      meter.add(touchY - y);
-      touchY = y;
-      lastInput = performance.now();
-    };
-    const onScroll = () => {
-      const y = window.scrollY;
-      if (performance.now() - lastInput > 100) meter.add(y - lastY);
-      lastY = y;
-    };
-    window.addEventListener('wheel', onWheel, { passive: true });
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchmove', onTouchMove, { passive: true });
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('wheel', onWheel);
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('scroll', onScroll);
-    };
-  }, [enabled, meter]);
-  return meter;
-}
-
 /** What the playback controller needs from the outside world (Motion and the DOM in the app, fakes in tests). */
 export type StoryPlayerDeps = {
   bands: Bands;
@@ -176,8 +118,6 @@ export type StoryPlayerDeps = {
   line: readonly { set(v: number): void }[];
   /** Current scroll progress (0..1). */
   progress: () => number;
-  /** The reader's recent scroll speed (screens per second), for how long loaded screens stay. */
-  speed: () => number;
   /** Current time in ms. */
   now: () => number;
   /** Run `value` 0 → 1 linearly over `duration` s; call `onComplete` at the end. Returns a stop function. */
@@ -192,13 +132,11 @@ export type StoryPlayerDeps = {
 /**
  * The story's playback rules (see `useStoryPlayback`), independent of React and Motion.
  *
- * The stage walks toward the screen the reader has scrolled to, one screen at a time:
+ * The stage stays on the furthest screen reached and only moves forward:
  * - Forward onto a screen that has not played: it plays at its own pace, and the next forward step
- *   waits until its animation is done (it stays at least MIN_SHOW_MS either way).
- * - Backward, or onto a screen that has played: it is shown finished, animations skipped, and stays
- *   for `showDwellMs(speed)` — shorter the faster the reader scrolls, never under SHOW_MIN_MS. The
- *   speed is re-read on every scroll, so speeding up mid-wait moves on sooner.
- * - A screen left going backward before its animation finished counts as loaded.
+ *   waits until its animation is done (it stays at least MIN_SHOW_MS).
+ * - Scrolled back above it: the screen on stage is finished at once (it counts as loaded) and the
+ *   stage stays put; the page shows the loaded screens.
  * - Everything before the screen on stage is in the past of the story, so it is finished too.
  */
 export function createStoryPlayer(d: StoryPlayerDeps) {
@@ -206,7 +144,7 @@ export function createStoryPlayer(d: StoryPlayerDeps) {
   let committed = bandIndex(bands, d.progress());
   const played = new Set<number>();
   let playing: { scene: number; stop: () => void } | null = null;
-  let dwell = 0; // timer: the screen on stage still has time to serve
+  let dwell = 0; // timer: a first-play screen still has time to serve
   let shownAt = 0;
   let shownMode: 'play' | 'show' = 'play';
 
@@ -257,24 +195,26 @@ export function createStoryPlayer(d: StoryPlayerDeps) {
     shownMode = mode;
     step(); // arms the dwell timer for this screen
   };
-  /** One screen toward the scroll position, unless the screen on stage still needs its time. */
+  /** Forward toward the scroll position, one first play at a time. */
   const step = () => {
     const target = bandIndex(bands, d.progress());
-    if (target === committed) return;
-    // every screen gets its time: a first play MIN_SHOW_MS, a loaded screen as long as the scroll speed asks
-    const need = shownMode === 'play' ? MIN_SHOW_MS : showDwellMs(d.speed());
-    const left = need - (d.now() - shownAt);
     d.clearTimer(dwell);
     dwell = 0;
-    if (left > 0) {
+    // Scrolled back above the stage: the page shows the loaded screens; the stage's own screen is
+    // finished, so it is complete whenever the reader comes back down to it.
+    if (target < committed) return finishPlaying();
+    if (target === committed) return;
+    // every first play gets its time: at least MIN_SHOW_MS, and the whole animation
+    const left = MIN_SHOW_MS - (d.now() - shownAt);
+    if (shownMode === 'play' && left > 0) {
       dwell = d.setTimer(() => {
         dwell = 0;
         step();
       }, left);
       return;
     }
-    if (target > committed && playing) return; // forward waits for the animation to finish
-    const next = committed + (target > committed ? 1 : -1);
+    if (playing) return; // forward waits for the animation to finish
+    const next = committed + 1;
     commit(next, arrivalMode(committed, next, played));
   };
 
@@ -311,8 +251,7 @@ export function useStoryPlayback(
   scroll: MotionValue<number>,
   bands: Bands,
   seconds: readonly number[],
-  reduce: boolean,
-  speed: { screensPerSecond(): number }
+  reduce: boolean
 ) {
   const n = bands.start.length;
   const play = useMemo(() => Array.from({ length: n }, () => motionValue(0)), [n]);
@@ -335,7 +274,6 @@ export function useStoryPlayback(
       play,
       line,
       progress: () => scroll.get(),
-      speed: () => speed.screensPerSecond(),
       now: () => performance.now(),
       run: (value, duration, onComplete) => {
         const controls = animate(value as MotionValue<number>, 1, { duration, ease: 'linear', onComplete });
@@ -358,15 +296,16 @@ export function useStoryPlayback(
       window.clearTimeout(skipTimer);
       MotionGlobalConfig.skipAnimations = false;
     };
-  }, [scroll, bands, seconds, reduce, play, line, speed]);
+  }, [scroll, bands, seconds, reduce, play, line]);
 
   return { index: state.index, instant: state.instant, play, line };
 }
 
 /**
- * The furthest the page may scroll (story progress) while screen `index` is on stage: the end of the
- * NEXT screen's section. The reader can scroll ahead into the next section while a screen plays, but
- * not past it — so the page never runs screens ahead of the stage. Null on the last screen (no cap).
+ * The furthest the page may scroll (story progress) while screen `index` is on stage (the stage is
+ * always on the furthest screen reached): the end of the NEXT screen's section. Loaded screens above
+ * scroll freely; the reader can scroll ahead into the next section while a screen plays, but not past
+ * it, so the page never runs screens ahead of the stage. Null on the last screen (no cap).
  */
 export function scrollLimit(bands: Bands, index: number): number | null {
   const next = index + 1;
@@ -391,12 +330,17 @@ export function useScrollLimit({
   scroll,
   maxProgress,
   enabled,
+  onBlocked,
 }: {
   /** Story scroll progress (0..1) — the same MotionValue the stage is driven by. */
   scroll: MotionValue<number>;
   maxProgress: number | null;
   enabled: boolean;
+  /** Called each time a scroll past the limit is stopped (wheel, touch, keys or scrollbar). */
+  onBlocked?: () => void;
 }) {
+  const blocked = useRef(onBlocked);
+  blocked.current = onBlocked;
   useEffect(() => {
     if (!enabled || maxProgress === null) return;
     const cap = maxProgress;
@@ -406,7 +350,10 @@ export function useScrollLimit({
     let lastGoodY = window.scrollY;
     const clamp = () => {
       if (scroll.get() > cap) {
-        if (window.scrollY !== lastGoodY) window.scrollTo(0, lastGoodY);
+        if (window.scrollY !== lastGoodY) {
+          window.scrollTo(0, lastGoodY);
+          blocked.current?.();
+        }
       } else {
         lastGoodY = window.scrollY;
       }
@@ -424,13 +371,19 @@ export function useScrollLimit({
       const y = e.touches[0]?.clientY ?? touchY;
       const down = y < touchY; // finger moving up scrolls the page down
       touchY = y;
-      if (down && atLimit() && e.cancelable) e.preventDefault();
+      if (down && atLimit() && e.cancelable) {
+        e.preventDefault();
+        blocked.current?.();
+      }
     };
     const DOWN_KEYS = new Set(['ArrowDown', 'PageDown', 'End', ' ', 'Spacebar']);
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
-      if (DOWN_KEYS.has(e.key) && !e.shiftKey && atLimit()) e.preventDefault();
+      if (DOWN_KEYS.has(e.key) && !e.shiftKey && atLimit()) {
+        e.preventDefault();
+        blocked.current?.();
+      }
     };
     clamp();
     // Driven by the progress MotionValue's own change event (fired after Motion reads the fresh scroll
