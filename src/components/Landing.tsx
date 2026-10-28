@@ -1389,7 +1389,6 @@ export function Landing() {
     storeLogout();
   };
   const videoRef = useRef<HTMLVideoElement>(null);
-  const underTheHoodRef = useRef<HTMLDivElement>(null);
   const exploreScienceRef = useRef<HTMLButtonElement>(null);
   // Hovering / focusing "Explore the science" brings the science backdrop into focus.
   const [scienceRevealed, setScienceRevealed] = useState(false);
@@ -2782,7 +2781,6 @@ export function Landing() {
 
           {/* Matching intelligence — the science behind a single good match */}
           <div
-            ref={underTheHoodRef}
             id="under-the-hood"
             className="scroll-mt-24 lg:scroll-mt-28 relative mt-32 sm:mt-36 lg:mt-44 bg-accent text-white overflow-visible w-screen -ml-[50vw] left-[50%] z-10"
           >
@@ -2794,14 +2792,13 @@ export function Landing() {
               }}
             />
 
-            {/* The science page's orbit animation, blurred, centred under the pointer; it sharpens and
-                settles on "Explore the science" while that button is hovered or focused. */}
+            {/* The science page's orbit animation, centred on "Explore the science": blurred, and it
+                comes into focus while that button is hovered or focused. */}
             {/* It spans the curved top cap and the bottom fade strip as well: --cap / --fade mirror their
                 heights, and the mask follows the cap's ellipse and the strip's fade-out. */}
             {enableOrbitBackdrop && (
             <ScienceOrbitBackdrop
               revealed={scienceRevealed}
-              pointerTarget={underTheHoodRef}
               anchor={exploreScienceRef}
               className="z-[1] [--cap:3rem] [--fade:100px] sm:[--cap:4rem] sm:[--fade:150px] lg:[--cap:5rem] lg:[--fade:200px]"
               style={{
