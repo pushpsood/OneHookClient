@@ -90,11 +90,13 @@ describe('deckPacing (behavioral analyzers + defaults)', () => {
 describe('ROUTES (Pub/Sub subscription filters)', () => {
   it('matches the per-engine event filters, with erasure reaching every engine', () => {
     expect(ROUTES.view).toEqual(['engagement']);
-    expect(ROUTES.swipe).toEqual(['engagement', 'rhythm']);
+    expect(ROUTES.swipe).toEqual(['engagement', 'rhythm', 'taste']);
     expect(ROUTES.session).toEqual(['engagement', 'rhythm']);
     expect(ROUTES.chat).toEqual(['engagement']);
     expect(ROUTES.profile).toEqual(['meaning']);
-    expect(ROUTES.erase).toEqual(['engagement', 'rhythm', 'meaning']);
+    expect(ROUTES.ask).toEqual(['wish']);
+    expect(ROUTES.birth).toEqual(['tradition']);
+    expect(ROUTES.erase).toEqual(['engagement', 'rhythm', 'meaning', 'taste', 'wish', 'tradition']);
   });
 });
 

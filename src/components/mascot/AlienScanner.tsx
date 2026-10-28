@@ -60,7 +60,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
   className,
   style,
   onClick,
-  hoverLabel = 'Click to watch me explain more about onehook.club',
+  hoverLabel = 'Click to watch Mr.OneHook explain more about onehook.club',
   forceExcited = false,
   hideTooltips = false,
   settled = false,
@@ -297,7 +297,7 @@ export const AlienScanner: React.FC<AlienScannerProps> = ({
       {!bare && <AiSparkle 
         settled={settled}
         size="320%" 
-        className="hidden md:block absolute top-[80%] left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 pointer-events-none opacity-80" 
+        className="absolute top-[80%] left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 pointer-events-none opacity-80"
       />}
 
       {/* Excited hover tooltip (plain conditional: exit-coordination could leave

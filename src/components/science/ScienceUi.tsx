@@ -6,7 +6,9 @@ import { UiElement, trackProps } from '../../lib/analytics/analytics';
 /** Brand tones sampled from the OneHook love logo (silver heart, navy "1"). */
 export const BRAND = {
   ink: '#0A0B10',
-  paper: '#FAFAF8',
+  paper: '#FFFFFF',
+  /** The landing page's "How it works" ground, used for the process chapter on /science. */
+  mist: '#EEF0F3',
   navy: '#1F3A6B',
   silver: '#C9CDD3',
   logo: '/media/onehook-512.png',
@@ -24,7 +26,16 @@ export const ENGINE_META: Record<EngineId, { name: string; role: string; color: 
   engagement: { name: 'Engagement', role: 'How much a moment meant', color: '#E3A6AE', deep: '#A2525E', soft: 'rgba(227,166,174,0.10)' },
   rhythm: { name: 'Rhythm', role: 'How you are moving', color: '#D8B77C', deep: '#8A6A2E', soft: 'rgba(216,183,124,0.10)' },
   meaning: { name: 'Meaning', role: 'Who you are in words', color: '#9FB1E8', deep: '#1F3A6B', soft: 'rgba(159,177,232,0.10)' },
+  taste: { name: 'Taste', role: 'Who you keep liking', color: '#9CCFB6', deep: '#2F6B52', soft: 'rgba(156,207,182,0.10)' },
+  wish: { name: 'Wish', role: 'Who you asked for', color: '#C4A8E3', deep: '#5B3F86', soft: 'rgba(196,168,227,0.10)' },
+  tradition: { name: 'Tradition', role: 'When you were born', color: '#DDA27A', deep: '#8A4A22', soft: 'rgba(221,162,122,0.10)' },
 };
+
+/** Every mind in ring order, innermost first. */
+export const ENGINE_ORDER: EngineId[] = ['engagement', 'rhythm', 'meaning', 'taste', 'wish', 'tradition'];
+
+/** A soft conic aurora through every mind's tint, closing on the first. */
+export const AURORA = `conic-gradient(from 0deg, ${[...ENGINE_ORDER, ENGINE_ORDER[0]].map((e) => ENGINE_META[e].soft).join(', ')})`;
 
 export type ScienceChapterId = 'signal' | 'journey' | 'minds' | 'time' | 'mr-onehook' | 'promises';
 
@@ -89,9 +100,11 @@ export function Chapter({
       data-chapter={chapter.id}
       aria-labelledby={`${chapter.id}-title`}
       className={`relative scroll-mt-24 px-5 sm:px-6 ${continues ? 'pb-12 pt-2 sm:pb-14 sm:pt-4' : 'py-12 sm:py-14'}`}
-      style={{ background: dark ? BRAND.ink : BRAND.paper, color: dark ? '#FFFFFF' : BRAND.ink }}
+      // Light chapters are transparent: the paper comes from the wrapper around them (Science.tsx).
+      style={{ background: dark ? BRAND.ink : 'transparent', color: dark ? '#FFFFFF' : BRAND.ink }}
     >
       <div className="mx-auto max-w-6xl">
+        <div className="relative isolate">
         {/* Hairline separator: the light chapters are divided by a rule, not by colour blocks. */}
         {/* Number on top; the hairlines run either side of the section name below it. */}
         <div className="mb-6 sm:mb-7">
@@ -116,6 +129,7 @@ export function Chapter({
           </h2>
           <div className={`mx-auto mt-3 max-w-2xl text-base font-light leading-relaxed ${dark ? 'text-white/60' : 'text-black/55'}`}>{lede}</div>
         </motion.div>
+        </div>
 
         <div className="mt-7 sm:mt-8">{children}</div>
 

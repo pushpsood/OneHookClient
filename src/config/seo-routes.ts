@@ -140,7 +140,7 @@ export const ROUTE_SEO: Record<string, RouteSeo> = {
   '/science': {
     title: 'The Science of One — How OneHook Dating Works',
     description:
-      'How OneHook matches: reading intent, rhythm and meaning in real conversations so two people build one genuine connection instead of swiping endlessly.',
+      'How OneHook turns attention, timing, profile meaning and what you ask for into considered introductions, while your match chats stay private.',
   },
   '/pricing': {
     title: 'OneHook Pricing — Free, Super & Infinity Dating Plans',
