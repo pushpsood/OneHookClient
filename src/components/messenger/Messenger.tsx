@@ -1,6 +1,6 @@
-import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion, useMotionValue, useMotionValueEvent, useReducedMotion, useScroll, useTransform, type MotionValue } from 'motion/react';
+import { AnimatePresence, MotionConfig, motion, useMotionValue, useMotionValueEvent, useReducedMotion, useScroll, useTransform, type MotionValue } from 'motion/react';
 import {
   ArrowRight,
   Check,
@@ -33,7 +33,7 @@ import {
   CheckCheck,
   MessageCircleMore,
 } from 'lucide-react';
-import { SiteHeader } from '../common/SiteHeader';
+import { STORY_PAGE_TITLES, SiteHeader } from '../common/SiteHeader';
 import { SiteFooter } from '../common/SiteFooter';
 import { Seo } from '../common/Seo';
 import { ROUTE_SEO } from '../../config/seo-routes';
@@ -43,6 +43,7 @@ import { ProgressBar } from '../science/Science';
 import {
   StoryTimelineProvider,
   bandIndex,
+  isRepeatedAttempt,
   isStoryComplete,
   makeEqualBands,
   SHOW_MIN_MS,
@@ -54,7 +55,6 @@ import {
   useSceneProgress,
   useStoryInstant,
   useScrollLimit,
-  useScrollSpeed,
   useStoryPlayback,
   useTimeline,
 } from './storyTimeline';
@@ -2833,6 +2833,80 @@ function SceneProgress({ index }: { index: number }) {
   );
 }
 
+/** The stage's layout: illustration (flex-1), words, buttons, with room for a collapsed phone toolbar. */
+const STAGE_LAYOUT =
+  'flex flex-col items-center overflow-hidden px-4 pb-[calc(100lvh-100svh+12px)] pt-1 sm:px-6 sm:pb-[calc(100lvh-100svh+32px)] sm:pt-6';
+
+/**
+ * One loaded screen as a page: the same layout as the stage, in its finished state, placed at
+ * `(i - pos)` screens from the top so the strip slides with the scroll. `buttons` is an invisible
+ * copy of the stage's button row, so every slide lays out exactly like the stage (the real buttons
+ * stay pinned above the strip).
+ */
+function StorySlide({ i, pos, buttons }: { i: number; pos: MotionValue<number>; buttons: ReactNode }) {
+  const y = useTransform(pos, (v) => `${(i - v) * 100}%`);
+  const scene = SCENES[i];
+  const n = SCENES.length;
+  const finale = i === n - 1;
+  return (
+    <motion.div className={`absolute inset-0 ${STAGE_LAYOUT}`} style={{ y }}>
+      {i === 5 && (
+        <>
+          <PinkStrokes />
+          <MascotPeeks />
+        </>
+      )}
+      {i === 4 && <LanguageRail handoff={false} />}
+      <div className={`relative z-0 flex min-h-0 w-full flex-1 ${i <= 4 || scene.fullScreen ? '' : scene.wide ? 'max-w-6xl' : 'max-w-3xl'}`}>
+        {i <= 4 ? (
+          <div className="absolute inset-0">
+            <PhonesStage index={i} />
+          </div>
+        ) : scene.fullScreen ? (
+          <div className="absolute inset-0">{scene.art()}</div>
+        ) : (
+          // the finale's heart has faded into the background by the time the screen has played
+          <div className="flex min-h-0 w-full flex-1" style={finale ? { opacity: 0 } : undefined}>
+            <FitBox>
+              <div className="flex w-full justify-center">{scene.art()}</div>
+            </FitBox>
+          </div>
+        )}
+      </div>
+      <div className="relative z-10 mt-1 flex min-h-[78px] w-full max-w-3xl shrink-0 items-start justify-center text-center sm:mt-5 sm:min-h-[120px]">
+        {!finale && (
+          <div>
+            <p className="font-mono text-[11px] text-black/30">
+              {String(i + 1).padStart(2, '0')} / {String(n).padStart(2, '0')}
+            </p>
+            <SceneProgress index={i} />
+            <p className="mt-1.5 text-2xl font-light leading-[1.08] tracking-[-0.02em] sm:mt-2 sm:text-5xl">{scene.title}</p>
+            <p className="mt-2 text-sm font-light text-black/55 sm:mt-3 sm:text-lg">{scene.line}</p>
+          </div>
+        )}
+      </div>
+      {finale && (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-center justify-center px-6 text-center"
+          style={{ bottom: 'clamp(84px, 14vh, 130px)' }}
+        >
+          <p className="font-mono text-xs text-black/30 sm:text-sm">
+            {String(n).padStart(2, '0')} / {String(n).padStart(2, '0')}
+          </p>
+          <SceneProgress index={i} />
+          <p className="mt-4 max-w-[16ch] font-light leading-[0.98] tracking-[-0.03em]" style={{ fontSize: 'clamp(3rem, 9vw, 8.5rem)' }}>
+            {scene.title}
+          </p>
+          <p className="mt-6 text-base font-light text-black/55 sm:text-2xl">{scene.line}</p>
+        </div>
+      )}
+      <div className="invisible" inert>
+        {buttons}
+      </div>
+    </motion.div>
+  );
+}
+
 export function Messenger() {
   const [lite] = useState(detectLite);
   const navigate = useNavigate();
@@ -2854,9 +2928,8 @@ export function Messenger() {
   // footer while the stage still shows screen 3. Until screen 8 is up, the page simply ends at the
   // bottom of the track. Hiding it again is safe: whenever an earlier screen is on stage the reader is
   // inside the track, above it, so nothing in view moves.
-  // how long a screen you've already seen stays up follows your scroll speed (see storyTimeline.tsx)
-  const scrollSpeed = useScrollSpeed(!reduce);
-  const { index, instant, play, line } = useStoryPlayback(scrollYProgress, STORY_BANDS, SCENE_PLAY_SECONDS, Boolean(reduce), scrollSpeed);
+  // new screens play once on the stage; screens already seen are a normal page above it (see storyTimeline.tsx)
+  const { index, instant, play, line } = useStoryPlayback(scrollYProgress, STORY_BANDS, SCENE_PLAY_SECONDS, Boolean(reduce));
   // the footer only once the last screen is actually on stage (it can still be finishing an earlier one)
   // ...and only once screen 8 has had its time (its animation done, then SHOW_MIN_MS on the finished
   // screen). Otherwise a reader still scrolling when it arrives is carried straight past it into the
@@ -2893,10 +2966,40 @@ export function Messenger() {
   const storyDone = endingOpen && index === n - 1;
   // The page can't run ahead of the stage: at most to the end of the next screen's section while a
   // screen plays (the cap moves on as each screen comes up; none on the last screen).
+  // A reader who keeps trying to scroll while a screen plays is told why the page is holding: the
+  // illustration is still playing, and scrolling continues once it finishes.
+  const attempts = useRef<number[]>([]);
+  const nudgeTimer = useRef(0);
+  const [nudge, setNudge] = useState(false);
+  const onBlocked = useCallback(() => {
+    const list = attempts.current;
+    list.push(performance.now());
+    if (list.length > 40) list.shift();
+    if (!isRepeatedAttempt(list)) return;
+    setNudge(true);
+    // it goes away on its own once the reader stops trying
+    window.clearTimeout(nudgeTimer.current);
+    nudgeTimer.current = window.setTimeout(() => setNudge(false), 2500);
+  }, []);
+  useEffect(() => {
+    // a new screen on stage, or this one done playing: the hold is over
+    const clear = () => {
+      attempts.current = [];
+      window.clearTimeout(nudgeTimer.current);
+      setNudge(false);
+    };
+    clear();
+    const off = play[index].on('change', (v) => v >= 1 && clear());
+    return () => {
+      off();
+      window.clearTimeout(nudgeTimer.current);
+    };
+  }, [index, play]);
   useScrollLimit({
     scroll: scrollYProgress,
     maxProgress: scrollLimit(STORY_BANDS, index),
     enabled: !reduce,
+    onBlocked,
   });
   const threadHeight = useTransform(scrollYProgress, (v) => `${Math.min(1, Math.max(0, v)) * 100}%`);
   // the screen we came from (updated after render, so during a render it is the previous screen)
@@ -2907,6 +3010,54 @@ export function Messenger() {
   const story = useMemo(
     () => ({ scroll: scrollYProgress, play, line, bands: STORY_BANDS, reduce: Boolean(reduce), instant }),
     [scrollYProgress, play, line, reduce, instant]
+  );
+
+  // Screens already seen are a normal page. `pos` is the reader's place in screens (screen i is
+  // centred at pos = i), held at the stage's screen: at or below it the stage itself is showing;
+  // above it, a strip of the loaded screens, finished, slides with the scroll like any page.
+  const indexRef = useRef(index);
+  indexRef.current = index;
+  const pos = useTransform(scrollYProgress, (p) => Math.min(Math.max(0, p) * n, indexRef.current));
+  // the loaded screen at the top of the view while the strip shows (null: the stage is showing)
+  const [strip, setStrip] = useState<number | null>(null);
+  useMotionValueEvent(pos, 'change', (v) => {
+    const next = !reduce && v < indexRef.current - 0.001 ? Math.floor(v) : null;
+    setStrip((prev) => (prev === next ? prev : next));
+  });
+  // the screen the reader is looking at (for the thread and the backdrop glow)
+  const view = strip === null ? index : Math.min(index, Math.round(pos.get()));
+  const hideStage = strip === null ? undefined : ('hidden' as const);
+  const slideStory = useMemo(() => ({ ...story, instant: true }), [story]);
+
+  // the same three buttons, always in the same place (also laid out, invisibly, in each page slide)
+  const buttonsRow = (
+    <motion.div
+      className="relative z-10 mt-2 flex shrink-0 flex-wrap items-center justify-center gap-1.5 sm:mt-5 sm:gap-3"
+      initial={false}
+      animate={{ opacity: 1 }}
+    >
+      <GetAppLink
+        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-accent px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-white transition-opacity hover:opacity-90"
+      >
+        <Smartphone className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Get the app
+      </GetAppLink>
+      <button
+        type="button"
+        onClick={() => navigate('/redeem')}
+        {...trackProps(UiElement.LANDING_GET_STARTED)}
+        // not on phones (/messenger): Get the app + Support only
+        className="hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-black/15 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:inline-flex sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-black/[0.04]"
+      >
+        Start with an invite <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+      </button>
+      <a
+        href={DONATE_HREF}
+        {...trackProps(UiElement.LANDING_EMAIL_LINK, { value: 'other' })}
+        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#ff8fc7]/60 bg-[#ff8fc7]/10 px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-[#ff8fc7]/20"
+      >
+        <HandHeart className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: PINK }} /> Support
+      </a>
+    </motion.div>
   );
 
   const scene = SCENES[index];
@@ -2939,7 +3090,7 @@ export function Messenger() {
     <div className={`min-h-screen bg-[#FAFAF8] text-text ${lite ? 'oh-lite' : ''}`}>
       <Seo {...ROUTE_SEO['/messenger']} path="/messenger" />
       <ProgressBar background={`linear-gradient(90deg, ${PINK}, #1F3A6B 50%, ${PINK})`} />
-      <SiteHeader pageTitle="Messenger" />
+      <SiteHeader pageTitle="Messenger" fitTitles={STORY_PAGE_TITLES} />
 
       <main>
         <h1 className="sr-only">OneHook Messenger — the new-age, end-to-end encrypted messenger, free forever</h1>
@@ -2962,40 +3113,61 @@ export function Messenger() {
             // toolbar collapsed (100lvh), but everything in it is laid out for the screen WITH the
             // toolbar (100svh), so nothing re-sizes or moves when the toolbar shows or hides while
             // scrolling. The extra strip the collapsed toolbar uncovers holds "Start with an invite".
-            className="sticky flex flex-col items-center overflow-hidden px-4 pb-[calc(100lvh-100svh+12px)] pt-1 sm:px-6 sm:pb-[calc(100lvh-100svh+32px)] sm:pt-6"
+            className={`sticky ${STAGE_LAYOUT}`}
             style={{ top: headerH, height: `calc(100lvh - ${headerH}px)` }}
           >
             {/* screen 6: Mr OneHook peeking in from the edges */}
-            <AnimatePresence>
-              {index === 5 && (
-                <Fragment key="peeks">
-                  <PinkStrokes />
-                  <MascotPeeks />
-                </Fragment>
-              )}
-            </AnimatePresence>
+            <div style={{ display: 'contents', visibility: hideStage }}>
+              <AnimatePresence>
+                {index === 5 && (
+                  <Fragment key="peeks">
+                    <PinkStrokes />
+                    <MascotPeeks />
+                  </Fragment>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* screen 5: the supported-language list, rolling the full height of the screen */}
-            <AnimatePresence>
-              {index === 4 && (
-                <Fragment key="rail">
-                  <LanguageRail handoff={prevIndex.current === SCENE_SYNC && !instant} />
-                </Fragment>
-              )}
-            </AnimatePresence>
+            <div style={{ display: 'contents', visibility: hideStage }}>
+              <AnimatePresence>
+                {index === 4 && (
+                  <Fragment key="rail">
+                    <LanguageRail handoff={prevIndex.current === SCENE_SYNC && !instant} />
+                  </Fragment>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* soft backdrop glow that drifts with the story */}
             <motion.div
               aria-hidden="true"
               className="pointer-events-none absolute h-[36rem] w-[36rem] rounded-full"
               style={{ background: 'radial-gradient(circle, rgba(255,143,199,0.16), transparent 65%)' }}
-              animate={{ left: `${10 + (index % 2) * 40}%`, top: `${10 + (index % 3) * 12}%` }}
+              animate={{ left: `${10 + (view % 2) * 40}%`, top: `${10 + (view % 3) * 12}%` }}
               transition={{ duration: 1.2, ease: 'easeInOut' }}
             />
 
+            {/* the loaded screens above the stage, as a page that slides with the scroll */}
+            {strip !== null && (
+              <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
+                <MotionConfig skipAnimations>
+                  <StoryTimelineProvider value={slideStory}>
+                    {[strip, strip + 1]
+                      .filter((i) => i <= index)
+                      .map((i) => (
+                        <Fragment key={i}>
+                          <StorySlide i={i} pos={pos} buttons={buttonsRow} />
+                        </Fragment>
+                      ))}
+                  </StoryTimelineProvider>
+                </MotionConfig>
+              </div>
+            )}
+
             {/* 1 — the illustration is the hero. Screens 1–2 share one persistent phone stage (same
                 key, so it never remounts); other screens scale down to fit the height that is left. */}
-            <div aria-hidden="true" className={`relative z-0 flex min-h-0 w-full flex-1 ${index <= 4 || scene.fullScreen ? '' : scene.wide ? 'max-w-6xl' : 'max-w-3xl'}`}>
+            <div aria-hidden="true" className={`relative z-0 flex min-h-0 w-full flex-1 ${index <= 4 || scene.fullScreen ? '' : scene.wide ? 'max-w-6xl' : 'max-w-3xl'}`} style={{ visibility: hideStage }}>
               <AnimatePresence mode="wait">
                 {index <= 4 ? (
                   <motion.div
@@ -3051,6 +3223,7 @@ export function Messenger() {
             <div
               aria-hidden="true"
               className="relative z-10 mt-1 flex min-h-[78px] w-full max-w-3xl shrink-0 items-start justify-center text-center sm:mt-5 sm:min-h-[120px]"
+              style={{ visibility: hideStage }}
             >
               {/* `custom` = "is the next screen the finale?" — when it is, the outgoing words rise and
                   grow toward the centre of the stage and dissolve there, right where the finale's big
@@ -3085,6 +3258,7 @@ export function Messenger() {
             </div>
 
             {/* finale: the words take the whole stage, centred (behind the buttons, above the faded heart) */}
+            <div style={{ display: 'contents', visibility: hideStage }}>
             <AnimatePresence>
               {finale && (
                 <motion.div
@@ -3110,35 +3284,33 @@ export function Messenger() {
                 </motion.div>
               )}
             </AnimatePresence>
+            </div>
+
+            {/* why the page is holding, if the reader keeps trying to scroll while a screen plays */}
+            <div
+              role="status"
+              aria-live="polite"
+              // at the top of the stage, clear of the headline and the buttons
+              className="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-4 sm:top-3"
+            >
+              <AnimatePresence>
+                {nudge && (
+                  <motion.p
+                    key="nudge"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25, ease: 'easeOut' }}
+                    className="max-w-sm rounded-2xl sm:max-w-none bg-[#0A0B10]/90 px-4 py-2.5 text-center text-xs leading-relaxed text-white shadow-lg sm:text-sm"
+                  >
+                    Hang on, the illustration is still playing. Scrolling continues once it finishes.
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* 3 — the same three buttons, always in the same place */}
-            <motion.div
-              className="relative z-10 mt-2 flex shrink-0 flex-wrap items-center justify-center gap-1.5 sm:mt-5 sm:gap-3"
-              initial={false}
-              animate={{ opacity: 1 }}
-            >
-              <GetAppLink
-                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-accent px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-white transition-opacity hover:opacity-90"
-              >
-                <Smartphone className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Get the app
-              </GetAppLink>
-              <button
-                type="button"
-                onClick={() => navigate('/redeem')}
-                {...trackProps(UiElement.LANDING_GET_STARTED)}
-                // not on phones (/messenger): Get the app + Support only
-                className="hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-black/15 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:inline-flex sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-black/[0.04]"
-              >
-                Start with an invite <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </button>
-              <a
-                href={DONATE_HREF}
-                {...trackProps(UiElement.LANDING_EMAIL_LINK, { value: 'other' })}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#ff8fc7]/60 bg-[#ff8fc7]/10 px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] sm:gap-2 sm:px-6 sm:py-3.5 sm:text-[11px] sm:tracking-[0.22em] text-text/80 transition-colors hover:bg-[#ff8fc7]/20"
-              >
-                <HandHeart className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: PINK }} /> Support
-              </a>
-            </motion.div>
+            {buttonsRow}
 
             {/* phones: the strip a collapsed browser toolbar uncovers (100lvh − 100svh) — it shows only
                 then, and nothing else moves */}
@@ -3163,7 +3335,7 @@ export function Messenger() {
                   <span
                     key={s.plain}
                     className="-ml-[3px] h-2 w-2 rounded-full transition-all duration-300"
-                    style={{ background: i <= index ? PINK : 'rgba(10,11,16,0.15)', transform: i === index ? 'scale(1.6)' : 'scale(1)' }}
+                    style={{ background: i <= view ? PINK : 'rgba(10,11,16,0.15)', transform: i === view ? 'scale(1.6)' : 'scale(1)' }}
                   />
                 ))}
               </div>
