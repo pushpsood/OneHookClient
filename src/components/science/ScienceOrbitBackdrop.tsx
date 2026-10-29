@@ -7,14 +7,7 @@ import {
   type CSSProperties,
   type RefObject,
 } from 'react';
-import {
-  motion,
-  useAnimate,
-  useInView,
-  useMotionValue,
-  useReducedMotion,
-  useSpring,
-} from 'motion/react';
+import { motion, useAnimate, useInView, useMotionValue, useReducedMotion } from 'motion/react';
 import { AURORA, ENGINE_ORDER } from './ScienceUi';
 import { CX, CY, ORBITS } from './ScienceDiagrams';
 import { ScienceDisc, useScienceHeroDisc, type Pulse } from './ScienceHero';
@@ -26,28 +19,26 @@ const ENGINES: EngineId[] = ENGINE_ORDER;
  * signals), as a decorative background for another section. Its geometry (size, lean, logo) is the
  * one the /science hero computes for the same screen, so in focus it looks exactly like the hero.
  *
- * - Its centre (the logo) follows the pointer anywhere over `pointerTarget`, on a soft spring, and
- *   eases back to the middle of the section when the pointer leaves.
+ * - It stays centred on `anchor` (the "Explore the science" button) at all times; it does not
+ *   follow the pointer.
  * - It sits blurred and dimmed, so it reads as texture behind the foreground content. While
  *   blurred the rings hold still: a moving layer under a blur is re-blurred on every frame.
- * - `revealed` brings it into focus (blur clears, rings spin) and pins its centre on
- *   `anchor` (the "Explore the science" button), whether reached by pointer or keyboard.
+ * - `revealed` brings it into focus (blur clears, rings spin), whether the button is reached by
+ *   pointer or keyboard.
  * - Signals fire on their own while the section is on screen, so it never looks static.
  *
- * Every moving part is a composited layer (CSS spin, transform-only following), as on the hero.
+ * Every moving part is a composited layer (CSS spin), as on the hero.
  * Purely decorative: aria-hidden, pointer-events none. Reduced motion: static, no blur transition
  * animation and no autoplay.
  */
 export function ScienceOrbitBackdrop({
   revealed,
-  pointerTarget,
   anchor,
   className = '',
   style,
 }: {
   revealed: boolean;
-  pointerTarget: RefObject<HTMLElement | null>;
-  /** Element the centre snaps onto while `revealed`. */
+  /** Element the disc is centred on. */
   anchor: RefObject<HTMLElement | null>;
   className?: string;
   /** Extra positioning / masking for the root (merged under the blur and opacity). */
@@ -80,66 +71,50 @@ export function ScienceOrbitBackdrop({
   const { layout: hero, frame } = useScienceHeroDisc();
   const disc = { cx: 0, cy: 0, tilt: hero.tilt, orbitScale: hero.orbitScale, logoR: hero.logoR };
 
-  // Centre of the system, in section pixels.
-  const centerX = useMotionValue(0);
-  const centerY = useMotionValue(0);
-  const cx = useSpring(centerX, { stiffness: 110, damping: 22, mass: 0.7 });
-  const cy = useSpring(centerY, { stiffness: 110, damping: 22, mass: 0.7 });
-  // Parallax is replaced by following the pointer; the rings still take motion values.
+  // Centre of the system, in section pixels: always on the anchor.
+  const cx = useMotionValue(0);
+  const cy = useMotionValue(0);
+  // The rings take parallax motion values; here they stay still.
   const still = useMotionValue(0);
 
-  const home = useCallback(() => {
-    const r = rootRef.current?.getBoundingClientRect();
-    if (!r) return;
-    centerX.set(r.width / 2);
-    centerY.set(r.height / 2);
-  }, [centerX, centerY]);
-
   const pinToAnchor = useCallback(() => {
-    const root = rootRef.current?.getBoundingClientRect();
-    const a = anchor.current?.getBoundingClientRect();
+    const root = rootRef.current;
+    const a = anchor.current;
     if (!root || !a) return;
-    centerX.set(a.left + a.width / 2 - root.left);
-    centerY.set(a.top + a.height / 2 - root.top);
-  }, [anchor, centerX, centerY]);
-
-  // Start in the middle without animating in from the corner.
-  useLayoutEffect(() => {
-    if (!size.w) return;
-    if (centerX.get() === 0 && centerY.get() === 0) {
-      cx.jump(size.w / 2);
-      cy.jump(size.h / 2);
-      home();
+    // Layout offsets, not on-screen rects: the button's section fades up into place (a transform),
+    // and the disc should sit where the button settles, not where it is mid-animation.
+    const base = root.offsetParent;
+    let x = a.offsetWidth / 2;
+    let y = a.offsetHeight / 2;
+    let el: HTMLElement | null = a;
+    while (el && el !== base) {
+      x += el.offsetLeft;
+      y += el.offsetTop;
+      el = el.offsetParent as HTMLElement | null;
     }
-  }, [size.w, size.h, cx, cy, centerX, centerY, home]);
+    if (el === base) {
+      cx.set(x - root.offsetLeft);
+      cy.set(y - root.offsetTop);
+      return;
+    }
+    const r = root.getBoundingClientRect();
+    const ar = a.getBoundingClientRect();
+    cx.set(ar.left + ar.width / 2 - r.left);
+    cy.set(ar.top + ar.height / 2 - r.top);
+  }, [anchor, cx, cy]);
 
-  // Follow the pointer; while revealed, stay pinned on the anchor instead.
-  useEffect(() => {
-    const target = pointerTarget.current;
-    if (!target || reduce) return;
-    const onMove = (e: PointerEvent) => {
-      if (revealed) return pinToAnchor();
-      const r = rootRef.current?.getBoundingClientRect();
-      if (!r) return;
-      centerX.set(e.clientX - r.left);
-      centerY.set(e.clientY - r.top);
-    };
-    const onLeave = () => {
-      if (!revealed) home();
-    };
-    target.addEventListener('pointermove', onMove, { passive: true });
-    target.addEventListener('pointerleave', onLeave);
-    return () => {
-      target.removeEventListener('pointermove', onMove);
-      target.removeEventListener('pointerleave', onLeave);
-    };
-  }, [pointerTarget, reduce, revealed, pinToAnchor, home, centerX, centerY]);
-
-  // Snap onto the button the moment it is revealed (covers keyboard focus too), and back home after.
+  // Re-centre whenever the section or the button changes size (resize, fonts, layout).
+  useLayoutEffect(() => {
+    pinToAnchor();
+    const a = anchor.current;
+    if (!a) return;
+    const ro = new ResizeObserver(pinToAnchor);
+    ro.observe(a);
+    return () => ro.disconnect();
+  }, [size.w, size.h, anchor, pinToAnchor]);
   useEffect(() => {
     if (revealed) pinToAnchor();
-    else if (reduce) home();
-  }, [revealed, reduce, pinToAnchor, home]);
+  }, [revealed, pinToAnchor]);
 
   const onArrive = useCallback(
     (p: Pulse) => {
