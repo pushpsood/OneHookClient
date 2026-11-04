@@ -65,13 +65,14 @@ import {
   type MrOneHookMessage,
   type MrOneHookScope,
   type PendingExcerptReview,
+  type SessionListItem,
 } from '../../lib/mr-onehook';
 import {
   selectEphemeralExcerpts,
   toSelectableMessages,
   type ExcerptSelectionRequest,
 } from '../../lib/mr-onehook-excerpts';
-import { DEFAULT_SUBSCRIPTION_TIER } from 'onehook-api-client/membership';
+import { DEFAULT_SUBSCRIPTION_TIER, isPaidSubscriptionTier } from 'onehook-api-client/membership';
 import type { SubscriptionTier } from '../../types';
 import { ChatSettingsSheet } from '../../components/chat/ChatSettingsSheet';
 import { AttachmentBubble } from '../../components/chat/AttachmentBubble';
@@ -1572,7 +1573,7 @@ function MrOneHookProductScope({
     scope: { type: 'product' },
     tier,
   });
-  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} />;
+  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} tier={tier} scopeType="product" />;
 }
 
 /**
@@ -1613,7 +1614,9 @@ function MrOneHookMatchScope({
     resolveLocalExcerpts,
   });
 
-  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} matchName={matchName} />;
+  return (
+    <MrOneHookChatBody chat={chat} wallpaper={wallpaper} matchName={matchName} tier={tier} scopeType="connection" />
+  );
 }
 
 /**
@@ -1625,11 +1628,17 @@ function MrOneHookChatBody({
   chat,
   wallpaper,
   matchName,
+  tier,
+  scopeType,
 }: {
   chat: ReturnType<typeof useMrOneHookChat>;
   wallpaper: ChatWallpaper;
   matchName?: string;
+  tier: SubscriptionTier;
+  scopeType: 'product' | 'connection';
 }) {
+  const canSaveChats = isPaidSubscriptionTier(tier);
+  const [savedOpen, setSavedOpen] = useState(false);
   const { messages, loading, mood, pendingReview, availability, send, confirmReview, cancelReview } = chat;
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
@@ -1650,9 +1659,49 @@ function MrOneHookChatBody({
 
   return (
     <>
+      {canSaveChats && (
+        <SavedChatsBar
+          chat={chat}
+          scopeType={scopeType}
+          open={savedOpen || chat.sessionLimit !== null}
+          onToggle={() => {
+            if (!savedOpen) void chat.refreshSessions();
+            setSavedOpen((v) => !v);
+          }}
+        />
+      )}
       <div className="flex-1 relative min-h-0">
         <ChatBackdrop wallpaper={wallpaper} />
         <div className="relative h-full p-6 md:p-8 space-y-6 overflow-y-auto min-h-0">
+          {chat.sessionLimit && (
+            <div
+              className="max-w-md rounded-2xl border border-accent/40 bg-accent/5 p-4 space-y-3"
+              data-testid="session-limit"
+            >
+              <p className="text-sm text-text">
+                You have {chat.sessionLimit.maxSessions} saved chats, the most you can keep. Replace your least
+                recent chat, or delete one above.
+              </p>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => void chat.replaceLeastRecentAndSend()}
+                  {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_LIMIT, { value: 'replace_least_recent' })}
+                  className="px-3 py-1.5 rounded-lg bg-ig-blue text-white text-xs font-semibold cursor-pointer"
+                >
+                  Replace least recent
+                </button>
+                <button
+                  type="button"
+                  onClick={chat.dismissSessionLimit}
+                  {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_LIMIT, { value: 'cancel' })}
+                  className="px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-text cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           {messages.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-3 opacity-70">
               <Mascot mood="Happy" className="w-16 h-16" />
@@ -1733,6 +1782,102 @@ function MrOneHookChatBody({
         }
       />
     </>
+  );
+}
+
+/**
+ * Super and above: the member's saved Mr. OneHook chats (at most 3 in total, across product and match
+ * chats). Resume a product chat here, delete any, or start a new one.
+ */
+function SavedChatsBar({
+  chat,
+  scopeType,
+  open,
+  onToggle,
+}: {
+  chat: ReturnType<typeof useMrOneHookChat>;
+  scopeType: 'product' | 'connection';
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const list: SessionListItem[] = chat.sessionLimit?.sessions ?? chat.sessions;
+
+  const remove = async (sessionId: string) => {
+    setBusy(sessionId);
+    setError(null);
+    try {
+      await chat.deleteSession(sessionId);
+    } catch {
+      setError("Couldn't delete that chat. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="shrink-0 px-4 md:px-6 py-2 border-b border-border/60 bg-surface-card/40" data-testid="saved-chats">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSIONS_OPEN, { action: open ? 'dismiss' : undefined })}
+          className="px-3 py-1.5 rounded-full border border-border text-xs font-semibold text-text hover:bg-surface-hover cursor-pointer"
+          aria-expanded={open}
+        >
+          Saved chats
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            chat.clear();
+            void chat.refreshSessions();
+          }}
+          {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_NEW)}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-border text-xs font-semibold text-text hover:bg-surface-hover cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" /> New chat
+        </button>
+      </div>
+      {open && (
+        <ul className="mt-2 space-y-1.5">
+          {list.length === 0 && <li className="text-xs text-text-secondary">No saved chats yet.</li>}
+          {list.map((s) => (
+            <li key={s.sessionId} className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-text truncate">
+                {s.scope === 'product' ? 'OneHook chat' : 'Match chat'} ·{' '}
+                {Number.isFinite(Date.parse(s.updatedAt)) ? new Date(s.updatedAt).toLocaleString() : ''} ·{' '}
+                {s.messageCount} messages
+              </span>
+              <span className="flex gap-1.5 shrink-0">
+                {s.scope === scopeType && scopeType === 'product' && (
+                  <button
+                    type="button"
+                    onClick={() => void chat.resumeSession(s.sessionId)}
+                    {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_RESUME)}
+                    className="px-2 py-1 rounded-md border border-border font-semibold cursor-pointer"
+                  >
+                    Open
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void remove(s.sessionId)}
+                  disabled={busy === s.sessionId}
+                  {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_DELETE)}
+                  className="px-2 py-1 rounded-md border border-border font-semibold text-red-500 disabled:opacity-50 cursor-pointer"
+                  aria-label="Delete saved chat"
+                >
+                  {busy === s.sessionId ? 'Deleting…' : 'Delete'}
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+    </div>
   );
 }
 

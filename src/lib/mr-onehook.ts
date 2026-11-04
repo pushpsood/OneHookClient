@@ -11,6 +11,7 @@
  * context (`needsMoreContext`) AND the user explicitly approves the excerpts the device selected.
  * Excerpts are never persisted — not in the transcript, not in the session payload, not in logs.
  *
+ * Must (free) chats live only in memory and reset when the app is closed (10 messages per UTC day).
  * Session persistence is tier-gated: only a paid (Super / Infinity) local display tier requests it, and any
  * server-side session denial is handled by transparently retrying the same question without a
  * session so the user still gets an answer.
@@ -31,10 +32,14 @@ import {
   type MemberSessionMetadata,
   type MrOneHookMessage,
   type MrOneHookMood,
+  parseSessionDetail,
+  parseSessionList,
+  sessionLimitFromError,
+  type SessionListItem,
 } from './mr-onehook-contract';
 import type { ExcerptSelectionRequest, ExcerptSelectionResult } from './mr-onehook-excerpts';
 
-export type { MrOneHookMessage, MrOneHookMood } from './mr-onehook-contract';
+export type { MrOneHookMessage, MrOneHookMood, SessionListItem } from './mr-onehook-contract';
 
 // Mirrors ChatbotWidget's failure copy so the AI voice is consistent across surfaces.
 const SERVER_ERROR_COPY =
@@ -116,6 +121,35 @@ export interface UseMrOneHookChat {
   confirmReview: () => Promise<void>;
   cancelReview: () => void;
   clear: () => void;
+  /**
+   * Super and above: the member's saved chats (all scopes; the total is capped server-side). Empty for
+   * Must, whose chat lives only in memory and resets when the app is closed.
+   */
+  sessions: SessionListItem[];
+  refreshSessions: () => Promise<void>;
+  /** Opens a saved product chat in this conversation. */
+  resumeSession: (sessionId: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
+  /**
+   * Set when a NEW chat was refused because the member already has the maximum saved chats. The member
+   * either replaces the least recent one ({@link replaceLeastRecentAndSend}) or deletes one and sends again.
+   */
+  sessionLimit: SessionLimit | null;
+  replaceLeastRecentAndSend: () => Promise<void>;
+  dismissSessionLimit: () => void;
+}
+
+export interface SessionLimit {
+  maxSessions: number;
+  sessions: SessionListItem[];
+  /** The message that was refused; sent again once there is room. */
+  pendingMessage: string;
+}
+
+class SessionLimitReachedError extends Error {
+  constructor(readonly maxSessions: number, readonly sessions: SessionListItem[]) {
+    super('CHAT_SESSION_LIMIT_REACHED');
+  }
 }
 
 function scopeKey(scope: MrOneHookScope): string {
@@ -130,8 +164,22 @@ function sessionStorageKey(userId: string, scope: MrOneHookScope): string {
   return `onehook.mrOneHook.session.${userId}.${scopeKey(scope)}`;
 }
 
-function loadTranscript(userId: string, scope: MrOneHookScope): MrOneHookMessage[] {
-  if (typeof window === 'undefined' || !userId) return [];
+/**
+ * Must (free) members' chat lives only in memory: it resets when the app is closed. Removes any transcript
+ * an earlier version stored for them on this device.
+ */
+function forgetStoredTranscript(userId: string, scope: MrOneHookScope): void {
+  if (typeof window === 'undefined' || !userId) return;
+  try {
+    window.localStorage.removeItem(transcriptStorageKey(userId, scope));
+    window.localStorage.removeItem(sessionStorageKey(userId, scope));
+  } catch {
+    /* ignore disabled storage */
+  }
+}
+
+function loadTranscript(userId: string, scope: MrOneHookScope, persistAllowed = true): MrOneHookMessage[] {
+  if (typeof window === 'undefined' || !userId || !persistAllowed) return [];
   try {
     const raw = window.localStorage.getItem(transcriptStorageKey(userId, scope));
     if (!raw) return [];
@@ -142,8 +190,13 @@ function loadTranscript(userId: string, scope: MrOneHookScope): MrOneHookMessage
   }
 }
 
-function saveTranscript(userId: string, scope: MrOneHookScope, messages: MrOneHookMessage[]): void {
-  if (typeof window === 'undefined' || !userId) return;
+function saveTranscript(
+  userId: string,
+  scope: MrOneHookScope,
+  messages: MrOneHookMessage[],
+  persistAllowed = true,
+): void {
+  if (typeof window === 'undefined' || !userId || !persistAllowed) return;
   try {
     // Persist only durable turns; error bubbles are transient UI, not conversation history. Excerpts
     // are never part of a transcript turn, so nothing sensitive is written here.
@@ -201,7 +254,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   const persistAllowed = isPaidSubscriptionTier(tier);
   const key = scopeKey(scope);
 
-  const [messages, setMessages] = useState<MrOneHookMessage[]>(() => loadTranscript(userId, scope));
+  const [messages, setMessages] = useState<MrOneHookMessage[]>(() => loadTranscript(userId, scope, persistAllowed));
   const [loading, setLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [mood, setMood] = useState<MrOneHookMood>('Happy');
@@ -209,28 +262,32 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   const [pendingReview, setPendingReview] = useState<PendingExcerptReview | null>(null);
   const [availability, setAvailability] = useState<MemberChatAvailability>('AVAILABLE');
   const [remainingMessages, setRemainingMessages] = useState<number | undefined>(undefined);
+  const [sessions, setSessions] = useState<SessionListItem[]>([]);
+  const [sessionLimit, setSessionLimit] = useState<SessionLimit | null>(null);
 
-  const sessionIdRef = useRef<string | undefined>(loadSessionId(userId, scope));
+  const sessionIdRef = useRef<string | undefined>(persistAllowed ? loadSessionId(userId, scope) : undefined);
   const resolveRef = useRef<LocalExcerptResolver | undefined>(resolveLocalExcerpts);
   resolveRef.current = resolveLocalExcerpts;
 
   // Reload when the user or scope changes so transcripts/sessions never bleed across accounts/scopes.
   useEffect(() => {
-    setMessages(loadTranscript(userId, scope));
-    sessionIdRef.current = loadSessionId(userId, scope);
+    if (!persistAllowed) forgetStoredTranscript(userId, scope);
+    setMessages(loadTranscript(userId, scope, persistAllowed));
+    sessionIdRef.current = persistAllowed ? loadSessionId(userId, scope) : undefined;
     setSession(null);
+    setSessionLimit(null);
     setPendingReview(null);
     setHasError(false);
     setMood('Happy');
     setAvailability('AVAILABLE');
     // scope is reconstructed each render; key is its stable identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, key]);
+  }, [userId, key, persistAllowed]);
 
   useEffect(() => {
-    saveTranscript(userId, scope, messages);
+    saveTranscript(userId, scope, messages, persistAllowed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, key, messages]);
+  }, [userId, key, messages, persistAllowed]);
 
   const pushError = useCallback((copy: string) => {
     setMessages((prev) => [...prev, { role: 'assistant', content: copy, isError: true }]);
@@ -244,7 +301,13 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
    * transient, retryable error bubble.
    */
   const handleFailure = useCallback(
-    (err: unknown) => {
+    (err: unknown, pendingMessage?: string) => {
+      if (err instanceof SessionLimitReachedError) {
+        setSessions(err.sessions);
+        setSessionLimit({ maxSessions: err.maxSessions, sessions: err.sessions, pendingMessage: pendingMessage ?? '' });
+        setMood('Neutral');
+        return;
+      }
       if (err instanceof MemberChatTerminalError) {
         setAvailability(err.outcome);
         pushError(availabilityCopy(err.outcome));
@@ -270,6 +333,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       historyTruncated?: boolean;
       userConfirmed?: boolean;
       contextRequestId?: string;
+      replaceLeastRecent?: boolean;
     }): Promise<MemberChatResponse> => {
       const token = await fetchIdToken();
       if (!token) throw new Error('NOT_AUTHENTICATED');
@@ -285,7 +349,11 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
           ...(init.userConfirmed !== undefined ? { userConfirmed: init.userConfirmed } : {}),
           ...(init.contextRequestId ? { contextRequestId: init.contextRequestId } : {}),
           ...(useSession && persistAllowed
-            ? { persist: true, ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}) }
+            ? {
+                persist: true,
+                ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
+                ...(init.replaceLeastRecent ? { replaceLeastRecent: true } : {}),
+              }
             : {}),
         });
         return fetch(`${chatbotUrl}${MEMBER_CHAT_PATH}`, {
@@ -298,6 +366,9 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       let response = await attempt(persistAllowed);
       if (!response.ok && persistAllowed) {
         const errorBody = (await response.clone().json().catch(() => ({}))) as { error?: unknown };
+        // A NEW saved chat at the limit: let the member choose (replace the least recent, or delete one).
+        const limit = sessionLimitFromError(errorBody, Boolean(sessionIdRef.current));
+        if (limit) throw new SessionLimitReachedError(limit.maxSessions, limit.sessions);
         if (isSessionErrorCode(errorBody.error)) {
           // The session can't be used — forget it and answer the same question session-free.
           sessionIdRef.current = undefined;
@@ -396,7 +467,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         const result = await postOnce({ message: trimmed });
         handleResult(result, trimmed);
       } catch (err) {
-        handleFailure(err);
+        handleFailure(err, trimmed);
       } finally {
         setLoading(false);
       }
@@ -444,6 +515,90 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, key]);
 
+  const authorizedFetch = useCallback(async (path: string, init?: RequestInit): Promise<Response> => {
+    const token = await fetchIdToken();
+    if (!token) throw new Error('NOT_AUTHENTICATED');
+    return fetch(`${chatbotUrl}${MEMBER_CHAT_PATH}${path}`, {
+      ...init,
+      headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
+    });
+  }, []);
+
+  const refreshSessions = useCallback(async () => {
+    if (!persistAllowed) {
+      setSessions([]);
+      return;
+    }
+    try {
+      const response = await authorizedFetch('/sessions');
+      if (response.ok) setSessions(parseSessionList(await response.json()));
+    } catch {
+      /* the list is a convenience; chatting still works */
+    }
+  }, [authorizedFetch, persistAllowed]);
+
+  const resumeSession = useCallback(
+    async (sessionId: string) => {
+      if (!persistAllowed || loading) return;
+      try {
+        const response = await authorizedFetch(`/sessions/${encodeURIComponent(sessionId)}`);
+        const detail = response.ok ? parseSessionDetail(await response.json()) : undefined;
+        if (!detail) throw new Error('SERVER_ERROR');
+        sessionIdRef.current = detail.sessionId;
+        persistSessionId(userId, scope, detail.sessionId);
+        setMessages(detail.messages.map((m) => ({ role: m.role, content: m.content })));
+        setPendingReview(null);
+        setSessionLimit(null);
+        setHasError(false);
+        setMood('Happy');
+      } catch {
+        pushError(SERVER_ERROR_COPY);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [authorizedFetch, persistAllowed, loading, userId, key, pushError],
+  );
+
+  const deleteSession = useCallback(
+    async (sessionId: string) => {
+      if (!persistAllowed) return;
+      const response = await authorizedFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+      if (!response.ok && response.status !== 404) throw new Error('SERVER_ERROR');
+      setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
+      setSessionLimit((prev) => (prev
+        ? { ...prev, sessions: prev.sessions.filter((s) => s.sessionId !== sessionId) }
+        : prev));
+      if (sessionIdRef.current === sessionId) {
+        sessionIdRef.current = undefined;
+        persistSessionId(userId, scope, undefined);
+        setSession(null);
+        setMessages([]);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [authorizedFetch, persistAllowed, userId, key],
+  );
+
+  const replaceLeastRecentAndSend = useCallback(async () => {
+    if (!sessionLimit || loading) return;
+    const { pendingMessage } = sessionLimit;
+    setSessionLimit(null);
+    if (!pendingMessage) return;
+    setLoading(true);
+    setMood('Thinking');
+    try {
+      const result = await postOnce({ message: pendingMessage, replaceLeastRecent: true });
+      handleResult(result, pendingMessage);
+      void refreshSessions();
+    } catch (err) {
+      handleFailure(err, pendingMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionLimit, loading, postOnce, handleResult, handleFailure, refreshSessions]);
+
+  const dismissSessionLimit = useCallback(() => setSessionLimit(null), []);
+
   return {
     messages,
     loading,
@@ -457,5 +612,12 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     confirmReview,
     cancelReview,
     clear,
+    sessions,
+    refreshSessions,
+    resumeSession,
+    deleteSession,
+    sessionLimit,
+    replaceLeastRecentAndSend,
+    dismissSessionLimit,
   };
 }
