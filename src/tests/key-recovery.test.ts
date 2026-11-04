@@ -388,9 +388,12 @@ describe('sealRecoveryBundle / openRecoveryBundle', () => {
   it('rejects a non-OneHook QR code and an unknown protocol version distinctly', async () => {
     const { seal, open } = await scenario();
 
-    await expect(
-      open(base45Encode(globalThis.crypto.getRandomValues(new Uint8Array(120))))
-    ).rejects.toThrow(/not a OneHook recovery code/i);
+    // Fixed, non-OneHook bytes. Random bytes made this flaky: base45 includes a space, and open()
+    // trims the scanned text, so a random code that began or ended with a space decoded misaligned
+    // ("corrupt") about one run in forty (2.4%).
+    const foreign = base45Encode(Uint8Array.from({ length: 120 }, (_, i) => (i * 37 + 11) & 0xff));
+    expect(foreign).toBe(foreign.trim());
+    await expect(open(foreign)).rejects.toThrow(/not a OneHook recovery code/i);
 
     const sealed = base45Decode(await seal());
     sealed[3] = 0x09;
