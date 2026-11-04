@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 0de3f1cb1aae5814dd53bc7f5bebcbe1efe5db8df08450ca83b3d11d422ab31c
+// telemetry-integrity: sha256 892250b64cde2852dba08e06d6e5df25d28155d202de62331ee0ce12d53e6d88
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.12.0, hash 04677b92bd555132.
+// Catalog version 1.13.0, hash 67439546f8614319.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.12.0";
-export const TELEMETRY_CATALOG_HASH = "04677b92bd555132";
+export const TELEMETRY_CATALOG_VERSION = "1.13.0";
+export const TELEMETRY_CATALOG_HASH = "67439546f8614319";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -605,7 +605,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "discover.category_select": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: ["all", "profile_match", "onehook_suggested", "similar"], platforms: ["web", "ios", "android"] },
   "discover.highlight_swipe": { screen: "DISCOVER", kind: "gesture", actions: ["tap"], values: ["onehook_intelligence", "mr_onehook", "kundali", "western", "bazi", "zi_wei_dou_shu", "tzolkin", "tibetan", "hebrew", "arabic_parts", "buddhist", "celtic", "egyptian", "hellenistic", "babylonian"], platforms: ["web", "ios", "android"] },
   "discover.add_hook_submit": { screen: "DISCOVER", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios"] },
-  "discover.upgrade_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "discover.upgrade_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "like_composer.send": { screen: "LIKE_COMPOSER", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
   "like_composer.send_without_comment": { screen: "LIKE_COMPOSER", kind: "button", actions: ["submit"], values: null, platforms: ["ios"] },
   "like_composer.cancel": { screen: "LIKE_COMPOSER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
@@ -723,8 +723,8 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "profile_edit.voice_remove": { screen: "PROFILE_EDIT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "profile_edit.choice_select": { screen: "PROFILE_EDIT", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.save": { screen: "PREFERENCES", kind: "button", actions: ["submit"], values: null, platforms: ["ios", "android"] },
-  "preferences.upgrade_open": { screen: "PREFERENCES", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
-  "preferences.locked_filter_tap": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "preferences.upgrade_open": { screen: "PREFERENCES", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
+  "preferences.locked_filter_tap": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.suggestion_remove": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.own_suggestion_save": { screen: "PREFERENCES", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.tradition_toggle": { screen: "PREFERENCES", kind: "toggle", actions: ["toggle"], values: ["kundali", "western", "bazi", "zi_wei_dou_shu", "tzolkin", "tibetan", "hebrew", "arabic_parts", "buddhist", "celtic", "egyptian", "hellenistic", "babylonian"], platforms: ["web", "ios", "android"] },

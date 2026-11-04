@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Sparkles, UserRound } from 'lucide-react';
 import { SuggestionApi, type MemberSuggestions, type SuggestionView } from '../../api/rest';
 import { trackProps, UiElement, type UiElementId } from '../../lib/analytics/analytics';
+import { LockIcon, UpgradeDialog } from '../../components/common/LockedFeature';
 
 export type CurrentSuggestion = SuggestionView;
 
@@ -148,7 +149,7 @@ export function OwnSuggestionForm({ onSaved, replacing }: { onSaved: () => void;
 
 /**
  * The member's suggestions in match settings: their own (with the form to add or replace it) and
- * Mr. OneHook's. Super and above; Must sees nothing here.
+ * Mr. OneHook's. Super and above; Must sees it locked, with the upgrade prompt.
  */
 export function SuggestionsSection({ paid }: { paid: boolean }) {
   const [data, setData] = useState<MemberSuggestions>({});
@@ -162,7 +163,35 @@ export function SuggestionsSection({ paid }: { paid: boolean }) {
   useEffect(() => {
     if (paid) void load();
   }, [paid, load]);
-  if (!paid) return null;
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  if (!paid) {
+    return (
+      <div className="space-y-2" data-testid="suggestions-locked">
+        <button
+          type="button"
+          onClick={() => setUpgradeOpen(true)}
+          {...trackProps(UiElement.PREFERENCES_LOCKED_FILTER_TAP)}
+          className="w-full text-left border border-dashed border-border p-3 space-y-1 cursor-pointer opacity-80"
+          aria-label="Tell OneHook who you're looking for, locked"
+        >
+          <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.3em] font-black opacity-60">
+            <LockIcon /> Tell OneHook who you're looking for
+          </span>
+          <span className="block text-xs text-text-secondary">
+            Describe your kind of person and OneHook adds people like that to Discover. Mr. OneHook can save one for you too.
+          </span>
+        </button>
+        {upgradeOpen && (
+          <UpgradeDialog
+            feature="Your own suggestion"
+            detail="Tell OneHook who you're looking for, and keep the request Mr. OneHook saves for you."
+            element={UiElement.PREFERENCES_UPGRADE_OPEN}
+            onClose={() => setUpgradeOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3" data-testid="suggestions-section">
