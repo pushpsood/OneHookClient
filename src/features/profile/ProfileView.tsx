@@ -21,6 +21,7 @@ import {
 import type { UserProfile } from '../../types';
 import { ProfileApi } from '../../api/profile';
 import { SuggestionsSection } from './CurrentSuggestionCard';
+import { TraditionsSection } from './TraditionsSection';
 import { isPaidSubscriptionTier } from 'onehook-api-client/membership';
 import { usePreferences } from '../../hooks/use-api';
 import { useAppStore } from '../../store/app-store';
@@ -1384,6 +1385,8 @@ export function ProfileView({
             </div>
 
             <SuggestionsSection paid={isPaidSubscriptionTier(userState?.subscriptionTier)} />
+
+            <TraditionsSection />
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Relationship Goal">

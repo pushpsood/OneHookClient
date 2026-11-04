@@ -182,6 +182,7 @@ function finderOf(candidate: DiscoverResponse['candidates'][number]) {
     reasoning: candidate.reasoning,
     suggestionBasis: candidate.suggestionBasis,
     suggestionId: candidate.suggestionId,
+    matchHighlights: candidate.matchHighlights,
   };
 }
 

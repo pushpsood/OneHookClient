@@ -194,6 +194,24 @@ export const SuggestionApi = {
   removeOneHook: (): Promise<void> => request('DELETE', '/matching/suggestions/onehook'),
 };
 
+// ── Traditional matching systems (opt out per tradition) ──────────────────────
+
+export interface TraditionSetting {
+  id: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  /** Least birth data it uses: DATE, TIME or PLACE. */
+  needs: 'DATE' | 'TIME' | 'PLACE' | string;
+}
+
+export const TraditionApi = {
+  get: (): Promise<{ traditions: TraditionSetting[] }> => request('GET', '/matching/traditions'),
+  /** Replaces the opt-outs; an empty list re-enrols in every tradition. */
+  setDisabled: (disabled: string[]): Promise<{ traditions: TraditionSetting[] }> =>
+    request('PUT', '/matching/traditions', { disabled }),
+};
+
 // ── Chat settings ─────────────────────────────────────────────────────────────
 
 export type LastSeenVisibility = 'EVERYONE' | 'MATCHES' | 'NOBODY';

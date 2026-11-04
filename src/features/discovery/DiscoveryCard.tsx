@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Heart, MapPin, CheckCircle2, Volume2, Play, Pause } from 'lucide-react';
+import { MatchHighlightCards } from './MatchHighlightCards';
 import { MediaImage } from '../../components/common/MediaImage';
 import { useMediaSrc } from '../../utils/media-url';
 import { pictureTransformStyle } from '../../utils/photo-transform';
@@ -40,6 +41,8 @@ export interface DiscoveryProfileData {
   matchFinderLabel?: string;
   /** Why this candidate is shown (from the discover API). */
   reasoning?: string;
+  /** Every reason this is a good match, one per source; empty when none (then no cards show). */
+  matchHighlights?: import('onehook-api-client').MatchHighlight[];
   photos?: string[];
   pictures?: string[];
   pictureTransforms?: Record<string, string>;
@@ -637,7 +640,9 @@ export function DiscoveryCard({
     <article className={`w-full max-w-[470px] mx-auto bg-surface-card sm:border sm:border-border sm:rounded-xl flex flex-col overflow-hidden select-none ${className}`}>
       {/* Match finder: who found this person and why. Mr. OneHook = from a OneHook suggestion (asked or
           inferred); OneHook Intelligence = profile details match the member's preferences. */}
-      {(candidate.matchFinderLabel || candidate.reasoning || candidate.recommendationReason) && (
+      {candidate.matchHighlights !== undefined ? (
+        <MatchHighlightCards highlights={candidate.matchHighlights} />
+      ) : (candidate.matchFinderLabel || candidate.reasoning || candidate.recommendationReason) && (
         <div
           className={`border-b border-border px-4 py-3 text-[11px] leading-relaxed ${
             candidate.matchFinder === 'MR_ONEHOOK' ? 'bg-ig-blue/10 text-text' : 'bg-ig-blue/5 text-text-secondary'

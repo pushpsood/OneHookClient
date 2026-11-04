@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 b5cf11db437b7aa9a64b15eff135dfa95ceaa6550b2664a771d603d0e9f1eb5f
+// telemetry-integrity: sha256 0de3f1cb1aae5814dd53bc7f5bebcbe1efe5db8df08450ca83b3d11d422ab31c
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.11.0, hash 12c7d6d70211f79c.
+// Catalog version 1.12.0, hash 04677b92bd555132.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.11.0";
-export const TELEMETRY_CATALOG_HASH = "12c7d6d70211f79c";
+export const TELEMETRY_CATALOG_VERSION = "1.12.0";
+export const TELEMETRY_CATALOG_HASH = "04677b92bd555132";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -336,6 +336,7 @@ export const UiElement = {
   DISCOVER_ADD_HOOK_OPEN: "discover.add_hook_open",
   DISCOVER_RETRY: "discover.retry",
   DISCOVER_CATEGORY_SELECT: "discover.category_select",
+  DISCOVER_HIGHLIGHT_SWIPE: "discover.highlight_swipe",
   DISCOVER_ADD_HOOK_SUBMIT: "discover.add_hook_submit",
   DISCOVER_UPGRADE_OPEN: "discover.upgrade_open",
   LIKE_COMPOSER_SEND: "like_composer.send",
@@ -459,6 +460,7 @@ export const UiElement = {
   PREFERENCES_LOCKED_FILTER_TAP: "preferences.locked_filter_tap",
   PREFERENCES_SUGGESTION_REMOVE: "preferences.suggestion_remove",
   PREFERENCES_OWN_SUGGESTION_SAVE: "preferences.own_suggestion_save",
+  PREFERENCES_TRADITION_TOGGLE: "preferences.tradition_toggle",
   PREFERENCES_OWN_SUGGESTION_REMOVE: "preferences.own_suggestion_remove",
   SETTINGS_EMAIL_MANAGE: "settings.email_manage",
   SETTINGS_PHONE_UPDATE: "settings.phone_update",
@@ -601,6 +603,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "discover.add_hook_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "discover.retry": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "discover.category_select": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: ["all", "profile_match", "onehook_suggested", "similar"], platforms: ["web", "ios", "android"] },
+  "discover.highlight_swipe": { screen: "DISCOVER", kind: "gesture", actions: ["tap"], values: ["onehook_intelligence", "mr_onehook", "kundali", "western", "bazi", "zi_wei_dou_shu", "tzolkin", "tibetan", "hebrew", "arabic_parts", "buddhist", "celtic", "egyptian", "hellenistic", "babylonian"], platforms: ["web", "ios", "android"] },
   "discover.add_hook_submit": { screen: "DISCOVER", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios"] },
   "discover.upgrade_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "like_composer.send": { screen: "LIKE_COMPOSER", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
@@ -724,6 +727,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "preferences.locked_filter_tap": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "preferences.suggestion_remove": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.own_suggestion_save": { screen: "PREFERENCES", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
+  "preferences.tradition_toggle": { screen: "PREFERENCES", kind: "toggle", actions: ["toggle"], values: ["kundali", "western", "bazi", "zi_wei_dou_shu", "tzolkin", "tibetan", "hebrew", "arabic_parts", "buddhist", "celtic", "egyptian", "hellenistic", "babylonian"], platforms: ["web", "ios", "android"] },
   "preferences.own_suggestion_remove": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "settings.email_manage": { screen: "SETTINGS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "settings.phone_update": { screen: "SETTINGS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios", "android"] },
