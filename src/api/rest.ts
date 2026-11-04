@@ -172,8 +172,26 @@ export const BlocksApi = {
  * replaces it, and only the member removes it. The current one comes with the preferences
  * (`currentSuggestion`).
  */
+export interface SuggestionView {
+  suggestionId: string;
+  reasoning: string;
+  createdAt: string;
+}
+
+export interface MemberSuggestions {
+  /** Written by the member ("who I'm looking for"). */
+  own?: SuggestionView;
+  /** Recorded by Mr. OneHook from a "find me ..." chat. */
+  oneHook?: SuggestionView;
+}
+
+/** The member's two asked-for suggestions (Super and above); each removable on its own. */
 export const SuggestionApi = {
-  remove: (): Promise<void> => request('DELETE', '/matching/suggestions'),
+  get: (): Promise<MemberSuggestions> => request('GET', '/matching/suggestions'),
+  saveOwn: (prompt: string, reasoning: string): Promise<{ suggestionId: string }> =>
+    request('POST', '/matching/suggestions', { prompt, reasoning }),
+  removeOwn: (): Promise<void> => request('DELETE', '/matching/suggestions'),
+  removeOneHook: (): Promise<void> => request('DELETE', '/matching/suggestions/onehook'),
 };
 
 // ── Chat settings ─────────────────────────────────────────────────────────────

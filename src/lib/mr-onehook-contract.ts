@@ -65,6 +65,8 @@ export interface MemberChatRequestInit {
   persist?: boolean;
   /** Continue an existing session; implies persistence. */
   sessionId?: string;
+  /** At the saved-chat limit, replace the least recently active saved chat (new sessions only). */
+  replaceLeastRecent?: boolean;
 }
 
 export interface MemberChatRequestBody {
@@ -77,7 +79,7 @@ export interface MemberChatRequestBody {
     userConfirmed: boolean;
   };
   contextRequestId?: string;
-  sessionOptions?: { persist?: boolean; sessionId?: string };
+  sessionOptions?: { persist?: boolean; sessionId?: string; replaceLeastRecent?: boolean };
 }
 
 /**
@@ -122,7 +124,7 @@ export function buildMemberChatRequestBody(init: MemberChatRequestInit): MemberC
   if (init.sessionId) {
     body.sessionOptions = { persist: true, sessionId: init.sessionId };
   } else if (init.persist) {
-    body.sessionOptions = { persist: true };
+    body.sessionOptions = { persist: true, ...(init.replaceLeastRecent ? { replaceLeastRecent: true } : {}) };
   }
 
   return body;
@@ -290,6 +292,71 @@ export interface SessionListItem {
   updatedAt: string;
   expiresAt: string;
   messageCount: number;
+}
+
+function isSessionListItem(value: unknown): value is SessionListItem {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.sessionId === 'string'
+    && (v.scope === 'product' || v.scope === 'connection')
+    && typeof v.updatedAt === 'string'
+    && typeof v.createdAt === 'string';
+}
+
+/** Parses `GET .../sessions` (or the `sessions` of a 409 limit response); drops malformed items. */
+export function parseSessionList(value: unknown): SessionListItem[] {
+  const list = Array.isArray(value)
+    ? value
+    : typeof value === 'object' && value !== null && Array.isArray((value as { sessions?: unknown }).sessions)
+      ? (value as { sessions: unknown[] }).sessions
+      : [];
+  return list.filter(isSessionListItem).map((v) => ({
+    sessionId: v.sessionId,
+    scope: v.scope,
+    createdAt: v.createdAt,
+    updatedAt: v.updatedAt,
+    expiresAt: typeof v.expiresAt === 'string' ? v.expiresAt : '',
+    messageCount: typeof v.messageCount === 'number' ? v.messageCount : 0,
+  }));
+}
+
+/** Parses `GET .../sessions/:id` into display turns; undefined when malformed. */
+export function parseSessionDetail(value: unknown): SessionDetail | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const raw = (value as { session?: unknown }).session ?? value;
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const v = raw as Record<string, unknown>;
+  if (typeof v.sessionId !== 'string' || !Array.isArray(v.messages)) return undefined;
+  const messages = v.messages
+    .filter((m): m is Record<string, unknown> => typeof m === 'object' && m !== null)
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content as string, createdAt: typeof m.createdAt === 'string' ? m.createdAt : '' }));
+  return {
+    sessionId: v.sessionId,
+    ...(typeof v.matchId === 'string' ? { matchId: v.matchId } : {}),
+    createdAt: typeof v.createdAt === 'string' ? v.createdAt : '',
+    updatedAt: typeof v.updatedAt === 'string' ? v.updatedAt : '',
+    expiresAt: typeof v.expiresAt === 'string' ? v.expiresAt : '',
+    messages,
+  };
+}
+
+/**
+ * A 409 `CHAT_SESSION_LIMIT_REACHED` for a NEW saved chat: the member must choose (replace the least
+ * recent, or delete one). Returns undefined for anything else, including the limit while continuing an
+ * existing chat, which the client treats like any other session error.
+ */
+export function sessionLimitFromError(
+  errorBody: unknown,
+  continuingSession: boolean,
+): { maxSessions: number; sessions: SessionListItem[] } | undefined {
+  if (continuingSession || typeof errorBody !== 'object' || errorBody === null) return undefined;
+  const body = errorBody as { error?: unknown; maxSessions?: unknown; sessions?: unknown };
+  if (body.error !== 'CHAT_SESSION_LIMIT_REACHED') return undefined;
+  return {
+    maxSessions: typeof body.maxSessions === 'number' && body.maxSessions > 0 ? body.maxSessions : 3,
+    sessions: parseSessionList(body.sessions),
+  };
 }
 
 export interface SessionTurn {

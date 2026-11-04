@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 f28411e1bad31e806a4ac986fa0ffda82791c4c11dd8cb802e9c5e256587016e
+// telemetry-integrity: sha256 b5cf11db437b7aa9a64b15eff135dfa95ceaa6550b2664a771d603d0e9f1eb5f
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.10.0, hash 1d9a5b9cd896cae9.
+// Catalog version 1.11.0, hash 12c7d6d70211f79c.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.10.0";
-export const TELEMETRY_CATALOG_HASH = "1d9a5b9cd896cae9";
+export const TELEMETRY_CATALOG_VERSION = "1.11.0";
+export const TELEMETRY_CATALOG_HASH = "12c7d6d70211f79c";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -403,6 +403,11 @@ export const UiElement = {
   CHAT_MR_ONEHOOK_CONTEXT_SHARE: "chat.mr_onehook_context_share",
   CHAT_MR_ONEHOOK_SCOPE_OPEN: "chat.mr_onehook_scope_open",
   CHAT_MR_ONEHOOK_SCOPE_SELECT: "chat.mr_onehook_scope_select",
+  CHAT_MR_ONEHOOK_SESSIONS_OPEN: "chat.mr_onehook_sessions_open",
+  CHAT_MR_ONEHOOK_SESSION_RESUME: "chat.mr_onehook_session_resume",
+  CHAT_MR_ONEHOOK_SESSION_DELETE: "chat.mr_onehook_session_delete",
+  CHAT_MR_ONEHOOK_SESSION_NEW: "chat.mr_onehook_session_new",
+  CHAT_MR_ONEHOOK_SESSION_LIMIT: "chat.mr_onehook_session_limit",
   CHAT_INTRO_TOUR_OPEN: "chat.intro_tour_open",
   CHAT_INTRO_DISMISS: "chat.intro_dismiss",
   CHAT_INTRO_GET_STARTED: "chat.intro_get_started",
@@ -453,6 +458,8 @@ export const UiElement = {
   PREFERENCES_UPGRADE_OPEN: "preferences.upgrade_open",
   PREFERENCES_LOCKED_FILTER_TAP: "preferences.locked_filter_tap",
   PREFERENCES_SUGGESTION_REMOVE: "preferences.suggestion_remove",
+  PREFERENCES_OWN_SUGGESTION_SAVE: "preferences.own_suggestion_save",
+  PREFERENCES_OWN_SUGGESTION_REMOVE: "preferences.own_suggestion_remove",
   SETTINGS_EMAIL_MANAGE: "settings.email_manage",
   SETTINGS_PHONE_UPDATE: "settings.phone_update",
   SETTINGS_GOOGLE_LINK: "settings.google_link",
@@ -661,6 +668,11 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.mr_onehook_context_share": { screen: "CHAT", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.mr_onehook_scope_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web"] },
   "chat.mr_onehook_scope_select": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web"] },
+  "chat.mr_onehook_sessions_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_session_resume": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_session_delete": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_session_new": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_session_limit": { screen: "CHAT", kind: "dialog_button", actions: ["tap", "dismiss"], values: ["replace_least_recent", "manage", "cancel"], platforms: ["web", "ios", "android"] },
   "chat.intro_tour_open": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.intro_dismiss": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "chat.intro_get_started": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
@@ -711,6 +723,8 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "preferences.upgrade_open": { screen: "PREFERENCES", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "preferences.locked_filter_tap": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "preferences.suggestion_remove": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "preferences.own_suggestion_save": { screen: "PREFERENCES", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
+  "preferences.own_suggestion_remove": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "settings.email_manage": { screen: "SETTINGS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "settings.phone_update": { screen: "SETTINGS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios", "android"] },
   "settings.google_link": { screen: "SETTINGS", kind: "toggle", actions: ["toggle"], values: ["link", "unlink"], platforms: ["web", "ios", "android"] },
