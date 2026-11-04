@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TraditionApi, type TraditionSetting } from '../../api/rest';
-import { trackUi, UiElement } from '../../lib/analytics/analytics';
+import { trackProps, trackUi, UiElement } from '../../lib/analytics/analytics';
 
 const NEEDS: Record<string, string> = {
   DATE: 'Uses your date of birth',
@@ -17,11 +17,14 @@ export function TraditionsSection() {
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [loadFailed, setLoadFailed] = useState(false);
+  const load = () => {
+    setLoadFailed(false);
     TraditionApi.get()
       .then((r) => setItems(r.traditions))
-      .catch(() => setError('Could not load traditions.'));
-  }, []);
+      .catch(() => setLoadFailed(true));
+  };
+  useEffect(load, []);
 
   const toggle = async (t: TraditionSetting) => {
     if (!items) return;
@@ -52,7 +55,20 @@ export function TraditionsSection() {
         </p>
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
-      {!items && !error && <p className="text-xs opacity-60">Loading…</p>}
+      {loadFailed && (
+        <div className="flex items-center gap-3" data-testid="traditions-load-error">
+          <p className="text-xs text-red-600">Couldn't load traditional matching.</p>
+          <button
+            type="button"
+            onClick={load}
+            {...trackProps(UiElement.PREFERENCES_TRADITIONS_RETRY)}
+            className="px-3 py-1 rounded-lg border border-border text-xs font-semibold cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {!items && !error && !loadFailed && <p className="text-xs opacity-60">Loading…</p>}
       <ul className="divide-y divide-border border border-border">
         {items?.map((t) => (
           <li key={t.id} className="flex items-start justify-between gap-3 p-3">

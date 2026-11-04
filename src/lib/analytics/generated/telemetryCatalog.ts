@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 892250b64cde2852dba08e06d6e5df25d28155d202de62331ee0ce12d53e6d88
+// telemetry-integrity: sha256 eb26b79e95efdcecec8c38d7f7f4e6f5a507d7abc2ec14ba82092910fd6a3341
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.13.0, hash 67439546f8614319.
+// Catalog version 1.14.0, hash 93ffca84480c903b.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.13.0";
-export const TELEMETRY_CATALOG_HASH = "67439546f8614319";
+export const TELEMETRY_CATALOG_VERSION = "1.14.0";
+export const TELEMETRY_CATALOG_HASH = "93ffca84480c903b";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -461,6 +461,7 @@ export const UiElement = {
   PREFERENCES_SUGGESTION_REMOVE: "preferences.suggestion_remove",
   PREFERENCES_OWN_SUGGESTION_SAVE: "preferences.own_suggestion_save",
   PREFERENCES_TRADITION_TOGGLE: "preferences.tradition_toggle",
+  PREFERENCES_TRADITIONS_RETRY: "preferences.traditions_retry",
   PREFERENCES_OWN_SUGGESTION_REMOVE: "preferences.own_suggestion_remove",
   SETTINGS_EMAIL_MANAGE: "settings.email_manage",
   SETTINGS_PHONE_UPDATE: "settings.phone_update",
@@ -728,6 +729,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "preferences.suggestion_remove": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.own_suggestion_save": { screen: "PREFERENCES", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.tradition_toggle": { screen: "PREFERENCES", kind: "toggle", actions: ["toggle"], values: ["kundali", "western", "bazi", "zi_wei_dou_shu", "tzolkin", "tibetan", "hebrew", "arabic_parts", "buddhist", "celtic", "egyptian", "hellenistic", "babylonian"], platforms: ["web", "ios", "android"] },
+  "preferences.traditions_retry": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.own_suggestion_remove": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "settings.email_manage": { screen: "SETTINGS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "settings.phone_update": { screen: "SETTINGS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios", "android"] },
