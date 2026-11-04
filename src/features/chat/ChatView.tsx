@@ -46,6 +46,7 @@ import {
   HistoryLockedBanner,
   LockedMessageNotice,
 } from '../../components/chat/LockedMessage';
+import { LockIcon, UpgradeDialog } from '../../components/common/LockedFeature';
 import {
   useChatWallpaper,
   WALLPAPER_SCRIM_CLASS,
@@ -1659,6 +1660,7 @@ function MrOneHookChatBody({
 
   return (
     <>
+      {!canSaveChats && <LockedSavedChatsBar />}
       {canSaveChats && (
         <SavedChatsBar
           chat={chat}
@@ -1789,6 +1791,32 @@ function MrOneHookChatBody({
  * Super and above: the member's saved Mr. OneHook chats (at most 3 in total, across product and match
  * chats). Resume a product chat here, delete any, or start a new one.
  */
+/** Saved chats for a Must member: visible with a lock; a tap explains the upgrade. */
+function LockedSavedChatsBar() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="shrink-0 px-4 md:px-6 py-2 border-b border-border/60 bg-surface-card/40" data-testid="saved-chats-locked">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSIONS_OPEN)}
+        aria-label="Saved chats, locked"
+        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-dashed border-border text-xs font-semibold text-text-muted cursor-pointer"
+      >
+        <LockIcon /> Saved chats
+      </button>
+      {open && (
+        <UpgradeDialog
+          feature="Saved chats"
+          detail="Keep your Mr. OneHook conversations and pick them up again later, on any device."
+          element={UiElement.CHAT_MR_ONEHOOK_SESSIONS_OPEN}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 function SavedChatsBar({
   chat,
   scopeType,
