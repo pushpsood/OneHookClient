@@ -100,6 +100,11 @@ export interface UseMrOneHookChatOptions {
   tier: SubscriptionTier;
   /** Supplied for match scope so a `needsMoreContext` turn can search local history. */
   resolveLocalExcerpts?: LocalExcerptResolver;
+  /**
+   * Super and above: a saved chat from another scope (a match chat while on the product chat, or the
+   * reverse) was chosen in the tabs. The host switches to that scope; the session is already remembered.
+   */
+  onOpenScope?: (scope: MrOneHookScope) => void;
 }
 
 export interface UseMrOneHookChat {
@@ -137,6 +142,50 @@ export interface UseMrOneHookChat {
   sessionLimit: SessionLimit | null;
   replaceLeastRecentAndSend: () => Promise<void>;
   dismissSessionLimit: () => void;
+  /** The member agreed to replace the least recent saved chat: the current chat is now a new one. */
+  replacing: boolean;
+  /** Starts a new chat that replaces the least recent saved chat when its first message is sent. */
+  startReplacingLeastRecent: () => void;
+  /** The current saved chat's id (undefined for a new, unsaved chat). */
+  currentSessionId: string | undefined;
+}
+
+/**
+ * The chat tabs. Pure, for tests.
+ * - Super+: saved chats oldest first ("Chat 1"...), plus "New chat" while the current chat is unsaved.
+ *   While replacing, the least recent chat is left out (the new chat takes its place).
+ * - Must: one "Chat" tab.
+ */
+export function mrOneHookTabs(
+  sessions: SessionListItem[],
+  activeId: string | undefined,
+  paid: boolean,
+  replacing: boolean,
+): Array<{ sessionId?: string; title: string }> {
+  if (!paid) return [{ title: 'Chat' }];
+  const oldest = leastRecentSession(sessions);
+  const saved = [...sessions]
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .filter((s) => !(replacing && oldest && s.sessionId === oldest.sessionId));
+  const tabs: Array<{ sessionId?: string; title: string }> = saved.map((s, i) => ({
+    sessionId: s.sessionId,
+    title: `Chat ${i + 1}`,
+  }));
+  if (!activeId || !saved.some((s) => s.sessionId === activeId)) tabs.push({ title: 'New chat' });
+  return tabs;
+}
+
+/** The saved chat the server replaces at the limit: the least recently active one. */
+export function leastRecentSession(sessions: SessionListItem[]): SessionListItem | undefined {
+  return sessions.reduce<SessionListItem | undefined>(
+    (min, s) => (!min || s.updatedAt < min.updatedAt ? s : min),
+    undefined,
+  );
+}
+
+/** Remembers which saved chat continues in a scope (used when the tabs switch scope). */
+export function rememberSessionForScope(userId: string, scope: MrOneHookScope, sessionId: string): void {
+  persistSessionId(userId, scope, sessionId);
 }
 
 export interface SessionLimit {
@@ -249,7 +298,7 @@ function toEpochMs(iso?: string): number | undefined {
 }
 
 export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHookChat {
-  const { userId, scope, tier, resolveLocalExcerpts } = options;
+  const { userId, scope, tier, resolveLocalExcerpts, onOpenScope } = options;
   const matchId = scope.type === 'match' ? scope.matchId : undefined;
   const persistAllowed = isPaidSubscriptionTier(tier);
   const key = scopeKey(scope);
@@ -264,6 +313,15 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   const [remainingMessages, setRemainingMessages] = useState<number | undefined>(undefined);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [sessionLimit, setSessionLimit] = useState<SessionLimit | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  /** Bumped when a reply saves a chat, so the tabs reload the list. */
+  const [sessionsVersion, setSessionsVersion] = useState(0);
+  const hydratedKeyRef = useRef<string | undefined>(undefined);
+  const replacingRef = useRef(false);
+  replacingRef.current = replacing;
+  const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(undefined);
+  const onOpenScopeRef = useRef(onOpenScope);
+  onOpenScopeRef.current = onOpenScope;
 
   const sessionIdRef = useRef<string | undefined>(persistAllowed ? loadSessionId(userId, scope) : undefined);
   const resolveRef = useRef<LocalExcerptResolver | undefined>(resolveLocalExcerpts);
@@ -276,6 +334,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     sessionIdRef.current = persistAllowed ? loadSessionId(userId, scope) : undefined;
     setSession(null);
     setSessionLimit(null);
+    setReplacing(false);
     setPendingReview(null);
     setHasError(false);
     setMood('Happy');
@@ -352,7 +411,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
             ? {
                 persist: true,
                 ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
-                ...(init.replaceLeastRecent ? { replaceLeastRecent: true } : {}),
+                ...(init.replaceLeastRecent || replacingRef.current ? { replaceLeastRecent: true } : {}),
               }
             : {}),
         });
@@ -400,6 +459,9 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         sessionIdRef.current = result.session.sessionId;
         persistSessionId(userId, scope, result.session.sessionId);
         setSession(result.session);
+        setCurrentSessionId(result.session.sessionId);
+        setReplacing(false);
+        setSessionsVersion((v) => v + 1);
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
@@ -512,6 +574,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     // Start a fresh server session on the next message; the prior one lapses per its retention.
     sessionIdRef.current = undefined;
     persistSessionId(userId, scope, undefined);
+    setCurrentSessionId(undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, key]);
 
@@ -544,7 +607,18 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         const response = await authorizedFetch(`/sessions/${encodeURIComponent(sessionId)}`);
         const detail = response.ok ? parseSessionDetail(await response.json()) : undefined;
         if (!detail) throw new Error('SERVER_ERROR');
+        if ((detail.matchId ?? undefined) !== matchId) {
+          // A chat from another scope: remember it there and let the host switch.
+          const target: MrOneHookScope = detail.matchId
+            ? { type: 'match', matchId: detail.matchId }
+            : { type: 'product' };
+          persistSessionId(userId, target, detail.sessionId);
+          onOpenScopeRef.current?.(target);
+          return;
+        }
         sessionIdRef.current = detail.sessionId;
+        setCurrentSessionId(detail.sessionId);
+        setReplacing(false);
         persistSessionId(userId, scope, detail.sessionId);
         setMessages(detail.messages.map((m) => ({ role: m.role, content: m.content })));
         setPendingReview(null);
@@ -573,6 +647,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         persistSessionId(userId, scope, undefined);
         setSession(null);
         setMessages([]);
+        setCurrentSessionId(undefined);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -599,6 +674,63 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
 
   const dismissSessionLimit = useCallback(() => setSessionLimit(null), []);
 
+  const startReplacingLeastRecent = useCallback(() => {
+    clear();
+    setReplacing(true);
+  }, [clear]);
+
+  // Super and above: load the saved chats for the tabs. The server is the source of truth for a saved
+  // chat's turns, so a remembered chat is reloaded from it; with none remembered, the most recent saved
+  // chat of this scope opens, rather than starting another.
+  useEffect(() => {
+    if (!persistAllowed || !userId) {
+      setSessions([]);
+      setCurrentSessionId(undefined);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await authorizedFetch('/sessions');
+        if (!response.ok || cancelled) return;
+        const list = parseSessionList(await response.json());
+        if (cancelled) return;
+        setSessions(list);
+        const remembered = sessionIdRef.current;
+        if (remembered && !list.some((s) => s.sessionId === remembered)) {
+          // Deleted elsewhere or expired.
+          sessionIdRef.current = undefined;
+          persistSessionId(userId, scope, undefined);
+        }
+        setCurrentSessionId(sessionIdRef.current);
+        // Load a chat's turns once per scope; later runs (after a reply saved) only refresh the list.
+        const hydrateKey = `${userId}|${key}`;
+        if (hydratedKeyRef.current === hydrateKey) return;
+        hydratedKeyRef.current = hydrateKey;
+        const wanted = sessionIdRef.current
+          ?? (scope.type === 'product' && !replacingRef.current
+            ? [...list].filter((s) => s.scope === 'product').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+                ?.sessionId
+            : undefined);
+        if (!wanted) return;
+        const detailResponse = await authorizedFetch(`/sessions/${encodeURIComponent(wanted)}`);
+        const detail = detailResponse.ok ? parseSessionDetail(await detailResponse.json()) : undefined;
+        if (cancelled || !detail) return;
+        sessionIdRef.current = detail.sessionId;
+        persistSessionId(userId, scope, detail.sessionId);
+        setCurrentSessionId(detail.sessionId);
+        setMessages(detail.messages.map((m) => ({ role: m.role, content: m.content })));
+      } catch {
+        /* the tabs are a convenience; chatting still works */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // scope is reconstructed each render; key is its stable identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, key, persistAllowed, authorizedFetch, sessionsVersion]);
+
   return {
     messages,
     loading,
@@ -619,5 +751,8 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     sessionLimit,
     replaceLeastRecentAndSend,
     dismissSessionLimit,
+    replacing,
+    startReplacingLeastRecent,
+    currentSessionId,
   };
 }
