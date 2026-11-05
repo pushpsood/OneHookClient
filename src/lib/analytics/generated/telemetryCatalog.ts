@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 eb26b79e95efdcecec8c38d7f7f4e6f5a507d7abc2ec14ba82092910fd6a3341
+// telemetry-integrity: sha256 69623fb2407fa47f0bdb55c5dffc92e06e45b4fd15d51cd50015e879720d8e8f
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.14.0, hash 93ffca84480c903b.
+// Catalog version 1.14.0, hash 4d228919bd9883a5.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
 export const TELEMETRY_CATALOG_VERSION = "1.14.0";
-export const TELEMETRY_CATALOG_HASH = "93ffca84480c903b";
+export const TELEMETRY_CATALOG_HASH = "4d228919bd9883a5";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -409,6 +409,7 @@ export const UiElement = {
   CHAT_MR_ONEHOOK_SESSION_DELETE: "chat.mr_onehook_session_delete",
   CHAT_MR_ONEHOOK_SESSION_NEW: "chat.mr_onehook_session_new",
   CHAT_MR_ONEHOOK_SESSION_LIMIT: "chat.mr_onehook_session_limit",
+  CHAT_MR_ONEHOOK_UPGRADE_OPEN: "chat.mr_onehook_upgrade_open",
   CHAT_INTRO_TOUR_OPEN: "chat.intro_tour_open",
   CHAT_INTRO_DISMISS: "chat.intro_dismiss",
   CHAT_INTRO_GET_STARTED: "chat.intro_get_started",
@@ -672,11 +673,12 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.mr_onehook_context_share": { screen: "CHAT", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.mr_onehook_scope_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web"] },
   "chat.mr_onehook_scope_select": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web"] },
-  "chat.mr_onehook_sessions_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_sessions_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "chat.mr_onehook_session_resume": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
-  "chat.mr_onehook_session_delete": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_session_delete": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.mr_onehook_session_new": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.mr_onehook_session_limit": { screen: "CHAT", kind: "dialog_button", actions: ["tap", "dismiss"], values: ["replace_least_recent", "manage", "cancel"], platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_upgrade_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.intro_tour_open": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.intro_dismiss": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "chat.intro_get_started": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },

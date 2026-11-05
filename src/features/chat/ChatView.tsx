@@ -46,7 +46,6 @@ import {
   HistoryLockedBanner,
   LockedMessageNotice,
 } from '../../components/chat/LockedMessage';
-import { LockIcon, UpgradeDialog } from '../../components/common/LockedFeature';
 import {
   useChatWallpaper,
   WALLPAPER_SCRIM_CLASS,
@@ -61,12 +60,14 @@ import {
   getSortOption,
   type SortableConversation,
 } from '../../lib/chat-sort';
+import { MrOneHookConfirm, MrOneHookTabs } from '../../components/chat/MrOneHookTabs';
 import {
+  leastRecentSession,
+  mrOneHookTabs,
   useMrOneHookChat,
   type MrOneHookMessage,
   type MrOneHookScope,
   type PendingExcerptReview,
-  type SessionListItem,
 } from '../../lib/mr-onehook';
 import {
   selectEphemeralExcerpts,
@@ -1551,9 +1552,10 @@ function MrOneHookConversation({
           match={activeMatch}
           matchName={activeMatchName}
           tier={tier}
+          onOpenScope={setScope}
         />
       ) : (
-        <MrOneHookProductScope currentUser={currentUser} wallpaper={wallpaper} tier={tier} />
+        <MrOneHookProductScope currentUser={currentUser} wallpaper={wallpaper} tier={tier} onOpenScope={setScope} />
       )}
     </>
   );
@@ -1564,15 +1566,18 @@ function MrOneHookProductScope({
   currentUser,
   wallpaper,
   tier,
+  onOpenScope,
 }: {
   currentUser: UserProfile;
   wallpaper: ChatWallpaper;
   tier: SubscriptionTier;
+  onOpenScope: (scope: MrOneHookScope) => void;
 }) {
   const chat = useMrOneHookChat({
     userId: currentUser.id,
     scope: { type: 'product' },
     tier,
+    onOpenScope,
   });
   return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} tier={tier} scopeType="product" />;
 }
@@ -1588,6 +1593,7 @@ function MrOneHookMatchScope({
   match,
   matchName,
   tier,
+  onOpenScope,
 }: {
   key?: string;
   currentUser: UserProfile;
@@ -1595,6 +1601,7 @@ function MrOneHookMatchScope({
   match: HydratedMatch;
   matchName: string;
   tier: SubscriptionTier;
+  onOpenScope: (scope: MrOneHookScope) => void;
 }) {
   const { messages } = useChatMessages(match.matchId, match.peerId || undefined);
 
@@ -1613,6 +1620,7 @@ function MrOneHookMatchScope({
     scope: { type: 'match', matchId: match.matchId },
     tier,
     resolveLocalExcerpts,
+    onOpenScope,
   });
 
   return (
@@ -1639,7 +1647,20 @@ function MrOneHookChatBody({
   scopeType: 'product' | 'connection';
 }) {
   const canSaveChats = isPaidSubscriptionTier(tier);
-  const [savedOpen, setSavedOpen] = useState(false);
+  const [confirm, setConfirm] = useState<null | { kind: 'replace'; oldest: string; title: string } | { kind: 'delete'; id: string; title: string }>(null);
+  const [leavingId, setLeavingId] = useState<string | undefined>(undefined);
+  const tabs = mrOneHookTabs(chat.sessions, chat.currentSessionId, canSaveChats, chat.replacing);
+  const MAX_CHATS = 3;
+  const addChat = () => {
+    if (chat.loading) return;
+    const oldest = leastRecentSession(chat.sessions);
+    if (chat.sessions.length >= MAX_CHATS && chat.currentSessionId && !chat.replacing && oldest) {
+      const title = tabs.find((t) => t.sessionId === oldest.sessionId)?.title ?? 'your least recent chat';
+      setConfirm({ kind: 'replace', oldest: oldest.sessionId, title });
+      return;
+    }
+    chat.clear();
+  };
   const { messages, loading, mood, pendingReview, availability, send, confirmReview, cancelReview } = chat;
   const [input, setInput] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
@@ -1660,21 +1681,60 @@ function MrOneHookChatBody({
 
   return (
     <>
-      {!canSaveChats && <LockedSavedChatsBar />}
-      {canSaveChats && (
-        <SavedChatsBar
-          chat={chat}
-          scopeType={scopeType}
-          open={savedOpen || chat.sessionLimit !== null}
-          onToggle={() => {
-            if (!savedOpen) void chat.refreshSessions();
-            setSavedOpen((v) => !v);
-          }}
-        />
-      )}
       <div className="flex-1 relative min-h-0">
         <ChatBackdrop wallpaper={wallpaper} />
-        <div className="relative h-full p-6 md:p-8 space-y-6 overflow-y-auto min-h-0">
+        {/* The chat tabs float at the top of the conversation, on the wallpaper (not part of the header). */}
+        <div className="absolute top-0 inset-x-0 z-10 px-4 md:px-6 pt-3 pointer-events-none">
+          <div className="pointer-events-auto max-w-3xl mx-auto">
+            <MrOneHookTabs
+              tabs={tabs}
+              activeId={chat.currentSessionId}
+              locked={!canSaveChats}
+              leavingId={leavingId}
+              onSelect={(id) => void chat.resumeSession(id)}
+              onDelete={(id) =>
+                setConfirm({ kind: 'delete', id, title: tabs.find((t) => t.sessionId === id)?.title ?? 'this chat' })
+              }
+              onAdd={addChat}
+            />
+          </div>
+        </div>
+        {confirm?.kind === 'replace' && (
+          <MrOneHookConfirm
+            title={`Replace ${confirm.title}?`}
+            body={`You can keep ${MAX_CHATS} chats. Starting a new one removes ${confirm.title}, the one you used least recently. Its messages will be deleted.`}
+            confirmLabel="Replace"
+            element={UiElement.CHAT_MR_ONEHOOK_SESSION_LIMIT}
+            confirmOptions={{ value: 'replace_least_recent' }}
+            cancelOptions={{ value: 'cancel' }}
+            onCancel={() => setConfirm(null)}
+            onConfirm={() => {
+              const old = confirm.oldest;
+              setConfirm(null);
+              setLeavingId(old);
+              window.setTimeout(() => {
+                setLeavingId(undefined);
+                chat.startReplacingLeastRecent();
+              }, 280);
+            }}
+          />
+        )}
+        {confirm?.kind === 'delete' && (
+          <MrOneHookConfirm
+            title="Delete this chat?"
+            body="Its messages with Mr. OneHook will be deleted."
+            confirmLabel="Delete"
+            element={UiElement.CHAT_MR_ONEHOOK_SESSION_DELETE}
+            cancelOptions={{ action: 'dismiss' }}
+            onCancel={() => setConfirm(null)}
+            onConfirm={() => {
+              const id = confirm.id;
+              setConfirm(null);
+              void chat.deleteSession(id).catch(() => undefined);
+            }}
+          />
+        )}
+        <div className="relative h-full px-6 md:px-8 pb-6 md:pb-8 pt-20 space-y-6 overflow-y-auto min-h-0">
           {chat.sessionLimit && (
             <div
               className="max-w-md rounded-2xl border border-accent/40 bg-accent/5 p-4 space-y-3"
@@ -1784,128 +1844,6 @@ function MrOneHookChatBody({
         }
       />
     </>
-  );
-}
-
-/**
- * Super and above: the member's saved Mr. OneHook chats (at most 3 in total, across product and match
- * chats). Resume a product chat here, delete any, or start a new one.
- */
-/** Saved chats for a Must member: visible with a lock; a tap explains the upgrade. */
-function LockedSavedChatsBar() {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="shrink-0 px-4 md:px-6 py-2 border-b border-border/60 bg-surface-card/40" data-testid="saved-chats-locked">
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSIONS_OPEN)}
-        aria-label="Saved chats, locked"
-        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-dashed border-border text-xs font-semibold text-text-muted cursor-pointer"
-      >
-        <LockIcon /> Saved chats
-      </button>
-      {open && (
-        <UpgradeDialog
-          feature="Saved chats"
-          detail="Keep your Mr. OneHook conversations and pick them up again later, on any device."
-          element={UiElement.CHAT_MR_ONEHOOK_SESSIONS_OPEN}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-function SavedChatsBar({
-  chat,
-  scopeType,
-  open,
-  onToggle,
-}: {
-  chat: ReturnType<typeof useMrOneHookChat>;
-  scopeType: 'product' | 'connection';
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const list: SessionListItem[] = chat.sessionLimit?.sessions ?? chat.sessions;
-
-  const remove = async (sessionId: string) => {
-    setBusy(sessionId);
-    setError(null);
-    try {
-      await chat.deleteSession(sessionId);
-    } catch {
-      setError("Couldn't delete that chat. Please try again.");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  return (
-    <div className="shrink-0 px-4 md:px-6 py-2 border-b border-border/60 bg-surface-card/40" data-testid="saved-chats">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onToggle}
-          {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSIONS_OPEN, { action: open ? 'dismiss' : undefined })}
-          className="px-3 py-1.5 rounded-full border border-border text-xs font-semibold text-text hover:bg-surface-hover cursor-pointer"
-          aria-expanded={open}
-        >
-          Saved chats
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            chat.clear();
-            void chat.refreshSessions();
-          }}
-          {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_NEW)}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-full border border-border text-xs font-semibold text-text hover:bg-surface-hover cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" /> New chat
-        </button>
-      </div>
-      {open && (
-        <ul className="mt-2 space-y-1.5">
-          {list.length === 0 && <li className="text-xs text-text-secondary">No saved chats yet.</li>}
-          {list.map((s) => (
-            <li key={s.sessionId} className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-text truncate">
-                {s.scope === 'product' ? 'OneHook chat' : 'Match chat'} ·{' '}
-                {Number.isFinite(Date.parse(s.updatedAt)) ? new Date(s.updatedAt).toLocaleString() : ''} ·{' '}
-                {s.messageCount} messages
-              </span>
-              <span className="flex gap-1.5 shrink-0">
-                {s.scope === scopeType && scopeType === 'product' && (
-                  <button
-                    type="button"
-                    onClick={() => void chat.resumeSession(s.sessionId)}
-                    {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_RESUME)}
-                    className="px-2 py-1 rounded-md border border-border font-semibold cursor-pointer"
-                  >
-                    Open
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void remove(s.sessionId)}
-                  disabled={busy === s.sessionId}
-                  {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_DELETE)}
-                  className="px-2 py-1 rounded-md border border-border font-semibold text-red-500 disabled:opacity-50 cursor-pointer"
-                  aria-label="Delete saved chat"
-                >
-                  {busy === s.sessionId ? 'Deleting…' : 'Delete'}
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
-    </div>
   );
 }
 

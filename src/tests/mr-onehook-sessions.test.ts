@@ -45,3 +45,29 @@ describe('saved Mr. OneHook chats (Super and above)', () => {
     expect(parseSessionDetail({ session: { sessionId: 'a' } })).toBeUndefined();
   });
 });
+
+describe('Mr. OneHook chat tabs', () => {
+  const s = (id: string, created: string, updated: string) => ({
+    sessionId: id, scope: 'product' as const, createdAt: created, updatedAt: updated, expiresAt: '', messageCount: 2,
+  });
+
+  it('Must sees one Chat tab', async () => {
+    const { mrOneHookTabs } = await import('../lib/mr-onehook');
+    expect(mrOneHookTabs([], undefined, false, false).map((t) => t.title)).toEqual(['Chat']);
+  });
+
+  it('Super sees saved chats oldest first, plus New chat while unsaved', async () => {
+    const { mrOneHookTabs } = await import('../lib/mr-onehook');
+    const saved = [s('b', '2026-11-02', '2026-11-04'), s('a', '2026-11-01', '2026-11-03')];
+    expect(mrOneHookTabs(saved, 'a', true, false).map((t) => t.title)).toEqual(['Chat 1', 'Chat 2']);
+    expect(mrOneHookTabs(saved, undefined, true, false).map((t) => t.title)).toEqual(['Chat 1', 'Chat 2', 'New chat']);
+  });
+
+  it('replacing drops the least recently used chat; never more than 3 tabs', async () => {
+    const { mrOneHookTabs, leastRecentSession } = await import('../lib/mr-onehook');
+    const saved = [s('a', '1', '9'), s('b', '2', '3'), s('c', '3', '7')];
+    expect(leastRecentSession(saved)?.sessionId).toBe('b');
+    const tabs = mrOneHookTabs(saved, undefined, true, true);
+    expect(tabs.map((t) => t.sessionId)).toEqual(['a', 'c', undefined]);
+  });
+});
