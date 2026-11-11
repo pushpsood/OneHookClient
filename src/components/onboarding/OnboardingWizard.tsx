@@ -1,19 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import {
-  Plus,
-  Mic,
-  Volume2,
-  Sparkles,
-  Image as ImageIcon,
-  Check,
-  Trash2,
-  Play,
-  Pause,
-  Smile,
-  LogOut,
-} from 'lucide-react';
+import { Plus, Trash2, LogOut, MessageCircle } from 'lucide-react';
 import { ProfileApi } from '../../api/profile';
 import { StateApi } from '../../api/state';
 import { useAppStore } from '../../store/app-store';
@@ -24,160 +12,23 @@ import { MediaImage } from '../common/MediaImage';
 import { DateOfBirthField } from './DateOfBirthField';
 import { BirthTimePlaceFields, birthDetailsPayload, type BirthTimePlace } from './BirthTimePlaceFields';
 import { ageOn, onboardingGateMessage, validateDob } from '../../utils/dob';
-import { useMediaSrc, isMediaKey } from '../../utils/media-url';
 import { getCognitoAuth } from '../../lib/cognito-auth';
-import { UiElement, trackProps, trackUi, trackScreenView, Screen } from '../../lib/analytics/analytics';
+import { errorStatus } from '../../lib/api-errors';
+import { toUserProfile } from '../../lib/profile-model';
+import { UiElement, trackProps, trackScreenView, Screen } from '../../lib/analytics/analytics';
 
 /** Step order, so the label and the progress bar cannot disagree about where the user is. */
-const STEP_INDEX: Record<string, number> = { basics: 0, photos: 1, prompts: 2, lifestyle: 3 };
+const STEPS = ['basics', 'photo'] as const;
+type Step = (typeof STEPS)[number];
 
 /**
- * Selectable ages. The lower bound is the platform minimum, so an under-18 value cannot be entered at
- * all rather than being rejected after the fact.
+ * Chat-only onboarding (OneHookBackend/docs/chat-only-profiles.md §7.1, G1).
+ *
+ * Every account starts with a CHAT profile only: display name, date of birth (18+, immutable) and an
+ * optional avatar. That is `PUT /profile/chat`, then `POST /state/complete-onboarding`, and the member
+ * lands in a Messenger-only app. Matching is opt-in later, from Settings: the matching profile (photos,
+ * prompts, voice, preferences) is built there, never here.
  */
-/** Heights in cm, covering the adult range. Picked, not typed. */
-const HEIGHT_OPTIONS = Array.from({ length: 91 }, (_, i) => i + 130);
-
-/**
- * Hometown suggestions only. A closed list would exclude most of the world, so this stays free text
- * with a datalist: one tap for the common case, no dead end for anyone else.
- */
-const HOMETOWN_SUGGESTIONS = [
-  'Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune',
-  'London', 'Manchester', 'Dublin', 'Paris', 'Berlin', 'Munich', 'Amsterdam',
-  'Madrid', 'Barcelona', 'Milan', 'Rome', 'Lisbon', 'Stockholm', 'Copenhagen',
-  'New York', 'Los Angeles', 'San Francisco', 'Chicago', 'Toronto', 'Vancouver',
-  'Mexico City', 'São Paulo', 'Buenos Aires', 'Bogotá', 'Lima', 'Santiago',
-  'Lagos', 'Nairobi', 'Cairo', 'Johannesburg', 'Cape Town', 'Accra', 'Casablanca',
-  'Dubai', 'Doha', 'Riyadh', 'Istanbul', 'Tel Aviv', 'Karachi', 'Lahore', 'Dhaka',
-  'Singapore', 'Hong Kong', 'Tokyo', 'Osaka', 'Seoul', 'Shanghai', 'Beijing',
-  'Bangkok', 'Jakarta', 'Kuala Lumpur', 'Manila', 'Hanoi',
-  'Sydney', 'Melbourne', 'Auckland',
-];
-
-const GENDER_OPTIONS = [
-  { value: 'MALE', label: 'Man' },
-  { value: 'FEMALE', label: 'Woman' },
-  { value: 'NON_BINARY', label: 'Non-binary' },
-];
-
-const INTEREST_ENUM_MAP: Record<string, string> = {
-  'Travel': 'TRAVEL',
-  'Fitness': 'FITNESS',
-  'Art & Design': 'ART',
-  'Coffee': 'COFFEE',
-  'Music': 'MUSIC',
-  'Tech': 'TECHNOLOGY',
-  'Cinema': 'MOVIES',
-  'Reading': 'READING',
-  'Cooking': 'COOKING',
-  'Outdoors': 'NATURE',
-  'Photography': 'PHOTOGRAPHY',
-  'Gaming': 'GAMING',
-  'Yoga': 'YOGA',
-  'Wine & Dining': 'WINE',
-  'Running': 'RUNNING',
-  'Podcasts': 'WELLNESS',
-  'Dogs': 'ANIMALS',
-  'Cats': 'ANIMALS',
-};
-
-const PROMPT_PRESETS = [
-  'A boundary of mine is...',
-  'Dating me looks like...',
-  'Typical Sunday looks like...',
-  'I won’t stop talking about...',
-  'The most spontaneous thing I’ve done...',
-  'My simple pleasures in life...',
-  'Together, we could...',
-  'The key to my heart is...',
-];
-
-const INTEREST_PRESETS = [
-  'Travel', 'Fitness', 'Art & Design', 'Coffee', 'Music', 'Tech',
-  'Cinema', 'Reading', 'Cooking', 'Outdoors', 'Photography', 'Gaming',
-  'Yoga', 'Wine & Dining', 'Running', 'Podcasts', 'Dogs', 'Cats',
-];
-
-const RELATIONSHIP_OPTIONS = [
-  { value: 'MONOGAMOUS', label: 'Serious relationship (Monogamous)' },
-  { value: 'CASUAL', label: 'Casual dating' },
-  { value: 'OPEN', label: 'Open relationship' },
-  { value: 'POLYAMOROUS', label: 'Polyamorous' },
-  { value: 'ETHICALLY_NON_MONOGAMOUS', label: 'Ethically non-monogamous' },
-  { value: 'NOT_SURE_YET', label: 'Not sure yet' },
-];
-
-const WANTS_KIDS_OPTIONS = [
-  { value: 'OPEN', label: 'Open to children' },
-  { value: 'YES', label: 'Want children' },
-  { value: 'NO', label: 'Don’t want children' },
-  { value: 'NOT_SURE', label: 'Not sure' },
-];
-
-const SMOKING_OPTIONS = [
-  { value: 'NEVER', label: 'Never' },
-  { value: 'SOCIALLY', label: 'Socially' },
-  { value: 'REGULARLY', label: 'Regularly' },
-  { value: 'TRYING_TO_QUIT', label: 'Trying to quit' },
-];
-
-const DRINKING_OPTIONS = [
-  { value: 'SOCIALLY', label: 'Socially' },
-  { value: 'NEVER', label: 'Never' },
-  { value: 'REGULARLY', label: 'Regularly' },
-  { value: 'PREFER_NOT_TO_SAY', label: 'Prefer not to say' },
-];
-
-const RELIGION_OPTIONS = [
-  { value: '', label: 'Select Religion / Philosophy' },
-  { value: 'SPIRITUAL', label: 'Spiritual' },
-  { value: 'AGNOSTIC', label: 'Agnostic' },
-  { value: 'ATHEIST', label: 'Atheist' },
-  { value: 'HINDU', label: 'Hindu' },
-  { value: 'CHRISTIAN', label: 'Christian' },
-  { value: 'CATHOLIC', label: 'Catholic' },
-  { value: 'BUDDHIST', label: 'Buddhist' },
-  { value: 'JEWISH', label: 'Jewish' },
-  { value: 'MUSLIM', label: 'Muslim' },
-  { value: 'SIKH', label: 'Sikh' },
-  { value: 'OTHER', label: 'Other' },
-  { value: 'PREFER_NOT_TO_SAY', label: 'Prefer not to say' },
-];
-
-const STAR_SIGNS = [
-  { value: '', label: 'Select Star Sign' },
-  { value: 'ARIES', label: 'Aries' },
-  { value: 'TAURUS', label: 'Taurus' },
-  { value: 'GEMINI', label: 'Gemini' },
-  { value: 'CANCER', label: 'Cancer' },
-  { value: 'LEO', label: 'Leo' },
-  { value: 'VIRGO', label: 'Virgo' },
-  { value: 'LIBRA', label: 'Libra' },
-  { value: 'SCORPIO', label: 'Scorpio' },
-  { value: 'SAGITTARIUS', label: 'Sagittarius' },
-  { value: 'CAPRICORN', label: 'Capricorn' },
-  { value: 'AQUARIUS', label: 'Aquarius' },
-  { value: 'PISCES', label: 'Pisces' },
-];
-
-const LANGUAGE_PRESETS = [
-  { value: 'ENGLISH', label: 'English' },
-  { value: 'HINDI', label: 'Hindi' },
-  { value: 'SPANISH', label: 'Spanish' },
-  { value: 'FRENCH', label: 'French' },
-  { value: 'GERMAN', label: 'German' },
-  { value: 'CHINESE', label: 'Chinese' },
-  { value: 'JAPANESE', label: 'Japanese' },
-  { value: 'KOREAN', label: 'Korean' },
-  { value: 'ARABIC', label: 'Arabic' },
-  { value: 'PORTUGUESE', label: 'Portuguese' },
-  { value: 'RUSSIAN', label: 'Russian' },
-  { value: 'ITALIAN', label: 'Italian' },
-];
-
-type Step = 'basics' | 'photos' | 'prompts' | 'lifestyle';
-
 export function OnboardingWizard() {
   const navigate = useNavigate();
   const { currentUser, setCurrentUser, logout } = useAppStore();
@@ -185,68 +36,51 @@ export function OnboardingWizard() {
 
   const [step, setStep] = useState<Step>('basics');
   const [saving, setSaving] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   // Analytics: the onboarding wizard was shown (one screen_view on mount).
   useEffect(() => {
     trackScreenView(Screen.ONBOARDING);
   }, []);
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [uploadingPhotoIndex, setUploadingPhotoIndex] = useState<number | null>(null);
-  const [uploadingAudio, setUploadingAudio] = useState(false);
 
-  const [displayName, setDisplayName] = useState(currentUser?.name || currentUser?.displayName || '');
+  const [displayName, setDisplayName] = useState(currentUser?.displayName || currentUser?.name || '');
   // Date of birth, captured once and never editable afterwards (the backend derives age from it).
   // A member returning to the wizard with a real date already stored keeps it, locked.
-  const storedDob =
-    currentUser?.birthDetails?.date && !currentUser.birthDetails.provisional ? currentUser.birthDetails.date : '';
+  const [storedDob, setStoredDob] = useState(
+    currentUser?.birthDetails?.date && !currentUser.birthDetails.provisional ? currentUser.birthDetails.date : ''
+  );
   const [birthDate, setBirthDate] = useState(storedDob);
   const [dobConfirmed, setDobConfirmed] = useState(Boolean(storedDob));
   const age = birthDate ? ageOn(birthDate) ?? 0 : 0;
   const [birthExtra, setBirthExtra] = useState<BirthTimePlace>({});
-  const [gender, setGender] = useState(currentUser?.gender || 'MALE');
-  const [interestedInGenders, setInterestedInGenders] = useState<string[]>(
-    currentUser?.interestedIn && currentUser.interestedIn.length > 0 ? currentUser.interestedIn : ['FEMALE']
-  );
-  const [bio, setBio] = useState(currentUser?.bio || '');
-  const [work, setWork] = useState(currentUser?.work || '');
-  const [education, setEducation] = useState(currentUser?.education || '');
-  const [hometown, setHometown] = useState(currentUser?.hometown || '');
-  const [height, setHeight] = useState<string>(currentUser?.height ? String(currentUser.height) : '');
+  const [avatarKey, setAvatarKey] = useState(currentUser?.avatarKey || '');
 
-  const [photos, setPhotos] = useState<string[]>(
-    currentUser?.pictures && currentUser.pictures.length > 0
-      ? currentUser.pictures
-      : currentUser?.photos && currentUser.photos.length > 0
-      ? currentUser.photos
-      : []
-  );
-
-  const [selectedPromptId, setSelectedPromptId] = useState(PROMPT_PRESETS[0]);
-  const [pendingRemoveIndex, setPendingRemoveIndex] = useState<number | null>(null);
-  const [promptAnswer, setPromptAnswer] = useState('');
-  const [promptsList, setPromptsList] = useState<Array<{ promptId: string; answer: string }>>([]);
-  const [audioPromptKey, setAudioPromptKey] = useState<string>(currentUser?.audioPrompt || '');
-  const resolvedAudioSrc = useMediaSrc(audioPromptKey);
-  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string>('');
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  const [relationshipType, setRelationshipType] = useState(currentUser?.relationshipType || 'MONOGAMOUS');
-  const [wantsKids, setWantsKids] = useState(currentUser?.wantsKids || 'OPEN');
-  const [smoking, setSmoking] = useState(currentUser?.smokingStatus || 'NEVER');
-  const [drinking, setDrinking] = useState(currentUser?.drinkingStatus || 'SOCIALLY');
-  const [religion, setReligion] = useState(currentUser?.religion || 'SPIRITUAL');
-  const [starSign, setStarSign] = useState(currentUser?.starSign || 'LEO');
-  const [selectedInterests, setSelectedInterests] = useState<string[]>(
-    currentUser?.interests || ['Travel', 'Fitness', 'Coffee']
-  );
-  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(
-    currentUser?.languages && currentUser.languages.length > 0 ? currentUser.languages : ['ENGLISH']
-  );
+  // Prefill from a chat profile that already exists (registration stores the display name; a member
+  // who left the wizard keeps what they saved). A 404 just means there is nothing yet.
+  useEffect(() => {
+    let active = true;
+    ProfileApi.getMine()
+      .then((res) => {
+        if (!active) return;
+        const me = toUserProfile(res);
+        setDisplayName((prev) => prev || me.displayName || '');
+        setAvatarKey((prev) => prev || me.avatarKey || '');
+        const real = me.birthDetails?.date && !me.birthDetails.provisional ? me.birthDetails.date : '';
+        if (real) {
+          setStoredDob(real);
+          setBirthDate(real);
+          setDobConfirmed(true);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const audioInputRef = useRef<HTMLInputElement | null>(null);
-  const targetSlotRef = useRef<number>(0);
 
   const getResolvedUserId = async () => {
     let uid = currentUser?.id;
@@ -261,122 +95,21 @@ export function OnboardingWizard() {
     return uid;
   };
 
-  const toggleInterestedIn = (value: string) => {
-    setInterestedInGenders((prev) =>
-      prev.includes(value) ? prev.filter((g) => g !== value) : [...prev, value]
-    );
-  };
-
-  const toggleInterest = (interest: string) => {
-    setSelectedInterests((prev) =>
-      prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest]
-    );
-  };
-
-  const toggleLanguage = (lang: string) => {
-    setSelectedLanguages((prev) =>
-      prev.includes(lang) ? (prev.length > 1 ? prev.filter((l) => l !== lang) : prev) : [...prev, lang]
-    );
-  };
-
-  const handlePhotoClick = (index: number) => {
-    targetSlotRef.current = index;
-    fileInputRef.current?.click();
-  };
-
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files: File[] = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    const slot = targetSlotRef.current;
-    setUploadingPhotoIndex(slot);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
     try {
-      const uid = await getResolvedUserId();
-      const newKeys: string[] = [];
-      for (const file of files) {
-        const key = await ProfileApi.uploadMedia(uid, file);
-        newKeys.push(key);
-      }
-
-      setPhotos((prev) => {
-        let next = [...prev];
-        if (files.length === 1 && slot < next.length) {
-          next[slot] = newKeys[0];
-        } else {
-          next = [...next, ...newKeys].slice(0, 6);
-        }
-        return next.filter(Boolean);
-      });
-      showToast(files.length > 1 ? `${files.length} photos added!` : 'Photo added successfully!', 'success');
+      // A chat avatar: purpose CHAT, so turning matching off later never touches it.
+      setAvatarKey(await ProfileApi.uploadMedia(file, 'CHAT'));
+      showToast('Photo added.', 'success');
     } catch (err: any) {
       console.error('Error adding photo:', err);
       showToast(err?.message || 'Could not upload image. Please try again.', 'error');
     } finally {
-      setUploadingPhotoIndex(null);
+      setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  };
-
-  const removePhoto = (index: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPendingRemoveIndex(index);
-  };
-
-  const confirmRemovePhoto = () => {
-    if (pendingRemoveIndex === null) return;
-    const index = pendingRemoveIndex;
-    setPhotos((prev) => prev.filter((_, i) => i !== index));
-    setPendingRemoveIndex(null);
-  };
-
-  const handleAudioChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingAudio(true);
-    try {
-      const uid = await getResolvedUserId();
-      const localUrl = URL.createObjectURL(file);
-      setAudioPreviewUrl(localUrl);
-
-      const key = await ProfileApi.uploadMedia(uid, file);
-      setAudioPromptKey(key);
-      showToast('Voice note uploaded!', 'success');
-    } catch (err: any) {
-      console.error('Error uploading voice note:', err);
-      showToast(err?.message || 'Failed to upload voice note.', 'error');
-    } finally {
-      setUploadingAudio(false);
-      if (audioInputRef.current) audioInputRef.current.value = '';
-    }
-  };
-
-  const togglePlayAudio = () => {
-    if (!audioRef.current) return;
-    if (isPlayingAudio) {
-      audioRef.current.pause();
-      setIsPlayingAudio(false);
-    } else {
-      audioRef.current.play();
-      setIsPlayingAudio(true);
-    }
-  };
-
-  const addPrompt = () => {
-    if (!promptAnswer.trim()) {
-      showToast('Please type an answer for your prompt.', 'error');
-      return;
-    }
-    setPromptsList((prev) => [
-      ...prev.filter((p) => p.promptId !== selectedPromptId),
-      { promptId: selectedPromptId, answer: promptAnswer.trim() },
-    ]);
-    setPromptAnswer('');
-    showToast('Prompt added to your profile!', 'success');
-  };
-
-  const removePrompt = (promptId: string) => {
-    setPromptsList((prev) => prev.filter((p) => p.promptId !== promptId));
   };
 
   const handleNextFromBasics = () => {
@@ -393,129 +126,57 @@ export function OnboardingWizard() {
       showToast('Please confirm your date of birth. It cannot be changed later.', 'error');
       return;
     }
-    setStep('photos');
-  };
-
-  const handleNextFromPhotos = () => {
-    if (photos.length < 3) {
-      showToast(`Please upload at least 3 photos to continue (${photos.length}/3 added).`, 'error');
-      return;
-    }
-    setStep('prompts');
-  };
-
-  const handleNextFromPrompts = () => {
-    setStep('lifestyle');
+    setStep('photo');
   };
 
   const finishOnboarding = async () => {
     setSaving(true);
     try {
       const uid = await getResolvedUserId();
-      const finalPrompts = [...promptsList];
-      if (promptAnswer.trim()) {
-        finalPrompts.push({ promptId: selectedPromptId, answer: promptAnswer.trim() });
-      }
-
-      // A real upload returns either a pending/ key (fresh, not yet claimed by a profile save) or a
-      // media/ key (already stored). Anything else is placeholder sample data, and the fabricated key
-      // below exists only to keep that demo path shaped correctly — never fabricate over a real key, or
-      // the profile would reference an object that was never uploaded.
-      const cleanedPictures = photos.map((p) =>
-        isMediaKey(p) ? p : `media/${uid}/${crypto.randomUUID()}`
-      );
-      const cleanedAudioPrompt = audioPromptKey
-        ? isMediaKey(audioPromptKey)
-          ? audioPromptKey
-          : `media/${uid}/${crypto.randomUUID()}`
-        : undefined;
-
-      const finalInterests = selectedInterests.map(
-        (i) => INTEREST_ENUM_MAP[i] || i.toUpperCase().replace(/[\s&-]+/g, '_')
-      );
-      const finalLanguages = selectedLanguages.map((l) => l.toUpperCase().replace(/[\s&-]+/g, '_'));
-
-      const profilePayload: Record<string, unknown> = {
+      const birthDetails = birthDetailsPayload(birthDate, birthExtra);
+      await ProfileApi.upsertChat({
         displayName: displayName.trim(),
-        bio: bio.trim(),
-        // Age is derived by the server from birthDetails.date; `age` is no longer sent.
-        birthDetails: birthDetailsPayload(birthDate, birthExtra),
-        gender: gender || 'MALE',
-        interestedIn: interestedInGenders.length > 0 ? interestedInGenders : ['FEMALE'],
-        pictures: cleanedPictures,
-        audioPrompt: cleanedAudioPrompt,
-        prompts: finalPrompts.length > 0 ? finalPrompts : undefined,
-        work: work.trim() || undefined,
-        education: education.trim() || undefined,
-        hometown: hometown.trim() || undefined,
-        height: height ? Number(height) : undefined,
-        relationshipType: relationshipType || undefined,
-        wantsKids: wantsKids || undefined,
-        smokingStatus: smoking || undefined,
-        drinkingStatus: drinking || undefined,
-        religion: religion || undefined,
-        starSign: starSign || undefined,
-        interests: finalInterests.length > 0 ? finalInterests : undefined,
-        languages: finalLanguages.length > 0 ? finalLanguages : undefined,
-      };
-
-      await ProfileApi.upsert(uid, profilePayload);
+        // Age is derived by the server from birthDetails.date.
+        birthDetails,
+        ...(avatarKey ? { avatarKey } : {}),
+      });
       // Completing onboarding is NOT optional: it transitions the authoritative user state
-      // ONBOARDING → AVAILABLE in the State service. Until that happens the user cannot be hooked
-      // at all (the hook transaction requires current_state IN (AVAILABLE, HOOKED)), so a user who
-      // reached the app with this step failed would appear fully onboarded while being silently
-      // unmatchable. This was previously swallowed with a console.warn and the wizard continued into
-      // the app, which is exactly how a user ended up stuck in ONBOARDING with a working-looking UI.
-      // Surface the failure and keep the user in the wizard so they can retry.
+      // ONBOARDING → AVAILABLE in the State service. Until that happens the member cannot connect with
+      // anyone (the hook transaction requires current_state IN (AVAILABLE, HOOKED)). Surface a failure
+      // and keep the member in the wizard so they can retry.
       await StateApi.completeOnboarding();
 
       setCurrentUser({
+        userId: uid,
         id: uid,
         name: displayName.trim(),
         displayName: displayName.trim(),
         age,
-        birthDetails: birthDetailsPayload(birthDate, birthExtra),
-        gender,
-        interestedIn: interestedInGenders,
-        bio: bio.trim(),
-        work: work.trim() || undefined,
-        education: education.trim() || undefined,
-        hometown: hometown.trim() || undefined,
-        height: height ? Number(height) : undefined,
-        relationshipType: relationshipType || undefined,
-        wantsKids: wantsKids || undefined,
-        smokingStatus: smoking || undefined,
-        drinkingStatus: drinking || undefined,
-        religion: religion || undefined,
-        starSign: starSign || undefined,
-        interests: finalInterests,
-        languages: finalLanguages,
-        prompts: finalPrompts,
-        pictures: cleanedPictures,
-        photos: cleanedPictures,
-        audioPrompt: cleanedAudioPrompt,
+        avatarKey: avatarKey || undefined,
+        birthDetails,
+        birthDateOnFile: true,
+        photos: [],
         currentState: UserState.AVAILABLE,
-      } as any);
+      });
 
-      showToast('Welcome to OneHook! Your profile is complete.', 'success');
+      showToast('Welcome to OneHook!', 'success');
       navigate('/app', { replace: true });
     } catch (err) {
       // Distinguish "your account is still finishing setup" from a genuine save failure. A 409 here
       // means only that the caller's sign-in credentials were not live in Cognito yet — nothing the
       // user entered is wrong, and nothing is lost. StateApi.completeOnboarding already retried with
-      // backoff, so reaching this branch means it persisted (typically an Identity outage). Tell them
-      // what is happening and that retrying is the next step, rather than implying their profile was
-      // rejected — and keep them in the wizard with their input intact so "Finish" simply works later.
-      const status = (err as any)?.status ?? (err as any)?.$metadata?.httpStatusCode;
-      const gate = status === 409 ? onboardingGateMessage((err as any)?.message) : null;
+      // backoff, so reaching this branch means it persisted (typically an Identity outage).
+      const status = errorStatus(err);
+      const message = (err as { message?: string })?.message ?? '';
+      const gate = status === 409 ? onboardingGateMessage(message) : null;
       if (gate) {
         showToast(gate, 'error');
-      } else if (status === 400 && /birthDetails|at least 18/.test((err as any)?.message ?? '')) {
-        showToast((err as any).message, 'error');
+      } else if (status === 400 && /birthDetails|at least 18/.test(message)) {
+        showToast(message, 'error');
         setStep('basics');
       } else if (status === 409) {
         showToast(
-          "Your account is still finishing setup — your profile is saved. Please tap Finish again in a few moments.",
+          'Your account is still finishing setup — your profile is saved. Please tap Finish again in a few moments.',
           'error'
         );
       } else {
@@ -543,38 +204,48 @@ export function OnboardingWizard() {
 
   if (saving || loggingOut) return <LoadingSpinner fullScreen />;
 
+  const stepIndex = STEPS.indexOf(step);
+
   return (
     <div className="min-h-screen bg-[#F7F7F7] flex items-center justify-center p-6 sm:p-12">
-      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
-      <input type="file" ref={audioInputRef} onChange={handleAudioChange} accept="audio/*" className="hidden" />
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+        aria-label="Choose a profile photo"
+      />
 
       <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl w-full bg-white border border-border p-8 sm:p-12 space-y-10 shadow-sm">
         <div className="space-y-4">
           <div className="flex items-start justify-between">
             <div className="space-y-4 flex-1">
-              <span className="text-[11px] uppercase tracking-[0.4em] font-black text-accent">Step {STEP_INDEX[step] + 1} of 4</span>
+              <span className="text-[11px] uppercase tracking-[0.4em] font-black text-accent">
+                Step {stepIndex + 1} of {STEPS.length}
+              </span>
               <h1 className="text-4xl sm:text-5xl font-serif italic tracking-tighter uppercase">
                 {step === 'basics' && 'Create Your Profile'}
-                {step === 'photos' && 'Upload Your Photos'}
-                {step === 'prompts' && 'Showcase Your Voice'}
-                {step === 'lifestyle' && 'Your Lifestyle'}
+                {step === 'photo' && 'Add a Photo'}
               </h1>
-              {/* Visible progress: people tolerate a multi-step form far longer when they can see how
-                  much is left, and the reassurance that nothing is final removes the other main reason
-                  for stalling on a question. */}
-              <div className="flex items-center gap-1.5" role="progressbar" aria-valuemin={1} aria-valuemax={4}
-                   aria-valuenow={STEP_INDEX[step] + 1} aria-label={`Step ${STEP_INDEX[step] + 1} of 4`}>
-                {[0, 1, 2, 3].map((index) => (
+              <div
+                className="flex items-center gap-1.5"
+                role="progressbar"
+                aria-valuemin={1}
+                aria-valuemax={STEPS.length}
+                aria-valuenow={stepIndex + 1}
+                aria-label={`Step ${stepIndex + 1} of ${STEPS.length}`}
+              >
+                {STEPS.map((s, index) => (
                   <span
-                    key={index}
-                    className={`h-[3px] flex-1 transition-colors ${
-                      index <= STEP_INDEX[step] ? 'bg-accent' : 'bg-border'
-                    }`}
+                    key={s}
+                    className={`h-[3px] flex-1 transition-colors ${index <= stepIndex ? 'bg-accent' : 'bg-border'}`}
                   />
                 ))}
               </div>
               <p className="text-sm opacity-60 italic">
-                You can change any of this later from your profile.
+                This is what the people you connect with see. Matching is optional: you can turn it on
+                later in Settings.
               </p>
             </div>
             <button
@@ -585,22 +256,25 @@ export function OnboardingWizard() {
               className="flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground hover:text-foreground border border-border hover:border-accent transition-all disabled:opacity-40"
               title="Sign out and continue later"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="hidden sm:inline font-bold uppercase tracking-wider">Skip for now</span>
             </button>
           </div>
         </div>
 
-        {/* ── STEP 1: BASICS ── */}
+        {/* ── STEP 1: NAME AND DATE OF BIRTH ── */}
         {step === 'basics' && (
           <div className="space-y-6">
             <div className="grid sm:grid-cols-[1.5fr_1fr] gap-6">
-              <Field label="Display Name *">
+              <Field label="Display Name *" htmlFor="onboarding-display-name">
                 <input
+                  id="onboarding-display-name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={100}
                   className="field-input"
                   placeholder="How you want to be introduced"
+                  autoComplete="nickname"
                 />
               </Field>
               {storedDob ? (
@@ -626,227 +300,81 @@ export function OnboardingWizard() {
               </div>
             </details>
 
-            <div className="space-y-3">
-              <label className="text-[10px] uppercase tracking-[0.3em] font-black opacity-50 block">
-                Your Gender *
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                {GENDER_OPTIONS.map((g) => (
-                  <button
-                    key={g.value}
-                    type="button"
-                    onClick={() => setGender(g.value)}
-                    {...trackProps(UiElement.ONBOARDING_CHOICE_SELECT, { targetId: g.value })}
-                    className={`py-3.5 px-4 text-xs font-bold uppercase tracking-widest border transition-all ${
-                      gender === g.value
-                        ? 'bg-accent text-white border-accent shadow-md'
-                        : 'border-border hover:border-accent/40 bg-white text-foreground'
-                    }`}
-                  >
-                    {g.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <label className="text-[10px] uppercase tracking-[0.3em] font-black opacity-50 block">
-                Interested In * (Select all that apply)
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                {GENDER_OPTIONS.map((g) => (
-                  <button
-                    key={g.value}
-                    type="button"
-                    onClick={() => toggleInterestedIn(g.value)}
-                    {...trackProps(UiElement.ONBOARDING_CHOICE_SELECT, { targetId: g.value })}
-                    className={`py-3.5 px-4 text-xs font-bold uppercase tracking-widest border transition-all flex items-center justify-center gap-2 ${
-                      interestedInGenders.includes(g.value)
-                        ? 'bg-accent text-white border-accent shadow-md'
-                        : 'border-border hover:border-accent/40 bg-white text-foreground'
-                    }`}
-                  >
-                    {interestedInGenders.includes(g.value) && <Check className="w-3.5 h-3.5" />}
-                    {g.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <Field label="Bio / About You">
-              <textarea
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                placeholder="A glimpse into what makes you, you..."
-                className="field-input min-h-24 resize-none"
-              />
-            </Field>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Work / Job Title">
-                <input
-                  value={work}
-                  onChange={(e) => setWork(e.target.value)}
-                  placeholder="e.g. Architect, Founder, Designer"
-                  className="field-input"
-                />
-              </Field>
-              <Field label="Education / University">
-                <input
-                  value={education}
-                  onChange={(e) => setEducation(e.target.value)}
-                  placeholder="e.g. Stanford, Pratt Institute"
-                  className="field-input"
-                />
-              </Field>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Hometown / Current City">
-                {/* Suggestions, not a closed list: any fixed set of cities would exclude most of the
-                    world. One tap for the common case, free text for everyone else. */}
-                <input
-                  value={hometown}
-                  onChange={(e) => setHometown(e.target.value)}
-                  placeholder="Start typing, or pick a suggestion"
-                  className="field-input"
-                  list="hometown-suggestions"
-                  autoComplete="address-level2"
-                />
-                <datalist id="hometown-suggestions">
-                  {HOMETOWN_SUGGESTIONS.map((city) => (
-                    <option key={city} value={city} />
-                  ))}
-                </datalist>
-              </Field>
-              <Field label="Height (cm)">
-                <select
-                  value={height}
-                  onChange={(e) => setHeight(e.target.value)}
-                  className="field-input"
-                  aria-label="Height in centimetres"
-                >
-                  <option value="">Prefer not to say</option>
-                  {HEIGHT_OPTIONS.map((cm) => (
-                    <option key={cm} value={cm}>
-                      {cm} cm
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
             <button
               onClick={handleNextFromBasics}
               {...trackProps(UiElement.ONBOARDING_NEXT, { value: 'basics' })}
               className="w-full py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 transition-all shadow-md mt-6"
             >
-              Continue to Photos
+              Continue
             </button>
           </div>
         )}
 
-        {/* ── STEP 2: PHOTOS (MIN 3 REQUIRED) ── */}
-        {step === 'photos' && (
+        {/* ── STEP 2: OPTIONAL AVATAR ── */}
+        {step === 'photo' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold tracking-wider uppercase text-foreground flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-accent" /> Photos ({photos.length}/6 added)
-              </span>
-              <span className={`text-[11px] font-black uppercase tracking-widest px-3 py-1 ${
-                photos.length >= 3 ? 'bg-green-100 text-green-800' : 'bg-accent/10 text-accent'
-              }`}>
-                {photos.length >= 3 ? 'Requirement Met' : `Need ${3 - photos.length} more`}
-              </span>
-            </div>
-
-            {/* 6 Photo Slots Grid */}
-            <div className="grid grid-cols-3 gap-4">
-              {[0, 1, 2, 3, 4, 5].map((index) => {
-                const photoSrc = photos[index];
-                const isUploading = uploadingPhotoIndex === index;
-
-                return (
-                  <div
-                    key={index}
-                    onClick={() => handlePhotoClick(index)}
-                    {...trackProps(UiElement.ONBOARDING_PHOTO_ADD)}
-                    className={`relative aspect-[3/4] border-2 border-dashed rounded-none flex flex-col items-center justify-center cursor-pointer transition-all overflow-hidden group ${
-                      photoSrc
-                        ? 'border-solid border-border bg-black/5'
-                        : 'border-border/80 hover:border-accent bg-bg/30'
-                    }`}
-                  >
-                    {isUploading ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <LoadingSpinner />
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">
-                          Uploading...
-                        </span>
-                      </div>
-                    ) : photoSrc ? (
-                      <>
-                        <MediaImage
-                          src={photoSrc}
-                          alt={`Slot ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        {index === 0 && (
-                          <div className="absolute top-2 left-2 bg-accent text-white text-[9px] font-black px-2 py-0.5 uppercase tracking-widest shadow">
-                            Main
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={(e) => removePhoto(index, e)}
-                          {...trackProps(UiElement.ONBOARDING_PHOTO_REMOVE)}
-                          className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-red-600 text-white transition-all shadow-md"
-                          title="Remove photo"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 text-center p-3">
-                        <div className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:text-accent group-hover:border-accent transition-all">
-                          <Plus className="w-4 h-4" />
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground group-hover:text-accent">
-                          {index < 3 ? `Photo ${index + 1} *` : `Photo ${index + 1}`}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Optional. Your photo is checked before anyone else sees it.
+            </p>
+            <div className="flex items-center gap-6">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                {...trackProps(UiElement.ONBOARDING_PHOTO_ADD)}
+                aria-label={avatarKey ? 'Change profile photo' : 'Add a profile photo'}
+                className="relative w-32 h-32 rounded-full border-2 border-dashed border-border hover:border-accent overflow-hidden flex items-center justify-center bg-bg/30 transition-all"
+              >
+                {uploading ? (
+                  <LoadingSpinner />
+                ) : avatarKey ? (
+                  <MediaImage src={avatarKey} alt="Your profile photo" className="w-full h-full object-cover" />
+                ) : (
+                  <Plus className="w-6 h-6 text-muted-foreground" aria-hidden="true" />
+                )}
+              </button>
+              {avatarKey && !uploading && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmRemove(true)}
+                  {...trackProps(UiElement.ONBOARDING_PHOTO_REMOVE)}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-widest border border-border hover:border-red-600 hover:text-red-600 transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Remove
+                </button>
+              )}
             </div>
 
             <div className="p-4 bg-accent/5 border border-accent/20 flex items-start gap-3 text-xs leading-relaxed text-muted-foreground">
-              <Sparkles className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+              <MessageCircle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" aria-hidden="true" />
               <span>
-                <strong>Tip:</strong> Your main photo should clearly show your face. Add candid, hobby, or travel photos to tell your full story.
+                After this you can add someone you know by their username. When they accept, you&rsquo;re
+                hooked and can chat, end-to-end encrypted.
               </span>
             </div>
 
-            {pendingRemoveIndex !== null && (
+            {confirmRemove && (
               <div
                 className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-6"
-                onClick={() => setPendingRemoveIndex(null)}
+                onClick={() => setConfirmRemove(false)}
                 data-track-exempt="backdrop: click-away that cancels the remove-photo dialog."
               >
                 <div
+                  role="alertdialog"
+                  aria-modal="true"
+                  aria-labelledby="remove-photo-title"
                   className="max-w-sm w-full bg-white border border-border p-6 space-y-4 shadow-2xl rounded-lg"
                   onClick={(e) => e.stopPropagation()}
                   data-track-exempt="backdrop: modal container; stops backdrop dismissal, not an interactive control."
                 >
-                  <h3 className="text-base font-black uppercase tracking-widest">Remove this photo?</h3>
-                  <p className="text-xs opacity-60 leading-relaxed">
-                    This photo will be removed from your profile. You can add it again later.
-                  </p>
+                  <h3 id="remove-photo-title" className="text-base font-black uppercase tracking-widest">
+                    Remove this photo?
+                  </h3>
+                  <p className="text-xs opacity-60 leading-relaxed">You can add one again later.</p>
                   <div className="flex gap-3">
                     <button
                       type="button"
-                      onClick={() => setPendingRemoveIndex(null)}
+                      onClick={() => setConfirmRemove(false)}
                       {...trackProps(UiElement.ONBOARDING_PHOTO_REMOVE_CONFIRM, { action: 'dismiss' })}
                       className="flex-1 py-2.5 border border-border text-xs font-bold uppercase tracking-widest hover:bg-surface-hover transition-colors"
                     >
@@ -854,7 +382,10 @@ export function OnboardingWizard() {
                     </button>
                     <button
                       type="button"
-                      onClick={confirmRemovePhoto}
+                      onClick={() => {
+                        setAvatarKey('');
+                        setConfirmRemove(false);
+                      }}
                       {...trackProps(UiElement.ONBOARDING_PHOTO_REMOVE_CONFIRM)}
                       className="flex-1 py-2.5 bg-red-600 text-white text-xs font-bold uppercase tracking-widest hover:bg-red-700 transition-colors"
                     >
@@ -876,348 +407,12 @@ export function OnboardingWizard() {
               </button>
               <button
                 type="button"
-                onClick={handleNextFromPhotos}
-                disabled={photos.length < 3}
-                {...trackProps(UiElement.ONBOARDING_NEXT, { value: 'photos' })}
-                className="flex-1 py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md"
-              >
-                Continue ({photos.length}/3 photos added)
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── STEP 3: PROMPTS & VOICE NOTE ── */}
-        {step === 'prompts' && (
-          <div className="space-y-8">
-            {/* Written Prompts Section */}
-            <div className="space-y-4">
-              <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent flex items-center gap-2">
-                <Smile className="w-4 h-4" /> Written Prompt
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] uppercase tracking-widest opacity-60 font-bold block">
-                  Select a Prompt
-                </label>
-                <select
-                  value={selectedPromptId}
-                  onChange={(e) => {
-                    trackUi(UiElement.SHARED_PROMPT_PRESET_SELECT, { context: Screen.ONBOARDING });
-                    setSelectedPromptId(e.target.value);
-                  }}
-                  className="field-input"
-                >
-                  {PROMPT_PRESETS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
-
-                <textarea
-                  value={promptAnswer}
-                  onChange={(e) => setPromptAnswer(e.target.value)}
-                  placeholder="Your authentic, personal answer..."
-                  className="field-input min-h-24 resize-none"
-                />
-
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={addPrompt}
-                    {...trackProps(UiElement.ONBOARDING_PROMPT_ADD)}
-                    className="py-2.5 px-5 bg-border/60 hover:bg-accent hover:text-white text-xs font-bold uppercase tracking-widest transition-all"
-                  >
-                    Save Prompt
-                  </button>
-                </div>
-              </div>
-
-              {promptsList.length > 0 && (
-                <div className="space-y-3 pt-2">
-                  <span className="text-[10px] uppercase tracking-widest opacity-60 font-black">
-                    Saved Prompts ({promptsList.length})
-                  </span>
-                  {promptsList.map((p) => (
-                    <div
-                      key={p.promptId}
-                      className="p-4 border border-border bg-bg/20 flex items-start justify-between gap-4"
-                    >
-                      <div>
-                        <div className="text-[10px] font-black uppercase tracking-widest text-accent">
-                          {p.promptId}
-                        </div>
-                        <p className="text-xs font-serif italic mt-1 text-foreground">
-                          "{p.answer}"
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removePrompt(p.promptId)}
-                        {...trackProps(UiElement.ONBOARDING_PROMPT_REMOVE)}
-                        className="text-muted-foreground hover:text-red-600 p-1"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Voice Prompt Section */}
-            <div className="space-y-4 border-t border-border pt-6">
-              <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent flex items-center gap-2">
-                <Volume2 className="w-4 h-4" /> Voice Prompt (Audio Note)
-              </div>
-              <p className="text-xs opacity-60 italic">
-                Upload or record a 10–30 second voice note so matches can hear your tone and vibe.
-              </p>
-
-              {audioPreviewUrl || audioPromptKey ? (
-                <div className="p-4 border border-border bg-accent/5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={togglePlayAudio}
-                      {...trackProps(UiElement.SHARED_VOICE_RECORDER, { value: isPlayingAudio ? 'pause' : 'play', context: Screen.ONBOARDING })}
-                      className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center shadow-md hover:bg-accent/90"
-                    >
-                      {isPlayingAudio ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-                    </button>
-                    <div>
-                      <div className="text-[11px] font-black uppercase tracking-widest text-foreground">
-                        Voice Note Ready
-                      </div>
-                      <div className="text-[10px] opacity-60 font-mono">
-                        {isMediaKey(audioPromptKey) ? 'Uploaded to S3' : 'Voice Note Ready'}
-                      </div>
-                    </div>
-                  </div>
-                  <audio
-                    ref={audioRef}
-                    src={audioPreviewUrl || resolvedAudioSrc}
-                    onEnded={() => setIsPlayingAudio(false)}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    {...trackProps(UiElement.ONBOARDING_VOICE_REMOVE)}
-                    onClick={() => {
-                      setAudioPromptKey('');
-                      setAudioPreviewUrl('');
-                    }}
-                    className="text-muted-foreground hover:text-red-600 p-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => audioInputRef.current?.click()}
-                  {...trackProps(UiElement.ONBOARDING_VOICE_ADD)}
-                  disabled={uploadingAudio}
-                  className="w-full py-4 border-2 border-dashed border-border hover:border-accent flex items-center justify-center gap-3 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-accent transition-all"
-                >
-                  {uploadingAudio ? (
-                    <>
-                      <LoadingSpinner /> Uploading Audio...
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="w-4 h-4" /> Upload Audio Note (.mp3, .m4a, .wav)
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-
-            <div className="flex gap-4 pt-4">
-              <button
-                type="button"
-                onClick={() => setStep('photos')}
-                {...trackProps(UiElement.ONBOARDING_BACK)}
-                className="py-4 px-6 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleNextFromPrompts}
-                {...trackProps(UiElement.ONBOARDING_NEXT, { value: 'prompts' })}
-                className="flex-1 py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 transition-all shadow-md"
-              >
-                Continue to Lifestyle
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── STEP 4: LIFESTYLE & IDENTITY ── */}
-        {step === 'lifestyle' && (
-          <div className="space-y-8">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Relationship Goal">
-                <select
-                  value={relationshipType}
-                  onChange={(e) => setRelationshipType(e.target.value)}
-                  className="field-input"
-                >
-                  {RELATIONSHIP_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Family Plans / Kids">
-                <select
-                  value={wantsKids}
-                  onChange={(e) => setWantsKids(e.target.value)}
-                  className="field-input"
-                >
-                  {WANTS_KIDS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Drinking">
-                <select
-                  value={drinking}
-                  onChange={(e) => setDrinking(e.target.value)}
-                  className="field-input"
-                >
-                  {DRINKING_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Smoking">
-                <select
-                  value={smoking}
-                  onChange={(e) => setSmoking(e.target.value)}
-                  className="field-input"
-                >
-                  {SMOKING_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Religion / Philosophy">
-                <select
-                  value={religion}
-                  onChange={(e) => setReligion(e.target.value)}
-                  className="field-input"
-                >
-                  {RELIGION_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              <Field label="Star Sign">
-                <select
-                  value={starSign}
-                  onChange={(e) => setStarSign(e.target.value)}
-                  className="field-input"
-                >
-                  {STAR_SIGNS.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            {/* Languages Multi-Select Pills */}
-            <div className="space-y-3">
-              <label className="text-[10px] uppercase tracking-[0.3em] font-black opacity-50 block">
-                Languages You Speak ({selectedLanguages.length} selected)
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {LANGUAGE_PRESETS.map((lang) => {
-                  const active = selectedLanguages.includes(lang.value);
-                  return (
-                    <button
-                      key={lang.value}
-                      type="button"
-                      onClick={() => toggleLanguage(lang.value)}
-                      {...trackProps(UiElement.ONBOARDING_CHOICE_SELECT, { targetId: lang.value })}
-                      className={`py-2 px-3.5 text-xs font-bold rounded-full border transition-all ${
-                        active
-                          ? 'bg-accent text-white border-accent shadow-sm'
-                          : 'border-border bg-white text-muted-foreground hover:border-accent/40'
-                      }`}
-                    >
-                      {lang.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Interests & Passions Pills */}
-            <div className="space-y-3">
-              <label className="text-[10px] uppercase tracking-[0.3em] font-black opacity-50 block">
-                Interests & Passions ({selectedInterests.length} selected)
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {INTEREST_PRESETS.map((interest) => {
-                  const active = selectedInterests.includes(interest);
-                  return (
-                    <button
-                      key={interest}
-                      type="button"
-                      onClick={() => toggleInterest(interest)}
-                      {...trackProps(UiElement.ONBOARDING_CHOICE_SELECT, { targetId: interest })}
-                      className={`py-2 px-3.5 text-xs font-bold rounded-full border transition-all ${
-                        active
-                          ? 'bg-accent text-white border-accent shadow-sm'
-                          : 'border-border bg-white text-muted-foreground hover:border-accent/40'
-                      }`}
-                    >
-                      {interest}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex gap-4 pt-4">
-              <button
-                type="button"
-                onClick={() => setStep('prompts')}
-                {...trackProps(UiElement.ONBOARDING_BACK)}
-                className="py-4 px-6 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all"
-              >
-                Back
-              </button>
-              <button
-                type="button"
                 onClick={finishOnboarding}
+                disabled={uploading}
                 {...trackProps(UiElement.ONBOARDING_FINISH)}
-                className="flex-1 py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 transition-all shadow-md"
+                className="flex-1 py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 disabled:opacity-40 transition-all shadow-md"
               >
-                Finish & Enter OneHook
+                {avatarKey ? 'Finish & Enter OneHook' : 'Skip photo & Enter OneHook'}
               </button>
             </div>
           </div>
@@ -1227,10 +422,12 @@ export function OnboardingWizard() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[10px] uppercase tracking-[0.3em] font-black opacity-50 block">{label}</label>
+      <label htmlFor={htmlFor} className="text-[10px] uppercase tracking-[0.3em] font-black opacity-50 block">
+        {label}
+      </label>
       {children}
     </div>
   );

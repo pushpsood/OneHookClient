@@ -1,115 +1,79 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { maxConnectionsForTier } from 'onehook-api-client/membership';
-import { UserState, SubscriptionTier, UserStateSnapshot, UserProfile } from '../types';
-import { StateApi } from '../api/state';
+import { UserState, SubscriptionTier, type UserStateResponse } from '../types';
+import { toUserStateSnapshot } from '../api/state';
 
-describe('Matches: State Service Extension', () => {
-  const currentUser: UserProfile = {
-    id: 'usr-123',
+/**
+ * The state model after chat-only profiles (docs/chat-only-profiles.md §9.1): the chat list is the
+ * state's `hooks[]` (each naming its partner), not `matchIds` plus a GET /state/match per hook.
+ */
+describe('toUserStateSnapshot (GET /state/{userId})', () => {
+  const base: UserStateResponse = {
     userId: 'usr-123',
-    name: 'Pushp',
-    displayName: 'Pushp',
-    photos: ['media/photo1.jpg'],
-    location: { lat: 37.77, lng: -122.41, geohash: '9q8yy' },
-    subscriptionTier: SubscriptionTier.MUST,
-    activeConnections: 1,
-    currentState: UserState.HOOKED,
-    currentMatches: ['match-abc-456'],
-  };
-
-  const userStateHooked: UserStateSnapshot = {
-    userId: 'usr-123',
-    state: UserState.HOOKED,
+    state: 'HOOKED',
     activeConnections: 1,
     matchIds: ['match-abc-456'],
     subscriptionTier: SubscriptionTier.MUST,
   };
 
-  const userStateAvailable: UserStateSnapshot = {
-    userId: 'usr-123',
-    state: UserState.AVAILABLE,
-    activeConnections: 0,
-    matchIds: [],
-    subscriptionTier: SubscriptionTier.MUST,
-  };
-
-  it('determines peer ID correctly from State service match record', () => {
-    const matchRecordA = {
-      matchId: 'match-abc-456',
-      userA: 'usr-123',
-      userB: 'usr-peer-789',
-      status: 'ACTIVE',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    const peerA = matchRecordA.userA === currentUser.id ? matchRecordA.userB : matchRecordA.userA;
-    expect(peerA).toBe('usr-peer-789');
-
-    const matchRecordB = {
-      matchId: 'match-xyz-999',
-      userA: 'usr-peer-789',
-      userB: 'usr-123',
-      status: 'ACTIVE',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    const peerB = matchRecordB.userA === currentUser.id ? matchRecordB.userB : matchRecordB.userA;
-    expect(peerB).toBe('usr-peer-789');
+  it('takes each hook partner from hooks[] (no userA/userB lookup)', () => {
+    const snap = toUserStateSnapshot({
+      ...base,
+      hooks: [{ matchId: 'match-abc-456', peerId: 'usr-peer-789', origin: 'REQUEST', hookedAt: 1767000000 }],
+      effectiveCapacity: 1,
+    });
+    expect(snap.hooks).toEqual([
+      { matchId: 'match-abc-456', peerId: 'usr-peer-789', origin: 'REQUEST', hookedAt: 1767000000, suspended: false },
+    ]);
+    expect(snap.state).toBe(UserState.HOOKED);
   });
 
-  it('computes connection capacity from the backend-owned tier catalogue', () => {
-    expect(maxConnectionsForTier(userStateHooked.subscriptionTier)).toBe(1);
+  it('defaults an absent matching mode to OFF (State: matching_status absent means OFF)', () => {
+    const snap = toUserStateSnapshot({ ...base, hooks: [] });
+    expect(snap.matching).toEqual({ status: 'OFF', generation: 0 });
+  });
 
-    const goldState: UserStateSnapshot = {
-      ...userStateHooked,
-      subscriptionTier: SubscriptionTier.SUPER,
-    };
-    // Super keeps the one-connection rule; only the top tier relaxes it.
-    expect(maxConnectionsForTier(goldState.subscriptionTier)).toBe(1);
+  it('derives discoveryPaused from capacity when the field is absent (R6)', () => {
+    expect(toUserStateSnapshot({ ...base, effectiveCapacity: 1 }).discoveryPaused).toBe(true);
+    expect(toUserStateSnapshot({ ...base, activeConnections: 1, effectiveCapacity: 3 }).discoveryPaused).toBe(false);
+    expect(toUserStateSnapshot({ ...base, effectiveCapacity: 3, discoveryPaused: true }).discoveryPaused).toBe(true);
+  });
+
+  it('marks a pending downgrade choice from either the flag or the SELECTION_REQUIRED state', () => {
+    expect(toUserStateSnapshot({ ...base, state: 'SELECTION_REQUIRED' }).selectionRequired).toBe(true);
+    const flagged = toUserStateSnapshot({ ...base, selectionRequired: true, keepLimit: 1, selectionDeadline: 1767600000 });
+    expect(flagged.selectionRequired).toBe(true);
+    expect(flagged.keepLimit).toBe(1);
+    expect(flagged.selectionDeadline).toBe(1767600000);
+  });
+
+  it('keeps the suspended flag per hook and drops malformed rows', () => {
+    const snap = toUserStateSnapshot({
+      ...base,
+      hooks: [
+        { matchId: 'm1', peerId: 'p1', origin: 'DISCOVERY', hookedAt: 1, suspended: true },
+        { matchId: 'm2', peerId: undefined, origin: 'DISCOVERY', hookedAt: 2 },
+      ],
+    });
+    expect(snap.hooks).toHaveLength(1);
+    expect(snap.hooks[0].suspended).toBe(true);
+  });
+
+  it('fails closed on an unknown state: treated as ONBOARDING, never as in the app', () => {
+    expect(toUserStateSnapshot({ ...base, state: 'LOCK_PENDING' }).state).toBe(UserState.ONBOARDING);
+  });
+
+  it('carries the chat view pass through', () => {
+    expect(toUserStateSnapshot({ ...base, chatViewPass: 'a.b.c' }).chatViewPass).toBe('a.b.c');
+  });
+});
+
+describe('capacity from the backend-owned tier catalogue', () => {
+  it('MUST and SUPER hold one hook, INFINITY three (both hook origins count together, E29)', () => {
+    expect(maxConnectionsForTier(SubscriptionTier.MUST)).toBe(1);
+    expect(maxConnectionsForTier(SubscriptionTier.SUPER)).toBe(1);
     expect(maxConnectionsForTier(SubscriptionTier.INFINITY)).toBe(3);
     // An unknown / missing tier fails closed to the free ceiling.
     expect(maxConnectionsForTier(undefined)).toBe(1);
-  });
-
-  it('unhooking resets active connections and transitions state to AVAILABLE', () => {
-    // Simulate unhooking transition on client state
-    let state = { ...userStateHooked };
-    const unhookMatchId = 'match-abc-456';
-
-    // State machine mutation mirror
-    state = {
-      ...state,
-      state: UserState.AVAILABLE,
-      activeConnections: Math.max(0, state.activeConnections - 1),
-      matchIds: state.matchIds.filter((id) => id !== unhookMatchId),
-    };
-
-    expect(state.state).toBe(UserState.AVAILABLE);
-    expect(state.activeConnections).toBe(0);
-    expect(state.matchIds).toHaveLength(0);
-  });
-
-  it('app state accommodates unified sections: DISCOVERY, MATCHES (with integrated chat), PROFILE', () => {
-    type AppSection = 'DISCOVERY' | 'MATCHES' | 'PROFILE';
-    const sections: AppSection[] = ['DISCOVERY', 'MATCHES', 'PROFILE'];
-
-    expect(sections).toContain('MATCHES');
-    expect(sections).toContain('DISCOVERY');
-    expect(sections).toContain('PROFILE');
-    expect(sections).toHaveLength(3);
-  });
-
-  it('selecting a match within the unified MatchesView updates active match state directly', () => {
-    let activeMatchId: string | null = null;
-
-    const onSelectMatch = (matchId: string | null) => {
-      activeMatchId = matchId;
-    };
-
-    onSelectMatch('match-abc-456');
-
-    expect(activeMatchId).toBe('match-abc-456');
   });
 });

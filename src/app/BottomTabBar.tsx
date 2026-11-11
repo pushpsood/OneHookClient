@@ -1,11 +1,14 @@
-import { Home, Compass, MessageCircle, Heart, Search, Clapperboard, SquarePlus, Settings } from 'lucide-react';
+import { Home, MessageCircle, Search, Clapperboard, Settings } from 'lucide-react';
 import { MediaImage } from '../components/common/MediaImage';
 import { UiElement, APP_TAB_SCREEN, trackProps } from '../lib/analytics/analytics';
+import type { AppTab } from '../lib/app-mode';
 
-export type AppTab = 'DISCOVERY' | 'MATCHES' | 'LIKES' | 'PROFILE' | 'SETTINGS';
+export type { AppTab } from '../lib/app-mode';
 
 interface BottomTabBarProps {
   activeTab: AppTab;
+  /** Tabs the shell has for the member's matching mode (lib/app-mode.ts `appTabsFor`). */
+  tabs: readonly AppTab[];
   onTabChange: (tab: AppTab) => void;
   /** Number of unread likes to show as a badge on the Likes tab. */
   likesCount?: number;
@@ -19,13 +22,14 @@ interface BottomTabBarProps {
 
 export function BottomTabBar({
   activeTab,
+  tabs,
   onTabChange,
-  likesCount = 0,
   unreadCount = 0,
   userPhoto,
   onOpenSearch,
-  onOpenCreate,
 }: BottomTabBarProps) {
+  // Discovery, its search and its reels shortcut exist only while matching is ON.
+  const discovery = tabs.includes('DISCOVERY');
   return (
     <nav
       className="md:hidden sticky bottom-0 z-50 bg-surface-card border-t border-border flex items-center justify-around shrink-0 select-none"
@@ -33,6 +37,7 @@ export function BottomTabBar({
       aria-label="Mobile Navigation"
     >
       {/* Home / Feed */}
+      {discovery && (
       <button
         type="button"
         onClick={() => onTabChange('DISCOVERY')}
@@ -48,8 +53,10 @@ export function BottomTabBar({
           fill={activeTab === 'DISCOVERY' ? 'currentColor' : 'none'}
         />
       </button>
+      )}
 
       {/* Search / Explore */}
+      {discovery && (
       <button
         type="button"
         onClick={() => {
@@ -65,8 +72,10 @@ export function BottomTabBar({
       >
         <Search className="w-6 h-6" strokeWidth={1.75} />
       </button>
+      )}
 
       {/* Reels / Video Explore */}
+      {discovery && (
       <button
         type="button"
         onClick={() => onTabChange('DISCOVERY')}
@@ -76,6 +85,7 @@ export function BottomTabBar({
       >
         <Clapperboard className="w-6 h-6" strokeWidth={1.75} />
       </button>
+      )}
 
       {/* Messages */}
       <button

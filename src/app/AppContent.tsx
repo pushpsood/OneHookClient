@@ -7,6 +7,8 @@ import { isPaidSubscriptionTier, subscriptionTierDisplayName } from 'onehook-api
 import { isPaidTier, useAppStore } from '../store/app-store';
 import { useCandidates, useProfile, useSwipe, useUserState } from '../hooks/use-api';
 import { useUserLocation } from '../hooks/use-user-location';
+import { useAppNotifications } from '../hooks/use-app-notifications';
+import { useViewPassRefreshers } from '../hooks/use-view-pass-refreshers';
 import { ApiError } from '../lib/api-client';
 import { StateApi } from '../api/state';
 import { getCognitoAuth } from '../lib/cognito-auth';
@@ -17,12 +19,15 @@ import { DiscoveryView } from '../features/discovery/DiscoveryView';
 import { LikesYouView } from '../features/discovery/LikesYouView';
 import type { LikeTargetType } from '../api/rest';
 import { ChatView } from '../features/chat/ChatView';
+import { KeepHooksChooser } from '../features/chat/KeepHooksChooser';
 import { ProfileView } from '../features/profile/ProfileView';
 import { SettingsView } from '../features/settings/SettingsView';
 import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
 import { useHistoryUnlock } from '../hooks/use-history-unlock';
 import { startAnalytics, stopAnalytics, trackScreenView, trackHookedStateView, APP_TAB_SCREEN, HookedStateAction, UiElement, trackProps } from '../lib/analytics/analytics';
-import { BottomTabBar, type AppTab } from './BottomTabBar';
+import { appTabsFor, canDiscover, defaultTabFor, isMatchingOn, resolveTab, type AppTab } from '../lib/app-mode';
+import { ownAvatar } from '../lib/profile-model';
+import { BottomTabBar } from './BottomTabBar';
 import { TopBar } from './TopBar';
 import { DesktopSidebar } from './DesktopSidebar';
 import { SearchDrawer } from './SearchDrawer';
@@ -33,8 +38,12 @@ import { useTheme } from '../lib/theme';
 
 export function AppContent() {
   const navigate = useNavigate();
-  const [appState, setAppState] = useState<AppTab>('DISCOVERY');
   const { currentUser, setCurrentUser, logout, userState } = useAppStore();
+  // The shell is computed from the matching mode: a chat-only member (OFF / ERASING) gets Chat,
+  // Profile and Settings, and nothing that calls /matching/* is mounted (lib/app-mode.ts).
+  const [appState, setAppState] = useState<AppTab>(() => defaultTabFor(userState));
+  const matchingOn = isMatchingOn(userState);
+  const tabs = appTabsFor(userState);
   const { resolvedTheme } = useTheme();
 
   // Scope the theme strictly to the /app route and restore default non-app styles when leaving /app
@@ -54,6 +63,11 @@ export function AppContent() {
     };
   }, [resolvedTheme]);
 
+  // Matching turned off (here or on another device): leave a tab the shell no longer has.
+  useEffect(() => {
+    setAppState((tab) => resolveTab(tab, userState));
+  }, [userState?.matching.status]);
+
   useHistoryUnlock(currentUser?.id);
   const {
     profile,
@@ -63,6 +77,8 @@ export function AppContent() {
   } = useProfile();
 
   const { refetch: refetchUserState } = useUserState();
+  useViewPassRefreshers(matchingOn);
+  useAppNotifications(currentUser?.id, refetchProfile);
   const paid = useAppStore(isPaidTier);
   const paidTierName = userState?.subscriptionTier
     ? subscriptionTierDisplayName(userState.subscriptionTier)
@@ -72,9 +88,11 @@ export function AppContent() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  // Location exists only for discovery: no prompt and no POST /matching/location while matching is off.
   const { coords: userCoords } = useUserLocation(
     currentUser?.id,
-    currentUser?.currentLocation || currentUser?.hometown
+    currentUser?.currentLocation || currentUser?.hometown,
+    matchingOn
   );
 
   const handleUpgrade = async () => {
@@ -106,8 +124,13 @@ export function AppContent() {
     category: discoveryCategory,
     availableCategories,
     setCategory: setDiscoveryCategory,
-  } = useCandidates(userCoords);
-  const { pass, like, loading: swipeLoading } = useSwipe();
+  } = useCandidates(userCoords, {
+    enabled: canDiscover(userState),
+    hooks: userState?.hooks,
+    // 403 MATCHING_OFF / DISCOVERY_PAUSED: the state changed under us; re-read it.
+    onRefused: () => void refetchUserState(),
+  });
+  const { pass, like } = useSwipe();
   const { showToast } = useToast();
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
 
@@ -126,15 +149,18 @@ export function AppContent() {
 
   useEffect(() => {
     // Web routing state uses its own tab names; analytics always reports the canonical catalog screen.
-    trackScreenView(APP_TAB_SCREEN[appState as AppTab]);
+    trackScreenView(APP_TAB_SCREEN[appState]);
   }, [appState]);
+
+  // Discovery is paused only at capacity (R6). INFINITY members with a free slot keep discovering.
+  const discoveryPaused = matchingOn && Boolean(userState?.discoveryPaused);
 
   // The "one connection at a time" exclusivity overlay was shown — differentiator research signal.
   useEffect(() => {
-    if (userState?.state === UserState.HOOKED && appState === 'DISCOVERY') {
+    if (discoveryPaused && appState === 'DISCOVERY') {
       trackHookedStateView(HookedStateAction.SHOWN);
     }
-  }, [userState?.state, appState]);
+  }, [discoveryPaused, appState]);
 
   useEffect(() => {
     if (!currentUser && (profileError || userState?.state === UserState.ONBOARDING)) {
@@ -143,12 +169,10 @@ export function AppContent() {
   }, [currentUser, profileError, userState?.state, navigate]);
 
   useEffect(() => {
-    if (!activeMatchId && currentUser?.currentMatches?.length) {
-      setActiveMatchId(currentUser.currentMatches[0]);
-    } else if (!activeMatchId && userState?.matchIds?.length) {
-      setActiveMatchId(userState.matchIds[0]);
+    if (!activeMatchId && userState?.hooks?.length) {
+      setActiveMatchId(userState.hooks[0].matchId);
     }
-  }, [activeMatchId, currentUser, userState]);
+  }, [activeMatchId, userState?.hooks]);
 
   const handlePass = async (targetId: string) => {
     try {
@@ -175,6 +199,8 @@ export function AppContent() {
     if (result.matched) {
       showToast("It's a match! 🎉", 'success');
       setActiveMatchId(result.matchId || null);
+      // The chat list comes from the state's hooks; the new hook (and its chat pass) is there now.
+      await refetchUserState();
       setAppState('MATCHES');
     } else {
       showToast(
@@ -251,7 +277,24 @@ export function AppContent() {
     return <LoadingSpinner fullScreen />;
   }
 
-  const userPhoto = currentUser.photos?.[0] || (currentUser as any).pictures?.[0];
+  // R24: after a downgrade below the current hooks the member must choose which to keep before using
+  // the app; every conversation of theirs is suspended until then.
+  if (userState?.selectionRequired) {
+    return (
+      <KeepHooksChooser
+        userState={userState}
+        onKept={async () => {
+          await refetchUserState();
+          setAppState('MATCHES');
+        }}
+        onUpgrade={handleUpgrade}
+        upgrading={upgrading}
+      />
+    );
+  }
+
+  const userPhoto = ownAvatar(currentUser);
+  const capacity = userState?.effectiveCapacity ?? 1;
 
   return (
     <CallProvider currentUserId={currentUser.id}>
@@ -268,8 +311,8 @@ export function AppContent() {
       <TopBar
         activeTab={appState}
         onNavigateToChat={() => setAppState('MATCHES')}
-        onNavigateToLikes={() => setAppState('LIKES')}
-        onNavigateToDiscovery={() => setAppState('DISCOVERY')}
+        onNavigateToLikes={() => setAppState(resolveTab('LIKES', userState))}
+        onNavigateToDiscovery={() => setAppState(defaultTabFor(userState))}
         onOpenSettings={() => setAppState('SETTINGS')}
         paidTierName={paid ? paidTierName : undefined}
         userPhoto={userPhoto}
@@ -280,6 +323,7 @@ export function AppContent() {
         {/* Desktop Left Navigation Rail (items vertically centered in left corner) */}
         <DesktopSidebar
           activeTab={appState}
+          tabs={tabs}
           onTabChange={setAppState}
           currentUser={currentUser}
           onLogout={requestLogout}
@@ -301,7 +345,7 @@ export function AppContent() {
           {/* Active Screen View */}
           <main className="flex-1 overflow-hidden min-h-0 bg-bg">
             <AnimatePresence mode="wait">
-              {appState === 'DISCOVERY' && (
+              {appState === 'DISCOVERY' && matchingOn && (
               <motion.div
                 key="discovery"
                 initial={{ opacity: 0 }}
@@ -325,7 +369,7 @@ export function AppContent() {
                 />
               </motion.div>
             )}
-            {appState === 'LIKES' && (
+            {appState === 'LIKES' && matchingOn && (
               <motion.div
                 key="likes"
                 initial={{ opacity: 0 }}
@@ -354,7 +398,8 @@ export function AppContent() {
                   onRefetchState={async () => {
                     await refetchUserState();
                   }}
-                  onNavigateToDiscovery={() => setAppState('DISCOVERY')}
+                  onNavigateToDiscovery={matchingOn ? () => setAppState('DISCOVERY') : undefined}
+                  onOpenMatchingSettings={() => setAppState('SETTINGS')}
                 />
               </motion.div>
             )}
@@ -368,7 +413,7 @@ export function AppContent() {
                 className="h-full overflow-y-auto bg-bg text-text"
               >
                 <div className="max-w-[700px] mx-auto p-4 sm:p-8">
-                  <ProfileView user={currentUser} />
+                  <ProfileView user={currentUser} onSaved={refetchProfile} onOpenSettings={() => setAppState('SETTINGS')} />
                 </div>
               </motion.div>
             )}
@@ -388,6 +433,10 @@ export function AppContent() {
                     upgrading={upgrading}
                     onVerified={refetchProfile}
                     onLogout={requestLogout}
+                    onMatchingChanged={async () => {
+                      await Promise.all([refetchUserState(), refetchProfile()]);
+                    }}
+                    onOpenMatchingProfile={() => setAppState('PROFILE')}
                   />
                 </div>
               </motion.div>
@@ -398,6 +447,7 @@ export function AppContent() {
         {/* Instagram Mobile Bottom Tab Bar */}
         <BottomTabBar
           activeTab={appState}
+          tabs={tabs}
           onTabChange={setAppState}
           userPhoto={userPhoto}
           onOpenSearch={() => setIsSearchOpen(true)}
@@ -406,15 +456,17 @@ export function AppContent() {
       </div>
     </div>
 
-      {/* Modern Instagram Sliding Search Drawer */}
-      <SearchDrawer
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        candidates={candidates}
-        onSelectCandidate={(candidate) => {
-          setAppState('DISCOVERY');
-        }}
-      />
+      {/* Modern Instagram Sliding Search Drawer (searches the discovery deck, so matching only) */}
+      {matchingOn && (
+        <SearchDrawer
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          candidates={candidates}
+          onSelectCandidate={() => {
+            setAppState('DISCOVERY');
+          }}
+        />
+      )}
 
       {/* Modern Instagram Create Post / Profile Modal */}
       <CreateModal
@@ -423,26 +475,30 @@ export function AppContent() {
         onNavigateToProfile={() => setAppState('PROFILE')}
       />
 
-      {/* Connection Guard Overlay — Hooked state */}
+      {/* Discovery paused: the member holds as many hooks as their plan allows (R6). */}
       <AnimatePresence>
-        {userState?.state === UserState.HOOKED && appState === 'DISCOVERY' && (
+        {discoveryPaused && appState === 'DISCOVERY' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="discovery-paused-title"
             className="fixed inset-0 z-[60] bg-surface-card/95 backdrop-blur-sm flex items-center justify-center p-6 text-text"
           >
             <div className="max-w-sm w-full text-center space-y-6">
               <div className="w-16 h-16 border-2 border-accent rounded-full flex items-center justify-center mx-auto">
-                <Lock className="w-6 h-6 text-text" />
+                <Lock className="w-6 h-6 text-text" aria-hidden="true" />
               </div>
               <div className="space-y-3">
-                <h2 className="text-xl font-semibold text-text">
+                <h2 id="discovery-paused-title" className="text-xl font-semibold text-text">
                   You&rsquo;re Hooked
                 </h2>
                 <p className="text-sm text-text-secondary leading-relaxed">
-                  OneHook is about one connection at a time. Discovery is paused so you can focus on
-                  the person you&rsquo;re already getting to know.
+                  {capacity > 1
+                    ? `You have ${capacity} hooks, the most your plan allows. Discovery is paused until one of them ends, and nobody sees you in theirs.`
+                    : 'OneHook is about one connection at a time. Discovery is paused so you can focus on the person you’re already getting to know.'}
                 </p>
               </div>
               <button

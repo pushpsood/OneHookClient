@@ -2,13 +2,12 @@ import { sdkClient } from './sdk-client';
 import { UserPreferences } from '../types';
 
 /**
- * Matching preferences wrapper.
+ * Matching preferences wrapper (`/matching/{userId}/preferences`).
  *
- * The backend preferences contract is intentionally small: age range, distance,
- * and interested-in genders. Anything else (relationship type, lifestyle, etc.)
- * lives on the PROFILE, not on preferences. The former "filter log" and
- * "filter rule set" concepts are backend-internal ranking details and are NOT
- * exposed to clients.
+ * A Matching route: only called while the member's matching is ON. The PUT replaces the stored
+ * preferences (fields left out are cleared), so callers send the full current set with their change
+ * merged in (see `usePreferences`). `hidePastHooks` is INFINITY-only: the server answers 403
+ * PREMIUM_REQUIRED to turn it on on another tier and ignores it after a downgrade.
  */
 export const PreferencesApi = {
   get: async (userId: string): Promise<UserPreferences> => {
@@ -16,12 +15,10 @@ export const PreferencesApi = {
   },
 
   upsert: async (userId: string, prefs: Partial<UserPreferences>) => {
-    return sdkClient.updatePreferences({
-      userId,
-      minAge: prefs.minAge,
-      maxAge: prefs.maxAge,
-      maxDistanceKm: prefs.maxDistanceKm,
-      interestedInGenders: prefs.interestedInGenders,
-    });
+    // `currentSuggestion` is read-only (it comes with the GET); everything else round-trips.
+    const { currentSuggestion: _readOnly, userId: _ignored, ...fields } = prefs;
+    void _readOnly;
+    void _ignored;
+    return sdkClient.updatePreferences({ ...fields, userId });
   },
 };

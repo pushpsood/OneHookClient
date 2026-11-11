@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { subscriptionTierDisplayName } from 'onehook-api-client/membership';
 import { MOST_POPULAR_TIER, PAID_TIER_NAMES } from '../../config/membership.config';
 import { motion } from 'motion/react';
-import { SlidersHorizontal, UserCog, Sparkles, LogOut, Check } from 'lucide-react';
+import { SlidersHorizontal, UserCog, Sparkles, LogOut, Check, Heart } from 'lucide-react';
 import type { UserProfile } from '../../types';
 import { isPaidTier, useAppStore } from '../../store/app-store';
 import { AppearanceCard } from '../../components/profile/AppearanceCard';
@@ -10,6 +10,7 @@ import { AccountSettingsCard } from '../../components/profile/AccountSettingsCar
 import { DeviceManagementCard } from '../../components/profile/DeviceManagementCard';
 import { SetPasswordCard } from '../../components/profile/SetPasswordCard';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { MatchingSettingsCard } from './MatchingSettingsCard';
 
 const LivenessVerification = lazy(() =>
   import('../../components/profile/LivenessVerification').then((module) => ({
@@ -29,12 +30,18 @@ export function SettingsView({
   upgrading,
   onVerified,
   onLogout,
+  onMatchingChanged,
+  onOpenMatchingProfile,
 }: {
   user: UserProfile;
   onUpgrade?: () => void;
   upgrading?: boolean;
   onVerified?: () => void;
   onLogout?: () => void;
+  /** Re-read the state and profile after matching is turned on or off. */
+  onMatchingChanged?: () => Promise<void> | void;
+  /** Open the matching profile editor (Profile tab). */
+  onOpenMatchingProfile?: () => void;
 }) {
   const { userState } = useAppStore();
   const paid = useAppStore(isPaidTier);
@@ -51,7 +58,7 @@ export function SettingsView({
       <header className="pt-4 space-y-1">
         <h1 className="text-2xl font-bold text-text">Settings</h1>
         <p className="text-sm text-text-secondary">
-          Manage how OneHook looks, your account and security, and your OneHook AI experience.
+          Manage how OneHook looks, matching, your account and security, and your OneHook AI experience.
         </p>
       </header>
 
@@ -62,6 +69,22 @@ export function SettingsView({
         description="Appearance and app-wide preferences."
       >
         <AppearanceCard />
+      </SettingsSection>
+
+      {/* ── Matching (optional; chat works without it) ──────────── */}
+      <SettingsSection
+        icon={<Heart className="w-4 h-4" />}
+        title="Matching"
+        description="Find someone new in Discover. Optional: your chats work without it."
+      >
+        <MatchingSettingsCard
+          user={user}
+          userState={userState}
+          onChanged={async () => {
+            await onMatchingChanged?.();
+          }}
+          onOpenMatchingProfile={onOpenMatchingProfile}
+        />
       </SettingsSection>
 
       {/* ── Account ─────────────────────────────────────────────── */}
@@ -99,13 +122,17 @@ export function SettingsView({
         <SetPasswordCard />
         <DeviceManagementCard />
 
-        <Suspense fallback={null}>
-          <LivenessVerification
-            userId={user.id}
-            verified={Boolean(user.verified)}
-            onVerified={onVerified}
-          />
-        </Suspense>
+        {/* Verification marks the MATCHING profile (Profile writes `verified` on that item), so it is
+            offered once the member has one. */}
+        {user.matchingStatus && (
+          <Suspense fallback={null}>
+            <LivenessVerification
+              userId={user.id}
+              verified={Boolean(user.verified)}
+              onVerified={onVerified}
+            />
+          </Suspense>
+        )}
 
         {/* Sign out */}
         {onLogout && (

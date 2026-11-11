@@ -18,7 +18,9 @@ export class EvidenceError extends Error {
   constructor(
     message: string,
     public readonly status: number,
-    public readonly code?: string
+    public readonly code?: string,
+    /** The envelope's `retryable` flag, when the portal sent one. */
+    public readonly retryable?: boolean
   ) {
     super(message);
     this.name = 'EvidenceError';
@@ -123,20 +125,29 @@ function resolveBaseUrl(t: EvidenceTransport): string {
   return (t.baseUrl ?? portalModerationBaseUrl).replace(/\/+$/, '');
 }
 
-async function parseBody(res: Response): Promise<{ code?: string; message?: string }> {
+/**
+ * Read the portal error envelope `{"error": {"code", "message", "retryable"}}` (Smithy
+ * `ModerationEvidenceErrorBody`). Anything else (a proxy HTML page, an empty body) yields no code.
+ */
+async function parseBody(res: Response): Promise<{ code?: string; message?: string; retryable?: boolean }> {
   const text = await res.text().catch(() => '');
   let parsed: unknown = undefined;
   if (text) {
     try {
       parsed = JSON.parse(text);
     } catch {
-      parsed = text;
+      parsed = undefined;
     }
   }
-  const obj = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : undefined;
+  const envelope = typeof parsed === 'object' && parsed !== null ? (parsed as { error?: unknown }) : undefined;
+  const detail =
+    typeof envelope?.error === 'object' && envelope.error !== null
+      ? (envelope.error as Record<string, unknown>)
+      : undefined;
   return {
-    code: typeof obj?.code === 'string' ? (obj.code as string) : undefined,
-    message: typeof obj?.message === 'string' ? (obj.message as string) : undefined,
+    code: typeof detail?.code === 'string' ? detail.code : undefined,
+    message: typeof detail?.message === 'string' ? detail.message : undefined,
+    retryable: typeof detail?.retryable === 'boolean' ? detail.retryable : undefined,
   };
 }
 
@@ -164,8 +175,8 @@ async function postJson<T>(t: EvidenceTransport, path: string, body: unknown): P
     );
   }
   if (!res.ok) {
-    const { code, message } = await parseBody(res);
-    throw new EvidenceError(message || `Evidence request failed (${res.status})`, res.status, code);
+    const { code, message, retryable } = await parseBody(res);
+    throw new EvidenceError(message || `Evidence request failed (${res.status})`, res.status, code, retryable);
   }
   return (await res.json()) as T;
 }

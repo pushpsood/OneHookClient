@@ -234,6 +234,9 @@ describe('matchSuggestion — "find me ..." outcome', () => {
     expect(parseMemberChatResponse({ reply: 'x', mood: 'Happy', matchSuggestion: { status: 'NOPE' } }).matchSuggestion)
       .toBeUndefined();
     expect(parseMemberChatResponse({ reply: 'x', mood: 'Happy' }).matchSuggestion).toBeUndefined();
+    expect(
+      parseMemberChatResponse({ reply: 'x', mood: 'Happy', matchSuggestion: { status: 'MATCHING_OFF' } }).matchSuggestion
+    ).toEqual({ status: 'MATCHING_OFF', reasoning: '' });
   });
 
   it('renders a note for each outcome', () => {
@@ -241,5 +244,6 @@ describe('matchSuggestion — "find me ..." outcome', () => {
       .toBe('Added to your Discover feed: You asked for a reader');
     expect(matchSuggestionNote({ status: 'PREMIUM_REQUIRED', reasoning: '' })).toMatch(/Upgrade to Super/);
     expect(matchSuggestionNote({ status: 'UNAVAILABLE', reasoning: '' })).toMatch(/try again later/);
+    expect(matchSuggestionNote({ status: 'MATCHING_OFF', reasoning: '' })).toMatch(/Turn on matching/);
   });
 });

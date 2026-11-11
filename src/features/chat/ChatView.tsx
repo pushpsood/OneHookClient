@@ -12,27 +12,27 @@ import {
   Check,
   ArrowLeftRight,
   MapPin,
-  Briefcase,
   Sparkles,
   AlertTriangle,
+  Inbox,
+  PauseCircle,
 } from 'lucide-react';
-import type { ChatMessageDTO, UserProfile, UserStateSnapshot } from '../../types';
-import { StateApi } from '../../api/state';
-import { ProfileApi } from '../../api/profile';
-import {
-  DistanceApi,
-  BlocksApi,
-  ConnectApi,
-  ADD_BY_USERNAME_CONFIRMATION,
-  type BlockReason,
-} from '../../api/rest';
-import { useChatMessages } from '../../hooks/use-api';
+import type { BlockReason } from 'onehook-api-client';
+import type { ChatMessageDTO, Hook, UserProfile, UserStateSnapshot } from '../../types';
+import { HOOK_REQUEST_SENT_CONFIRMATION, StateApi } from '../../api/state';
+import { DistanceApi } from '../../api/rest';
+import { useChatMessages, useHookRequests, usePartnerProfiles } from '../../hooks/use-api';
+import { useAppStore } from '../../store/app-store';
+import { isMatchingOn } from '../../lib/app-mode';
+import { SUSPENDED_CALL_COPY, isConversationSuspended } from '../../lib/call-errors';
+import type { PartnerProfile } from '../../lib/profile-model';
+import { HookRequestsSheet } from './HookRequestsSheet';
+import { HOOK_COPY, originLabel, sendRequestErrorCopy } from './hook-copy';
 import { useCallEligibility } from '../../hooks/use-calls';
 import { useCall } from '../../app/CallProvider';
 import { CallButtons } from '../../components/call/CallButtons';
 import { CallHistoryItem } from '../../components/call/CallHistoryItem';
 import { CallApi, type Call } from '../../api/calls';
-import { ApiError } from '../../lib/api-client';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { useToast } from '../../components/common/Toast';
 import { FALLBACK_PROFILE_IMAGE } from '../../utils/profile-image';
@@ -55,7 +55,6 @@ import { WallpaperGrid } from '../../components/chat/WallpaperGrid';
 import {
   useConversationSort,
   sortConversations,
-  humanizeEnum,
   CONVERSATION_SORTS,
   getSortOption,
   type SortableConversation,
@@ -90,6 +89,7 @@ import { probeImage, probeVideo } from '../../lib/attachment-media';
 import type { AttachmentObjectUrlCache } from '../../lib/attachment-transport';
 import type { OutgoingAttachment, AttachmentTransferState } from '../../hooks/use-api';
 
+
 /** Sentinel selection value for the in-place Mr.OneHook AI conversation. */
 const MR_ONEHOOK = 'MR_ONEHOOK' as const;
 type Selection = string | typeof MR_ONEHOOK;
@@ -103,11 +103,16 @@ const BLOCK_REASONS: { value: BlockReason; label: string }[] = [
   { value: 'OTHER', label: 'Other' },
 ];
 
+/** A current hook as chat shows it: State's hook plus the partner's chat profile once it loads. */
 interface HydratedMatch {
   matchId: string;
+  /** Epoch ms the hook formed (for sorting by recency). */
   createdAt: number;
   peerId: string;
-  peerProfile?: UserProfile | null;
+  origin: Hook['origin'];
+  /** Read-only while a member of it chooses which hooks to keep after a downgrade. */
+  suspended: boolean;
+  peerProfile?: PartnerProfile | null;
 }
 
 export function ChatView({
@@ -117,6 +122,7 @@ export function ChatView({
   onSelectMatch,
   onRefetchState,
   onNavigateToDiscovery,
+  onOpenMatchingSettings,
 }: {
   key?: string;
   currentUser: UserProfile;
@@ -124,13 +130,15 @@ export function ChatView({
   activeMatchId?: string | null;
   onSelectMatch?: (matchId: string | null) => void;
   onRefetchState?: () => Promise<void>;
+  /** Present only while matching is ON (a chat-only member has no discovery). */
   onNavigateToDiscovery?: () => void;
+  onOpenMatchingSettings?: () => void;
 }) {
   const { showToast } = useToast();
   const [wallpaper, setWallpaper] = useChatWallpaper();
+  const bumpRequests = useAppStore((s) => s.bumpRequests);
+  const matchingOn = isMatchingOn(userState);
 
-  const [matches, setMatches] = useState<HydratedMatch[]>([]);
-  const [loadingMatches, setLoadingMatches] = useState(true);
   const [distances, setDistances] = useState<Record<string, number | null>>({});
   const [selection, setSelection] = useState<Selection>(activeMatchId || MR_ONEHOOK);
 
@@ -138,16 +146,24 @@ export function ChatView({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [shieldOpen, setShieldOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [reportReason, setReportReason] = useState<BlockReason | null>(null);
+  // Who the block confirmation is for: the open conversation's partner, or a request's sender.
+  const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string; fromRequest: boolean } | null>(null);
   const [reporting, setReporting] = useState(false);
   // New member report flow (moderation Phase 2). Chat-sourced reports render inside the conversation
   // (where the decrypted messages live, for the optional evidence share); profile-sourced reports
   // render here without evidence.
   const [chatReportOpen, setChatReportOpen] = useState(false);
   const [profileReportOpen, setProfileReportOpen] = useState(false);
+
+  // Hook requests (State): the badge and the sheet share one read.
+  const requests = useHookRequests();
+  const unlockedIncoming = requests.incoming.filter((r) => !r.locked).length;
+  const pendingIncoming = requests.incoming.length;
 
   const [portalNode, setPortalNode] = useState<HTMLElement | null>(() => {
     if (typeof document !== 'undefined') {
@@ -170,6 +186,45 @@ export function ChatView({
     }
   }, [selection]);
 
+  // The chat list is the state's hooks (both origins), each naming its partner (§12).
+  const hooks = userState?.hooks;
+  const peerIds = useMemo(() => (hooks ?? []).map((h) => h.peerId), [hooks]);
+  // Partner chat profiles, opened with the state's chat view pass (lib/view-pass.ts).
+  const partnerProfiles = usePartnerProfiles(peerIds);
+  const matches: HydratedMatch[] = useMemo(
+    () =>
+      (hooks ?? []).map((h) => ({
+        matchId: h.matchId,
+        createdAt: h.hookedAt * 1000,
+        peerId: h.peerId,
+        origin: h.origin,
+        suspended: h.suspended,
+        peerProfile: partnerProfiles[h.peerId],
+      })),
+    [hooks, partnerProfiles]
+  );
+  const loadingMatches = !userState;
+
+  // Coarsened distance is a Matching route: only while the member's matching is ON (a partner who is
+  // chat-only simply has none).
+  const peerKey = peerIds.join(',');
+  useEffect(() => {
+    if (!matchingOn || !peerKey) return;
+    let active = true;
+    for (const peerId of peerKey.split(',')) {
+      DistanceApi.get(peerId)
+        .then((d) => {
+          if (active) setDistances((prev) => ({ ...prev, [peerId]: d.available ? d.distanceKm : null }));
+        })
+        .catch(() => {
+          if (active) setDistances((prev) => ({ ...prev, [peerId]: null }));
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [matchingOn, peerKey]);
+
   // Analytics: the peer's profile was re-opened from chat (sustained-interest signal).
   useEffect(() => {
     if (profileOpen && selection && selection !== MR_ONEHOOK) {
@@ -184,73 +239,10 @@ export function ChatView({
     if (shieldOpen) trackSafetyUiOpen('report');
   }, [shieldOpen]);
 
-  const matchIds = useMemo(() => userState?.matchIds || [], [userState?.matchIds]);
-
-  const loadMatches = useCallback(async () => {
-    if (!matchIds.length) {
-      setMatches([]);
-      setLoadingMatches(false);
-      return;
-    }
-    setLoadingMatches(true);
-    try {
-      const records = await Promise.all(
-        matchIds.map(async (id) => {
-          try {
-            const record = await StateApi.getMatch(id);
-            const peerId = record.userA === currentUser.id ? record.userB : record.userA;
-            return {
-              matchId: id,
-              createdAt: record.createdAt || Date.now(),
-              peerId: peerId || '',
-            } as HydratedMatch;
-          } catch {
-            return { matchId: id, createdAt: Date.now(), peerId: '' } as HydratedMatch;
-          }
-        })
-      );
-      setMatches(records);
-
-      // Hydrate peer profiles + coarsened distances in the background (best-effort).
-      records.forEach(async (m, index) => {
-        if (!m.peerId) return;
-        try {
-          const profile: any = await ProfileApi.get(m.peerId);
-          if (profile) {
-            profile.id = profile.userId || m.peerId;
-            profile.name = profile.displayName || profile.name || 'Your Match';
-            profile.photos =
-              profile.pictures && profile.pictures.length > 0
-                ? profile.pictures
-                : profile.photos || [];
-          }
-          setMatches((prev) =>
-            prev.map((item, i) => (i === index ? { ...item, peerProfile: profile } : item))
-          );
-        } catch {
-          /* profile hydration is best-effort */
-        }
-        // Distance is coarsened server-side; unavailable stays null (never invented).
-        try {
-          const d = await DistanceApi.get(m.peerId);
-          setDistances((prev) => ({ ...prev, [m.peerId]: d.available ? d.distanceKm : null }));
-        } catch {
-          setDistances((prev) => ({ ...prev, [m.peerId]: null }));
-        }
-      });
-    } finally {
-      setLoadingMatches(false);
-    }
-  }, [matchIds, currentUser.id]);
-
-  useEffect(() => {
-    void loadMatches();
-  }, [loadMatches]);
-
   // Keep selection valid: honor an incoming activeMatchId, else keep the current one, else fall
   // back to the first match, else Mr.OneHook (which is always available).
   useEffect(() => {
-    if (activeMatchId) {
+    if (activeMatchId && matches.some((m) => m.matchId === activeMatchId)) {
       setSelection(activeMatchId);
       return;
     }
@@ -265,7 +257,7 @@ export function ChatView({
   const activeMatch = isMrOneHook ? null : matches.find((m) => m.matchId === selection) || null;
   const peerProfile = activeMatch?.peerProfile || null;
   const peerName = peerProfile?.displayName || peerProfile?.name || 'Your Match';
-  const peerPhoto = peerProfile?.photos?.[0] || FALLBACK_PROFILE_IMAGE;
+  const peerPhoto = peerProfile?.avatarKey || FALLBACK_PROFILE_IMAGE;
   const activeDistance = activeMatch ? distances[activeMatch.peerId] : undefined;
 
   const selectConversation = (next: Selection) => {
@@ -281,41 +273,43 @@ export function ChatView({
         activeDistance != null
           ? ` · ${activeDistance} km away`
           : ''
-      } · Open conversation picker`;
+      }${activeMatch?.suspended ? ' · paused' : ''} · Open conversation picker`;
 
-  // ── Report & block flow ──────────────────────────────────────────────────
-  // Block first; only if the block succeeds do we end the connection and move on. If the block
-  // fails we surface a clear error and change NOTHING.
-  const runReportAndBlock = async (reason: BlockReason) => {
+  const openBlockForActive = () => {
     if (!activeMatch?.peerId) return;
-    setReporting(true);
-    try {
-      await BlocksApi.create(activeMatch.peerId, reason);
-    } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : 'We couldn’t block this person. Please try again.';
-      showToast(message, 'error');
-      setReporting(false);
-      return; // NO state change on block failure.
-    }
+    setBlockTarget({ userId: activeMatch.peerId, name: peerName, fromRequest: false });
+    setReportReason('OTHER');
+  };
 
-    // Block succeeded — end the connection via the existing unhook call.
-    try {
-      await StateApi.releaseHook(activeMatch.matchId, reason);
-    } catch {
-      // The block already took effect; note the partial outcome but still move the user on.
-      showToast('Blocked. We couldn’t fully close the connection — it will retry.', 'info');
-    }
-
-    const remaining = matches.filter((m) => m.matchId !== activeMatch.matchId);
+  const moveOffConversation = (matchId: string) => {
+    const remaining = matches.filter((m) => m.matchId !== matchId);
     const next: Selection = remaining[0]?.matchId ?? MR_ONEHOOK;
     setSelection(next);
     onSelectMatch?.(next === MR_ONEHOOK ? null : next);
+  };
+
+  // ── Block flow (State: POST /state/blocks) ───────────────────────────────
+  // State releases any hook between the two (and erases its chat) and deletes pending requests both
+  // ways before it answers, so there is no separate unhook. If the block fails, NOTHING changes.
+  const runBlock = async (reason: BlockReason) => {
+    const target = blockTarget;
+    if (!target) return;
+    setReporting(true);
+    try {
+      await StateApi.blockUser(target.userId, reason);
+    } catch {
+      showToast('We couldn’t block this person. Please try again.', 'error');
+      setReporting(false);
+      return; // NO state change on block failure.
+    }
+    const hooked = matches.find((m) => m.peerId === target.userId);
+    if (hooked) moveOffConversation(hooked.matchId);
     setReportReason(null);
+    setBlockTarget(null);
     setReporting(false);
-    showToast('Blocked and reported. You’re protected.', 'success');
+    showToast(`${target.name} is blocked. You won’t hear from them again.`, 'success');
+    bumpRequests();
     if (onRefetchState) await onRefetchState();
-    await loadMatches();
   };
 
   // Standalone unmatch (ends the connection without a block) — used by the report flow's
@@ -328,15 +322,19 @@ export function ChatView({
       showToast('We couldn’t unmatch just now. Please try again.', 'error');
       return;
     }
-    const remaining = matches.filter((m) => m.matchId !== activeMatch.matchId);
-    const next: Selection = remaining[0]?.matchId ?? MR_ONEHOOK;
-    setSelection(next);
-    onSelectMatch?.(next === MR_ONEHOOK ? null : next);
+    moveOffConversation(activeMatch.matchId);
     setReporting(false);
     showToast('Unmatched.', 'success');
+    // A slot freed up: locked requests may have unlocked.
+    bumpRequests();
     if (onRefetchState) await onRefetchState();
-    await loadMatches();
   };
+
+  // A write was refused because the conversation is suspended (the state we hold is stale).
+  const handleSuspended = useCallback(() => {
+    showToast(HOOK_COPY.suspendedTitle + '. ' + HOOK_COPY.suspendedBody, 'info');
+    void onRefetchState?.();
+  }, [showToast, onRefetchState]);
 
   // Rows for the conversation picker: Mr.OneHook pinned first, then matches.
   const pickerRows: (SortableConversation & {
@@ -354,19 +352,16 @@ export function ChatView({
     const rows = matches.map((m) => {
       const p = m.peerProfile;
       const name = p?.displayName || p?.name || 'Your Match';
-      const location = p?.currentLocation || '';
-      const intent = humanizeEnum(p?.relationshipType);
-      const subtitle = [location, intent].filter(Boolean).join(' · ');
-      const photo = p?.photos?.[0] || FALLBACK_PROFILE_IMAGE;
+      const subtitle = m.suspended ? 'Paused' : originLabel(m.origin);
+      const photo = p?.avatarKey || FALLBACK_PROFILE_IMAGE;
       return {
         id: m.matchId,
         name,
         age: p?.age ?? null,
         distanceKm: distances[m.peerId] ?? null,
-        relationshipType: p?.relationshipType ?? null,
+        relationshipType: null,
         lastActivity: m.createdAt,
         photo,
-        transform: p?.pictureTransforms?.[photo],
         subtitle,
       };
     });
@@ -490,7 +485,7 @@ export function ChatView({
                               disabled={reporting}
                               onClick={() => {
                                 setShieldOpen(false);
-                                setReportReason('OTHER');
+                                openBlockForActive();
                               }}
                               className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
                               {...trackProps(UiElement.CHAT_BLOCK_OPEN)}
@@ -534,6 +529,9 @@ export function ChatView({
                   Chat settings
                 </div>
               </div>
+
+              {/* Hook requests (received + sent) */}
+              <RequestsButton count={pendingIncoming} unlocked={unlockedIncoming} onOpen={() => setRequestsOpen(true)} tooltip="center" />
 
               {/* Add by username */}
               <div className="relative group/add flex items-center">
@@ -659,7 +657,7 @@ export function ChatView({
                             disabled={reporting}
                             onClick={() => {
                               setShieldOpen(false);
-                              setReportReason('OTHER');
+                              openBlockForActive();
                             }}
                             className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-red-500 disabled:opacity-40 cursor-pointer"
                             {...trackProps(UiElement.CHAT_BLOCK_OPEN)}
@@ -703,6 +701,8 @@ export function ChatView({
               </div>
             </div>
 
+            <RequestsButton count={pendingIncoming} unlocked={unlockedIncoming} onOpen={() => setRequestsOpen(true)} tooltip="right" />
+
             <div className="relative group/add flex items-center">
               <button
                 type="button"
@@ -736,19 +736,26 @@ export function ChatView({
         </div>
       ) : activeMatch ? (
         <MatchConversation
-          key={activeMatch.matchId}
+          // Remount on suspend/resume so call eligibility (cached once unlocked) is read again.
+          key={`${activeMatch.matchId}${activeMatch.suspended ? ':paused' : ''}`}
           matchId={activeMatch.matchId}
           peerId={activeMatch.peerId || undefined}
           peerName={peerName}
           currentUserId={currentUser.id}
           wallpaper={wallpaper}
-          onReportPeer={() => setReportReason('OTHER')}
+          suspended={activeMatch.suspended}
+          onSuspended={handleSuspended}
+          onReportPeer={openBlockForActive}
           reportOpen={chatReportOpen}
           onCloseReport={() => setChatReportOpen(false)}
           onRequestUnmatch={() => void runUnmatch()}
         />
       ) : (
-        <EmptyState onNavigateToDiscovery={onNavigateToDiscovery} onOpenPicker={() => setPickerOpen(true)} />
+        <EmptyState
+          onNavigateToDiscovery={onNavigateToDiscovery}
+          onOpenPicker={() => setPickerOpen(true)}
+          onAddByUsername={() => setAddOpen(true)}
+        />
       )}
 
       {/* ── CONVERSATION PICKER ────────────────────────────────────────────── */}
@@ -761,7 +768,29 @@ export function ChatView({
       />
 
       {/* ── ADD BY USERNAME ───────────────────────────────────────────────── */}
-      <AddByUsernameModal open={addOpen} onClose={() => setAddOpen(false)} />
+      <AddByUsernameModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSent={() => bumpRequests()}
+      />
+
+      {/* ── HOOK REQUESTS (received and sent) ─────────────────────────────── */}
+      <HookRequestsSheet
+        open={requestsOpen}
+        onClose={() => setRequestsOpen(false)}
+        incoming={requests.incoming}
+        outgoing={requests.outgoing}
+        loading={requests.loading}
+        onChanged={() => bumpRequests()}
+        onAccepted={async (matchId) => {
+          if (onRefetchState) await onRefetchState();
+          selectConversation(matchId);
+        }}
+        onBlock={(userId, name) => {
+          setBlockTarget({ userId, name, fromRequest: true });
+          setReportReason('OTHER');
+        }}
+      />
 
       {/* ── WALLPAPER PICKER (shared store with the settings sheet) ────────── */}
       <WallpaperPickerModal
@@ -788,6 +817,8 @@ export function ChatView({
         peerName={peerName}
         peerPhoto={peerPhoto}
         distanceKm={activeDistance ?? null}
+        originText={activeMatch ? originLabel(activeMatch.origin) : undefined}
+        suspended={Boolean(activeMatch?.suspended)}
         onReport={
           !isMrOneHook && activeMatch?.peerId
             ? () => {
@@ -806,20 +837,24 @@ export function ChatView({
           source="profile"
           reportedUserId={activeMatch.peerId}
           reportedName={peerName}
-          onRequestBlock={() => setReportReason('OTHER')}
+          onRequestBlock={openBlockForActive}
           onRequestUnmatch={() => void runUnmatch()}
         />
       )}
 
       {/* ── REPORT & BLOCK (reason picker) ────────────────────────────────── */}
       <ReportBlockModal
-        open={reportReason !== null}
+        open={reportReason !== null && blockTarget !== null}
         reason={reportReason ?? 'OTHER'}
         onReason={setReportReason}
         submitting={reporting}
-        peerName={peerName}
-        onCancel={() => setReportReason(null)}
-        onConfirm={(reason) => void runReportAndBlock(reason)}
+        peerName={blockTarget?.name ?? peerName}
+        fromRequest={Boolean(blockTarget?.fromRequest)}
+        onCancel={() => {
+          setReportReason(null);
+          setBlockTarget(null);
+        }}
+        onConfirm={(reason) => void runBlock(reason)}
       />
     </motion.div>
   );
@@ -848,6 +883,7 @@ function Composer({
   placeholder,
   footerRight,
   leading,
+  readOnlyReason,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -856,22 +892,26 @@ function Composer({
   placeholder?: string;
   footerRight?: string;
   leading?: ReactNode;
+  /** The conversation is read-only (suspended); the field is disabled and says why. */
+  readOnlyReason?: string;
 }) {
   return (
     <div className="p-4 md:p-6 border-t border-border bg-surface-card shrink-0">
       <div className="relative flex items-center">
         {leading}
         <input
-          value={value}
+          value={readOnlyReason ? '' : value}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && onSend()}
+          onKeyDown={(e) => e.key === 'Enter' && !readOnlyReason && onSend()}
           type="text"
-          placeholder={placeholder || 'Write a message…'}
-          className="w-full py-3 pr-20 pl-0 border-b border-border focus:border-accent transition-all outline-none text-sm bg-transparent placeholder:text-text-muted text-text"
+          disabled={Boolean(readOnlyReason)}
+          aria-label={readOnlyReason ?? 'Message'}
+          placeholder={readOnlyReason || placeholder || 'Write a message…'}
+          className="w-full py-3 pr-20 pl-0 border-b border-border focus:border-accent transition-all outline-none text-sm bg-transparent placeholder:text-text-muted text-text disabled:cursor-not-allowed"
         />
         <button
           onClick={onSend}
-          disabled={disabled || !value.trim()}
+          disabled={disabled || Boolean(readOnlyReason) || !value.trim()}
           {...trackProps(UiElement.CHAT_SEND_BUTTON)}
           className="absolute right-0 bottom-3 text-xs font-semibold text-ig-blue hover:opacity-80 transition-opacity disabled:opacity-30 flex items-center gap-1 cursor-pointer"
         >
@@ -1027,6 +1067,8 @@ function MatchConversation({
   peerName,
   currentUserId,
   wallpaper,
+  suspended,
+  onSuspended,
   onReportPeer,
   reportOpen,
   onCloseReport,
@@ -1038,6 +1080,10 @@ function MatchConversation({
   peerName: string;
   currentUserId: string;
   wallpaper: ChatWallpaper;
+  /** Read-only: a member of this hook must choose which hooks to keep (R24, E23). */
+  suspended?: boolean;
+  /** A write was refused with CONVERSATION_SUSPENDED (the state we hold was stale). */
+  onSuspended?: () => void;
   onReportPeer?: () => void;
   reportOpen?: boolean;
   onCloseReport?: () => void;
@@ -1185,14 +1231,15 @@ function MatchConversation({
   }, [messages, markAsRead]);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (!input.trim() || suspended) return;
     try {
       await sendMessage(input);
       setInput('');
       // The local user just sent — re-check whether that satisfied the "both messaged" gate.
       eligibility.recheck();
     } catch (err) {
-      if (err instanceof ApiError) showToast(err.message, 'error');
+      if (isConversationSuspended(err)) onSuspended?.();
+      else if (err instanceof Error && err.message) showToast(err.message, 'error');
     }
   };
 
@@ -1201,10 +1248,11 @@ function MatchConversation({
       try {
         await sendAttachment(attachment);
       } catch (err) {
-        showToast(err instanceof Error ? err.message : 'That attachment could not be sent.', 'error');
+        if (isConversationSuspended(err)) onSuspended?.();
+        else showToast(err instanceof Error ? err.message : 'That attachment could not be sent.', 'error');
       }
     },
-    [sendAttachment, showToast]
+    [sendAttachment, showToast, onSuspended]
   );
 
   const handlePickFile = useCallback(
@@ -1269,13 +1317,25 @@ function MatchConversation({
 
   return (
     <>
+      {suspended && (
+        <div
+          role="status"
+          className="shrink-0 px-4 py-2.5 flex items-start gap-2 border-b border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+        >
+          <PauseCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+          <p className="text-xs leading-relaxed">
+            <span className="font-semibold">{HOOK_COPY.suspendedTitle}.</span> {HOOK_COPY.suspendedBody}
+          </p>
+        </div>
+      )}
       <div className="shrink-0 h-10 px-4 flex items-center justify-end border-b border-border/60 bg-surface-card/60">
         {peerId && (
           <CallButtons
             peerName={peerName}
             disabled={call.active}
-            locked={eligibility.locked}
-            lockMessage={eligibility.lockMessage}
+            // A suspended hook refuses call signalling (CONVERSATION_SUSPENDED): explain instead of ringing.
+            locked={Boolean(suspended) || eligibility.locked}
+            lockMessage={suspended ? SUSPENDED_CALL_COPY : eligibility.lockMessage}
             onAudio={() =>
               peerId && void call.startCall({ matchId, peerId, peerName, media: 'AUDIO' })
             }
@@ -1387,9 +1447,10 @@ function MatchConversation({
         value={input}
         onChange={setInput}
         onSend={handleSend}
+        readOnlyReason={suspended ? HOOK_COPY.suspendedComposer : undefined}
         leading={
           <AttachmentComposer
-            disabled={loading}
+            disabled={loading || Boolean(suspended)}
             onPickFile={(file, kind) => void handlePickFile(file, kind)}
             onVoiceNote={handleVoiceNote}
           />
@@ -1924,17 +1985,19 @@ function ExcerptReviewPanel({
 function EmptyState({
   onNavigateToDiscovery,
   onOpenPicker,
+  onAddByUsername,
 }: {
   onNavigateToDiscovery?: () => void;
   onOpenPicker: () => void;
+  onAddByUsername: () => void;
 }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 md:p-12 text-center bg-bg text-text">
       <div className="max-w-md w-full bg-surface-card border border-border p-8 md:p-12 space-y-6 shadow-sm rounded-2xl">
         <h3 className="text-xl font-bold text-text">Pick a conversation</h3>
         <p className="text-xs text-text-secondary leading-relaxed">
-          Open the picker to chat with a connection or with Mr.OneHook, or explore Discovery for new
-          connections.
+          Open the picker to chat with a connection or with Mr.OneHook, or add someone you know by
+          their username{onNavigateToDiscovery ? ', or explore Discovery for new connections' : ''}.
         </p>
         <div className="flex flex-col gap-3">
           <button
@@ -1943,6 +2006,13 @@ function EmptyState({
             className="w-full py-3 bg-accent text-bg text-xs font-semibold rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
           >
             Open conversations
+          </button>
+          <button
+            onClick={onAddByUsername}
+            {...trackProps(UiElement.CHAT_ADD_HOOK_OPEN)}
+            className="w-full py-3 border border-border text-text text-xs font-semibold rounded-xl hover:bg-surface-hover transition-colors cursor-pointer"
+          >
+            Add by username
           </button>
           {onNavigateToDiscovery && (
             <button
@@ -1954,6 +2024,54 @@ function EmptyState({
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Header button for the hook requests sheet, with a count of received requests. */
+function RequestsButton({
+  count,
+  unlocked,
+  onOpen,
+  tooltip,
+}: {
+  count: number;
+  unlocked: number;
+  onOpen: () => void;
+  tooltip: 'center' | 'right';
+}) {
+  const label =
+    count === 0
+      ? 'Hook requests'
+      : `Hook requests, ${count} received${unlocked < count ? ` (${count - unlocked} locked)` : ''}`;
+  return (
+    <div className="relative group/requests flex items-center">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="relative w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
+        title="Requests"
+        aria-label={label}
+        aria-haspopup="dialog"
+        {...trackProps(UiElement.CHAT_REQUESTS_OPEN)}
+      >
+        <Inbox className="w-5 h-5 stroke-[1.75]" />
+        {count > 0 && (
+          <span
+            aria-hidden="true"
+            className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none"
+          >
+            {count > 9 ? '9+' : count}
+          </span>
+        )}
+      </button>
+      <div
+        className={`pointer-events-none absolute ${
+          tooltip === 'center' ? 'left-1/2 -translate-x-1/2' : 'right-0'
+        } top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/requests:opacity-100 transition-all duration-150 shadow-md z-50`}
+      >
+        Requests
       </div>
     </div>
   );
@@ -2142,26 +2260,34 @@ function ConversationPickerModal({
 // Add by username
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AddByUsernameModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function AddByUsernameModal({
+  open,
+  onClose,
+  onSent,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSent: () => void;
+}) {
   const { showToast } = useToast();
   const [username, setUsername] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
-    const handle = username.trim();
+    const handle = username.trim().replace(/^@/, '');
     if (!handle || submitting) return;
     setSubmitting(true);
     try {
-      await ConnectApi.byUsername(handle);
+      await StateApi.sendHookRequest(handle);
       // CRITICAL: identical confirmation for every outcome — never reveal whether the handle
-      // exists, is already connected, or is blocked.
-      showToast(ADD_BY_USERNAME_CONFIRMATION, 'success');
+      // exists, is full, has blocked you, or declines (R4, E10).
+      showToast(HOOK_REQUEST_SENT_CONFIRMATION, 'success');
       setUsername('');
+      onSent();
       onClose();
     } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : 'We couldn’t send that just now. Please try again.';
-      showToast(message, 'error');
+      // Only the caller's own state produces an error (no free slot, choosing hooks, not set up).
+      showToast(sendRequestErrorCopy(err), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -2189,12 +2315,18 @@ function AddByUsernameModal({ open, onClose }: { open: boolean; onClose: () => v
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Enter someone&rsquo;s username to send a connection request.
+            <p id="add-by-username-help" className="text-xs text-text-secondary leading-relaxed">
+              Enter the username of someone you know. If they accept your request, you&rsquo;re
+              hooked and can chat. It counts toward your plan&rsquo;s hooks, like a match does.
             </p>
             <input
               type="text"
               autoFocus
+              aria-label="Username"
+              aria-describedby="add-by-username-help"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && submit()}
@@ -2284,15 +2416,21 @@ function ProfileInspectorModal({
   peerName,
   peerPhoto,
   distanceKm,
+  originText,
+  suspended,
   onReport,
 }: {
   open: boolean;
   onClose: () => void;
   isMrOneHook: boolean;
-  peerProfile: UserProfile | null;
+  /** The partner's CHAT profile: all a hook partner ever sees here (E51, E66). */
+  peerProfile: PartnerProfile | null;
   peerName: string;
   peerPhoto: string;
   distanceKm: number | null;
+  /** How the hook formed. */
+  originText?: string;
+  suspended?: boolean;
   onReport?: () => void;
 }) {
   return (
@@ -2342,10 +2480,11 @@ function ProfileInspectorModal({
                     <span className="text-base opacity-50 font-serif">, {peerProfile.age}</span>
                   )}
                 </div>
-                {peerProfile?.currentLocation && (
-                  <div className="flex items-center gap-1.5 text-xs opacity-60">
-                    <MapPin className="w-3.5 h-3.5 shrink-0" />
-                    <span>{peerProfile.currentLocation}</span>
+                {originText && <div className="text-xs opacity-60">{originText}</div>}
+                {suspended && (
+                  <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                    <PauseCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                    <span>{HOOK_COPY.suspendedTitle}</span>
                   </div>
                 )}
                 {/* Distance is coarsened server-side; only shown when available. */}
@@ -2354,22 +2493,6 @@ function ProfileInspectorModal({
                     <MapPin className="w-3.5 h-3.5 shrink-0" />
                     <span>{distanceKm} km away</span>
                   </div>
-                )}
-                {peerProfile?.work && (
-                  <div className="flex items-center gap-1.5 text-xs opacity-60">
-                    <Briefcase className="w-3.5 h-3.5 shrink-0" />
-                    <span>{peerProfile.work}</span>
-                  </div>
-                )}
-                {humanizeEnum(peerProfile?.relationshipType) && (
-                  <div className="text-xs opacity-60">
-                    Looking for: {humanizeEnum(peerProfile?.relationshipType)}
-                  </div>
-                )}
-                {peerProfile?.bio && (
-                  <p className="text-xs leading-relaxed opacity-70 italic border-t border-border pt-4">
-                    &ldquo;{peerProfile.bio}&rdquo;
-                  </p>
                 )}
                 {onReport && (
                   <button
@@ -2400,6 +2523,7 @@ function ReportBlockModal({
   onReason,
   submitting,
   peerName,
+  fromRequest,
   onCancel,
   onConfirm,
 }: {
@@ -2408,6 +2532,8 @@ function ReportBlockModal({
   onReason: (r: BlockReason) => void;
   submitting: boolean;
   peerName: string;
+  /** Blocking the sender of a hook request rather than a hook partner. */
+  fromRequest?: boolean;
   onCancel: () => void;
   onConfirm: (reason: BlockReason) => void;
 }) {
@@ -2420,14 +2546,20 @@ function ReportBlockModal({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-sm flex items-center justify-center p-6"
         >
-          <div className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-6 shadow-2xl rounded-2xl">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="block-dialog-title"
+            className="max-w-md w-full bg-surface-card text-text border border-border p-8 space-y-6 shadow-2xl rounded-2xl"
+          >
             <div className="flex items-center gap-3 text-red-500">
-              <AlertTriangle className="w-6 h-6" />
-              <h3 className="text-xl font-bold text-text">Block</h3>
+              <AlertTriangle className="w-6 h-6" aria-hidden="true" />
+              <h3 id="block-dialog-title" className="text-xl font-bold text-text">Block {peerName}?</h3>
             </div>
             <p className="text-xs text-text-secondary leading-relaxed">
-              Blocking {peerName} ends this connection and prevents further contact. Your chat history
-              is archived. This can&rsquo;t be undone from here.
+              {fromRequest
+                ? `Their request is removed and they can't send you another. They are not told.`
+                : `This ends your hook and erases your chat with ${peerName}. They can't send you a request again. They are not told.`}
             </p>
             <div className="space-y-2">
               <label className="text-[10px] uppercase tracking-widest font-bold text-text-secondary block">

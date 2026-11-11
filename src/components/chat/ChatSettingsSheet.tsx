@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import {
   ChatSettingsApi,
+  type ChatNotificationKey,
   type ChatSettings,
   type LastSeenVisibility,
 } from '../../api/rest';
@@ -12,6 +13,79 @@ import { useToast } from '../common/Toast';
 import type { ChatWallpaper } from '../../lib/chat-appearance';
 import { WallpaperGrid } from './WallpaperGrid';
 import { UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
+import { useAppStore } from '../../store/app-store';
+import { isMatchingOn } from '../../lib/app-mode';
+
+/**
+ * The `targetId` each chat-settings toggle reports: the setting's snake_case key, the same string iOS
+ * (ChatSettingsViewController `settingKey`) and Android (`NotificationSwitch.settingKey`) send. The
+ * chat.smithy members are camelCase; the telemetry keys are not.
+ */
+export const CHAT_SETTING_TELEMETRY_KEY = {
+  messageNotifications: 'message_notifications',
+  showPreviews: 'show_previews',
+  reactionNotifications: 'reaction_notifications',
+  readReceipts: 'read_receipts',
+  typingIndicators: 'typing_indicators',
+  screenshotProtection: 'screenshot_protection',
+  connectionNotifications: 'connection_notifications',
+  likeNotifications: 'like_notifications',
+} as const satisfies Partial<Record<keyof ChatSettings, string>>;
+
+/** A chat setting shown as an on/off toggle that reports a `targetId`. */
+export type ChatToggleKey = keyof typeof CHAT_SETTING_TELEMETRY_KEY;
+
+/**
+ * The member-level push switches. They live in Chat settings so chat-only members (matching OFF) can
+ * reach them. "Likes" only matters while matching is ON, so it is shown only then.
+ */
+export function notificationSwitches(
+  matchingOn: boolean
+): { key: ChatNotificationKey; label: string; hint: string }[] {
+  const all: { key: ChatNotificationKey; label: string; hint: string; matchingOnly: boolean }[] = [
+    { key: 'connectionNotifications', label: 'Connections', hint: 'Hooks, requests, calls.', matchingOnly: false },
+    { key: 'likeNotifications', label: 'Likes', hint: 'When someone likes you.', matchingOnly: true },
+  ];
+  return all.filter((s) => matchingOn || !s.matchingOnly).map(({ key, label, hint }) => ({ key, label, hint }));
+}
+
+/** The "Notifications" section. Each switch saves through the sheet's partial update. */
+export function NotificationSwitches({
+  settings,
+  matchingOn,
+  onToggle,
+}: {
+  settings: Pick<ChatSettings, ChatNotificationKey>;
+  matchingOn: boolean;
+  onToggle: (change: Partial<Pick<ChatSettings, ChatNotificationKey>>) => void;
+}) {
+  return (
+    <div className="space-y-3 border-t border-border pt-5">
+      <h3 className="text-[10px] uppercase tracking-widest font-bold opacity-60 block">Notifications</h3>
+      {notificationSwitches(matchingOn).map((s) => (
+        <label
+          key={s.key}
+          {...trackProps(UiElement.CHAT_SETTINGS_NOTIFICATION_TOGGLE, {
+            value: settings[s.key] ? 'off' : 'on',
+            targetId: CHAT_SETTING_TELEMETRY_KEY[s.key],
+          })}
+          className="flex items-center justify-between gap-4 cursor-pointer"
+        >
+          <span className="flex flex-col">
+            <span className="text-sm">{s.label}</span>
+            <span className="text-[11px] text-text-muted leading-tight">{s.hint}</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={Boolean(settings[s.key])}
+            onChange={(e) => onToggle({ [s.key]: e.target.checked })}
+            className="w-5 h-5 accent-accent shrink-0"
+          />
+        </label>
+      ))}
+    </div>
+  );
+}
 
 /**
  * Chat & appearance settings. Reads `GET /chat/settings` on open and persists each change with a
@@ -30,6 +104,7 @@ export function ChatSettingsSheet({
   onChooseWallpaper: (id: string) => void;
 }) {
   const { showToast } = useToast();
+  const matchingOn = useAppStore((s) => isMatchingOn(s.userState));
   const [settings, setSettings] = useState<ChatSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +147,7 @@ export function ChatSettingsSheet({
     }
   };
 
-  const toggles: { key: keyof ChatSettings; label: string; kind: 'notification' | 'privacy'; hint?: string }[] = [
+  const toggles: { key: ChatToggleKey; label: string; kind: 'notification' | 'privacy'; hint?: string }[] = [
     { key: 'messageNotifications', label: 'Message notifications', kind: 'notification' },
     { key: 'showPreviews', label: 'Show message previews', kind: 'notification' },
     { key: 'reactionNotifications', label: 'Reaction notifications', kind: 'notification' },
@@ -131,7 +206,7 @@ export function ChatSettingsSheet({
                           t.kind === 'notification'
                             ? UiElement.CHAT_SETTINGS_NOTIFICATION_TOGGLE
                             : UiElement.CHAT_SETTINGS_PRIVACY_TOGGLE,
-                          { value: settings[t.key] ? 'off' : 'on', targetId: t.key }
+                          { value: settings[t.key] ? 'off' : 'on', targetId: CHAT_SETTING_TELEMETRY_KEY[t.key] }
                         )}
                         className="flex items-center justify-between gap-4 cursor-pointer"
                       >
@@ -145,6 +220,12 @@ export function ChatSettingsSheet({
                       </label>
                     ))}
                   </div>
+
+                  <NotificationSwitches
+                    settings={settings}
+                    matchingOn={matchingOn}
+                    onToggle={(change) => void patch(change)}
+                  />
 
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-widest font-bold opacity-60 block">

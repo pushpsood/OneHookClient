@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { DiscoveryCandidate, UserProfile } from '../../types';
 import type { ApiError } from '../../lib/api-client';
+import { errorMessage } from '../../lib/api-errors';
+import { DISCOVER_LOAD_FAILED_COPY } from '../../hooks/use-api';
 import type { LikeTargetType } from '../../api/rest';
 import { MatchingApi, type DiscoveryCategory } from '../../api/matching';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
@@ -156,7 +158,7 @@ export function DiscoveryView({
       <div className="h-full flex items-center justify-center bg-bg text-text p-6">
         <div className="max-w-sm w-full text-center space-y-4">
           <h2 className="text-lg font-semibold text-text">Couldn't load discovery</h2>
-          <p className="text-sm text-text-secondary">{error.message}</p>
+          <p className="text-sm text-text-secondary">{errorMessage(error, DISCOVER_LOAD_FAILED_COPY)}</p>
           <button
             onClick={onRetry}
             {...trackProps(UiElement.DISCOVER_RETRY)}

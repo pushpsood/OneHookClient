@@ -1,20 +1,15 @@
 /**
- * Thin authenticated REST helper for endpoints that the generated Smithy SDK
- * (`onehook-api-client@1.0.14`) does NOT yet model.
- *
- * The generated `sdkClient` remains the single source of truth for every operation it exposes
- * (profiles, discovery, state, chat messaging, chat settings, add-by-username, …). This helper now
- * exists ONLY for the matching safety/proximity endpoints, which are implemented on the service and
- * exposed through API Gateway but are not yet declared in `matching.smithy`, so codegen cannot see
- * them:
+ * Thin authenticated REST helper for the Matching endpoints whose request bodies the generated
+ * Smithy SDK does not serialise the way the service expects (comment-to-like swipes, received likes,
+ * roses, suggestions, traditions) and for the partner distance, which is not modelled:
  *
  *   • GET  /matching/distance/{userId}
- *   • GET|POST|DELETE /matching/blocks
+ *   • POST /matching/swipe, GET /matching/likes, GET /matching/roses
+ *   • /matching/suggestions, /matching/traditions
  *
- * Chat settings and add-by-username are served by the SDK as of 1.0.14; the wrappers below keep their
- * original signatures so callers were unaffected by that migration. Once `matching.smithy` declares
- * the block/distance operations and a new SDK is published, the remaining wrappers can move too and
- * this file can go away.
+ * Every /matching/* route answers 403 MATCHING_OFF unless the caller's matching is ON, so nothing here
+ * may be called for a chat-only member (docs/chat-only-profiles.md §12). Blocks, reports and hook
+ * requests are State routes and live in api/state.ts.
  *
  * It authenticates exactly like `sdk-client.ts` does — the Cognito **ID token** (falling back to the
  * access token) is read from the Amplify auth session and attached as a `Bearer` token — and it
@@ -22,6 +17,7 @@
  */
 import { apiBaseUrl } from '../utils/env.config';
 import { ApiError } from '../lib/api-client';
+import { bodyCode } from '../lib/api-errors';
 import { sdkClient } from './sdk-client';
 
 /**
@@ -108,13 +104,14 @@ async function request<T>(
   }
 
   if (!res.ok) {
-    const detail = parsed as { message?: string; code?: string } | string | undefined;
+    // Every OneHook API answers `{error: <human message>, code: <CODE>}` (common.smithy ErrorBody).
+    const error =
+      parsed && typeof parsed === 'object' ? (parsed as { error?: unknown }).error : undefined;
     const message =
-      (typeof detail === 'object' && detail?.message) ||
-      (typeof detail === 'string' && detail) ||
+      (typeof error === 'string' && error) ||
+      (typeof parsed === 'string' && parsed) ||
       `Request failed with status ${res.status}`;
-    const code = typeof detail === 'object' ? detail?.code : undefined;
-    throw new ApiError(message, res.status, code, parsed);
+    throw new ApiError(message, res.status, bodyCode(parsed), parsed);
   }
 
   return parsed as T;
@@ -135,34 +132,6 @@ export interface DistanceResponse {
 export const DistanceApi = {
   get: (userId: string): Promise<DistanceResponse> =>
     request<DistanceResponse>('GET', `/matching/distance/${encodeURIComponent(userId)}`),
-};
-
-// ── Blocks ──────────────────────────────────────────────────────────────────
-
-export type BlockReason =
-  | 'HARASSMENT'
-  | 'SPAM'
-  | 'FAKE_PROFILE'
-  | 'INAPPROPRIATE_CONTENT'
-  | 'SAFETY_CONCERN'
-  | 'OTHER';
-
-export interface BlockRecord {
-  blockedUserId: string;
-  reason?: BlockReason;
-  details?: string;
-  createdAt?: number;
-}
-
-export const BlocksApi = {
-  list: (): Promise<{ blocks: BlockRecord[] } | BlockRecord[]> =>
-    request('GET', '/matching/blocks'),
-
-  create: (blockedUserId: string, reason?: BlockReason, details?: string): Promise<void> =>
-    request('POST', '/matching/blocks', { blockedUserId, reason, details }),
-
-  remove: (blockedUserId: string): Promise<void> =>
-    request('DELETE', `/matching/blocks/${encodeURIComponent(blockedUserId)}`),
 };
 
 // ── Mr. OneHook suggestion ────────────────────────────────────────────────────
@@ -231,41 +200,42 @@ export interface ChatSettings {
    * battery and may download translation models. See OneHookBackend/docs/voice-video-calls.md D13.
    */
   helpTranslateCaptions: boolean;
+  /**
+   * Pushes about the member's hooks: a new hook, hook requests, missed calls, paused/resumed chats and
+   * quiet-conversation nudges. Default on. Applies to chat-only members too.
+   */
+  connectionNotifications: boolean;
+  /** Pushes when someone likes the member. Only matters while matching is ON. Default on. */
+  likeNotifications: boolean;
+}
+
+/** The settings keys that are push-notification switches (each reports a snake_case `targetId`). */
+export type ChatNotificationKey = 'connectionNotifications' | 'likeNotifications';
+
+/**
+ * Both GET and PUT answer `{ settings: ChatSettings }`. The two notification switches default to on
+ * (chat.smithy), so a response that predates them reads as on rather than off.
+ */
+function unwrapSettings(out: { settings?: unknown }): ChatSettings {
+  if (!out?.settings) throw new ApiError('Chat settings response had no settings.', 500);
+  const s = out.settings as Partial<ChatSettings>;
+  return {
+    ...(s as ChatSettings),
+    connectionNotifications: s.connectionNotifications ?? true,
+    likeNotifications: s.likeNotifications ?? true,
+  };
 }
 
 export const ChatSettingsApi = {
-  // Backed by the generated SDK as of onehook-api-client@1.0.14, which added GetChatSettings /
-  // UpdateChatSettings. The wrapper shape is kept so callers did not have to change.
-  get: async (): Promise<ChatSettings> =>
-    (await (sdkClient as any).getChatSettings({})) as ChatSettings,
+  // Backed by the generated SDK (GetChatSettings / UpdateChatSettings). The SDK serialiser only sends
+  // modelled members, so the SDK must model every field sent here (connectionNotifications and
+  // likeNotifications need the client generated from the current chat.smithy).
+  get: async (): Promise<ChatSettings> => unwrapSettings(await sdkClient.getChatSettings({})),
 
-  /** Partial update — send only the fields that changed. */
+  /** Partial update: send only the fields that changed. */
   update: async (patch: Partial<ChatSettings>): Promise<ChatSettings> =>
-    (await (sdkClient as any).updateChatSettings(patch)) as ChatSettings,
+    unwrapSettings(await sdkClient.updateChatSettings(patch)),
 };
-
-// ── Add by username ──────────────────────────────────────────────────────────
-
-/**
- * Send a connection request by username. The server returns a SINGLE constant status regardless of
- * whether the handle exists, is already connected, or is blocked — so callers MUST show identical
- * confirmation copy in every success case and never branch on the result. See
- * {@link ADD_BY_USERNAME_CONFIRMATION}.
- *
- * Backed by the generated SDK as of onehook-api-client@1.0.14 (SwipeByUsername).
- */
-export const ConnectApi = {
-  byUsername: async (username: string): Promise<{ status: string }> =>
-    (await (sdkClient as any).swipeByUsername({ username })) as { status: string },
-};
-
-/**
- * The ONLY confirmation copy allowed after an add-by-username request. It must be identical for
- * every outcome so the flow can never reveal whether a handle exists, is already connected, or is
- * blocked.
- */
-export const ADD_BY_USERNAME_CONFIRMATION =
-  "Request sent — if they add you back, you'll be connected";
 
 // ── Swipe (Hinge-style comment-to-like) & received likes ──────────────────────
 
@@ -276,7 +246,7 @@ export const ADD_BY_USERNAME_CONFIRMATION =
  * `{ targetId, direction, viewedSection }` — it has NO `comment`, `likeTargetType` or
  * `likeTargetRef`, and no `GetReceivedLikes` operation at all. Rather than force the new fields
  * through the stale SDK (they would be silently dropped by the generated serializer), both calls go
- * through this thin REST helper — exactly like the block/distance endpoints above — until a newer
+ * through this thin REST helper — like the distance endpoint above — until a newer
  * SDK models them. The caller's identity is the verified Cognito sub that API Gateway injects as
  * `X-User-Id`; the Bearer token attached by {@link getAuthToken} is all this helper needs to send.
  */
@@ -297,7 +267,10 @@ export interface SwipeResult {
 /** A single received like as returned by GET /matching/likes (newest first). */
 export interface ReceivedLike {
   fromUserId: string;
-  /** null only for legacy add-by-username likes, which carry no comment/target. */
+  /**
+   * Nullable in the model, which still documents the removed `SwipeByUsername` like. Every like now
+   * carries a comment and a target; null is rendered as no comment.
+   */
   comment: string | null;
   likeTargetType: string | null;
   likeTargetRef: string | null;
@@ -307,6 +280,8 @@ export interface ReceivedLike {
 
 export interface ReceivedLikesResponse {
   likes: ReceivedLike[];
+  /** Pass for the likers' matching profiles; absent when there are no likes. */
+  viewPass?: string;
   count: number;
 }
 
@@ -324,7 +299,7 @@ export const SwipeApi = {
   /**
    * LIKE (RIGHT) — Hinge-style: always carries a comment plus the specific element being liked.
    * `likeTargetRef` is required for every type except BIO (the server normalises BIO's ref to
-   * "bio"). Rejections surface as an {@link ApiError} (HTTP 400, code VALIDATION_FAILED) so callers
+   * "bio"). Rejections surface as an {@link ApiError} (HTTP 400, code BAD_REQUEST) so callers
    * can show the message and refrain from advancing the deck.
    */
   like: (input: {
@@ -367,11 +342,10 @@ export const ReceivedLikesApi = {
     request<ReceivedLikesResponse>('GET', '/matching/likes'),
 };
 
-// ── Member reports (POST /matching/reports) ───────────────────────────────────
+// ── Member reports (POST /state/reports) ───────────────────────────────────────
 
 /**
- * Report category superset (OneHookBackend packages/matching `ReportCategory`). A new client sends
- * these codes; the server maps them onto the legacy block `reason` allowlist for old-client compat.
+ * Report categories (State `ReportCategory`, state.smithy). Sent by {@link StateApi.reportMember}.
  */
 export type ReportCategoryCode =
   | 'HARASSMENT'
@@ -386,7 +360,7 @@ export type ReportCategoryCode =
   | 'OFF_PLATFORM_HARM'
   | 'OTHER';
 
-/** Body of `POST /matching/reports` (OneHookBackend matching `CreateReportRequest`). */
+/** Body of `POST /state/reports` (state.smithy `ReportMemberRequest`). */
 export interface CreateReportRequest {
   reportedUserId: string;
   category: ReportCategoryCode;
@@ -399,7 +373,7 @@ export interface CreateReportRequest {
   evidenceOffered: boolean;
 }
 
-/** `201` response of `POST /matching/reports` (OneHookBackend matching `CreateReportResponse`). */
+/** `201` response of `POST /state/reports` (state.smithy `ReportMemberResponse`). */
 export interface CreateReportResponse {
   /** Backend report UUID — the id the evidence presign/complete calls reference. */
   reportId: string;
@@ -411,11 +385,3 @@ export interface CreateReportResponse {
   evidenceAllowed: boolean;
 }
 
-export const ReportsApi = {
-  /**
-   * File a member report. Throws {@link ApiError} on failure; a `429` (rate limit) surfaces as
-   * `ApiError` with `status === 429` so the UI can show a friendly message.
-   */
-  create: (body: CreateReportRequest): Promise<CreateReportResponse> =>
-    request<CreateReportResponse>('POST', '/matching/reports', body),
-};

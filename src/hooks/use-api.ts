@@ -8,6 +8,8 @@ import {
   UserPreferences,
   UserProfile,
   UserStateSnapshot,
+  type Hook,
+  type HookRequestItem,
 } from '../types';
 import type { DiscoverResponse } from 'onehook-api-client';
 import { MessageStatus } from 'onehook-api-client/graphql';
@@ -17,6 +19,9 @@ import { ProfileApi } from '../api/profile';
 import { MatchingApi, type DiscoveryCategory, type ProfileSection } from '../api/matching';
 import type { LikeTargetType, ReceivedLike } from '../api/rest';
 import { ChatMessagingApi } from '../api/chat';
+import { toPartnerProfile, toUserProfile, type PartnerProfile } from '../lib/profile-model';
+import { dropHookPartners } from '../lib/app-mode';
+import { errorCode, errorMessage, errorStatus } from '../lib/api-errors';
 import { ChatEncryptionManager } from '../lib/chat-encryption';
 import { isUndecryptableMessageError } from '../lib/chat-wire-v2';
 import {
@@ -69,85 +74,72 @@ export function useAsync<T>(fn: () => Promise<T>, dependencies: unknown[] = []) 
   return { data, loading, error, refetch: fetchData };
 }
 
-export function useProfile(userId?: string) {
-  const { currentUser, setCurrentUser } = useAppStore();
+/**
+ * The signed-in member's own profiles (`GET /profile`: chat + matching when one exists), merged into
+ * the UI's {@link UserProfile} and published to the store. A 404 means no profile exists yet, which
+ * only happens before onboarding.
+ */
+export function useProfile() {
+  const { setCurrentUser } = useAppStore();
 
   const { data, loading, error, refetch } = useAsync<UserProfile>(async () => {
-    let uid = userId || currentUser?.id;
-    if (!uid) {
-      const { fetchAuthSession } = await import('aws-amplify/auth');
-      const session = await fetchAuthSession();
-      uid = (session.tokens?.idToken?.payload?.sub as string) || (session.tokens?.accessToken?.payload?.sub as string) || 'me';
-    }
-    const res: any = await ProfileApi.get(uid);
-    if (res) {
-      res.id = res.userId || uid;
-      res.name = res.displayName || res.name || '';
-      res.photos = res.pictures && res.pictures.length > 0 ? res.pictures : res.photos || [];
-    }
-    return res as UserProfile;
-  }, [userId, currentUser?.id]);
+    return toUserProfile(await ProfileApi.getMine());
+  }, []);
 
   useEffect(() => {
-    if (data && !userId) {
+    if (data) {
       setCurrentUser(data);
     }
-  }, [data, userId, setCurrentUser]);
+  }, [data, setCurrentUser]);
 
   return { profile: data, loading, error, refetch };
+}
+
+async function callerId(currentUserId?: string): Promise<string> {
+  if (currentUserId) return currentUserId;
+  const { fetchAuthSession } = await import('aws-amplify/auth');
+  const session = await fetchAuthSession();
+  return (
+    (session.tokens?.idToken?.payload?.sub as string) ||
+    (session.tokens?.accessToken?.payload?.sub as string) ||
+    'me'
+  );
 }
 
 /**
  * Fetches the authoritative user state (`GET /state/{userId}`) and publishes it to the store.
  *
- * <p>This is the single place the UI learns the subscription tier and connection state. It is
- * deliberately sourced from the State service rather than the profile, because the Profile read
- * model intentionally omits `subscriptionTier` — reading it off a profile silently yields
- * `undefined`, which previously made every user look like a paid tier.</p>
- *
- * <p>The same response also carries `matchIds`, so matches are derived here instead of issuing a
- * second identical request.</p>
+ * <p>This is the single place the UI learns the subscription tier, the hooks (with their partners and
+ * suspension), capacity, the downgrade selection and the matching mode. The response also carries the
+ * chat view pass for every hook partner, which {@link StateApi.getUserState} remembers.</p>
  */
 export function useUserState() {
-  const { currentUser, setUserState, setMatches } = useAppStore();
+  const { currentUser, setUserState } = useAppStore();
 
   const { data, loading, error, refetch } = useAsync<UserStateSnapshot>(
-    async () => {
-      let uid = currentUser?.id;
-      if (!uid) {
-        const { fetchAuthSession } = await import('aws-amplify/auth');
-        const session = await fetchAuthSession();
-        uid = (session.tokens?.idToken?.payload?.sub as string) || (session.tokens?.accessToken?.payload?.sub as string) || 'me';
-      }
-      return StateApi.getUserState(uid);
-    },
+    async () => StateApi.getUserState(await callerId(currentUser?.id)),
     [currentUser?.id]
   );
 
   useEffect(() => {
-    if (!data) return;
-    setUserState(data);
-    // Map matchIds to the minimal Match[] shape the UI expects.
-    setMatches((data.matchIds ?? []).map((id: string) => ({ matchId: id })) as never);
-  }, [data, setUserState, setMatches]);
+    if (data) setUserState(data);
+  }, [data, setUserState]);
 
   return { userState: data, loading, error, refetch };
 }
 
-export function useMatches() {
-  const { matches } = useAppStore();
-  const { loading, error, refetch } = useUserState();
-
-  return { matches, loading, error, refetch };
-}
-
-function calculateAge(birthDate?: string): number | undefined {
-  if (!birthDate) return undefined;
-  const dob = new Date(birthDate);
-  if (isNaN(dob.getTime())) return undefined;
-  const diff = Date.now() - dob.getTime();
-  const ageDt = new Date(diff);
-  return Math.abs(ageDt.getUTCFullYear() - 1970);
+/**
+ * Refetches the state outside React (view-pass refresh, notifications) and publishes it. Resolves
+ * even when the read fails: callers only want the freshest state they can get.
+ */
+export async function refreshUserStateInStore(): Promise<void> {
+  const store = useAppStore.getState();
+  try {
+    const id = await callerId(store.currentUser?.id ?? store.userState?.userId);
+    store.setUserState(await StateApi.getUserState(id));
+  } catch (err) {
+    console.warn('Could not refresh state:', err);
+  }
 }
 
 function toDiscoveryCandidate(
@@ -186,18 +178,45 @@ function finderOf(candidate: DiscoverResponse['candidates'][number]) {
   };
 }
 
-export function useCandidates(activeCoords?: Coordinates) {
+/**
+ * Codes on which the deck stops and the shell re-reads the state: matching was turned off elsewhere
+ * (403 MATCHING_OFF) or the member reached capacity (403 DISCOVERY_PAUSED).
+ */
+const DECK_REFUSALS = new Set(['MATCHING_OFF', 'DISCOVERY_PAUSED']);
+
+/** Shown when the deck fails to load and the error carries no text of its own. */
+export const DISCOVER_LOAD_FAILED_COPY = 'Unable to load discovery candidates. Please try again.';
+
+/** A swipe refused as MATCHING_OFF / DISCOVERY_PAUSED means the state we hold is stale: re-read it. */
+function refreshStateOnDeckRefusal(err: unknown): void {
+  const code = errorCode(err);
+  if (errorStatus(err) === 403 && code && DECK_REFUSALS.has(code)) void refreshUserStateInStore();
+}
+
+/**
+ * The discover deck. Runs only while `enabled` (matching ON, a free slot, no pending downgrade choice;
+ * see lib/app-mode.ts `canDiscover`) — nothing here may reach Matching for a chat-only member.
+ *
+ * Each card is hydrated with `GET /profile/{id}/matching` through the page's view pass, and the
+ * member's own hook partners are dropped before anything is shown (R20): Matching learns of a new
+ * hook a second or two after State, so a page fetched in between can still carry the partner.
+ */
+export function useCandidates(
+  activeCoords: Coordinates | undefined,
+  options: { enabled: boolean; hooks?: readonly Hook[]; onRefused?: () => void }
+) {
   const { currentUser, setCandidates } = useAppStore();
+  const { enabled, hooks, onRefused } = options;
   const [candidatesList, setCandidatesList] = useState<DiscoveryCandidate[]>([]);
   // Discovery category (Super+ may narrow the feed). availableCategories comes from the backend, so the
   // selector never hard-codes tier rules.
   const [category, setCategory] = useState<DiscoveryCategory>('ALL');
   const [availableCategories, setAvailableCategories] = useState<DiscoveryCategory[]>(['ALL']);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<ApiError | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  const uid = currentUser?.id;
+  const onRefusedRef = useRef(onRefused);
+  onRefusedRef.current = onRefused;
 
   // Resolve coordinates: explicit activeCoords -> currentUser.location -> Tier 2/3 fallback
   const resolvedCoords = useMemo(() => {
@@ -217,89 +236,74 @@ export function useCandidates(activeCoords?: Coordinates) {
 
   useEffect(() => {
     let active = true;
+    if (!enabled) {
+      setCandidatesList([]);
+      setCandidates([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     async function fetchDiscover() {
       setLoading(true);
       setError(null);
       try {
-        let userId = uid;
-        if (!userId) {
-          try {
-            const { fetchAuthSession } = await import('aws-amplify/auth');
-            const session = await fetchAuthSession();
-            userId =
-              (session.tokens?.idToken?.payload?.sub as string) ||
-              (session.tokens?.accessToken?.payload?.sub as string);
-          } catch {
-            // continue
-          }
-        }
-        if (!userId) {
-          throw new ApiError('Authentication required to discover candidates', 401, 'UNAUTHORIZED');
-        }
-
-        const res = await MatchingApi.discover(userId, lat, lon, category);
+        const res = await MatchingApi.discover(lat, lon, category);
         if (!active) return;
         if (Array.isArray(res?.availableCategories) && res.availableCategories.length > 0) {
           setAvailableCategories(res.availableCategories);
         }
+        // Drop own hook partners BEFORE hydrating, so not even their profile is fetched.
+        const page = dropHookPartners(res?.candidates ?? [], useAppStore.getState().userState?.hooks);
 
-        if (res && Array.isArray(res.candidates) && res.candidates.length > 0) {
-          const candidatePromises = res.candidates.map(async (candidate) => {
+        const mapped = await Promise.all(
+          page.map(async (candidate) => {
             const fallback = toDiscoveryCandidate(candidate);
             try {
-              const fullProfile: any = await ProfileApi.get(candidate.userId);
-              if (fullProfile) {
-                const photos =
-                  fullProfile.pictures && fullProfile.pictures.length > 0
-                    ? fullProfile.pictures
-                    : fullProfile.photos || [];
-                return {
-                  ...fallback,
-                  ...fullProfile,
-                  id: candidate.userId,
-                  userId: candidate.userId,
-                  name: fullProfile.displayName || fullProfile.name || fallback.name,
-                  displayName: fullProfile.displayName || fullProfile.name || fallback.name,
-                  age: calculateAge(fullProfile.birthDate) ?? fallback.age,
-                  bio: fullProfile.bio || fallback.bio,
-                  photos: photos.length > 0 ? photos : fallback.photos,
-                  pictures: photos.length > 0 ? photos : fallback.photos,
-                  distance: candidate.distanceKm,
-                  distanceKm: candidate.distanceKm,
-                  score: candidate.score,
-                  ...finderOf(candidate),
-                } as DiscoveryCandidate;
-              }
+              const profile = await ProfileApi.getMatching(String(candidate.userId));
+              const photos = profile.pictures ?? [];
+              return {
+                ...fallback,
+                ...profile,
+                id: String(candidate.userId),
+                userId: String(candidate.userId),
+                name: profile.displayName || fallback.name,
+                displayName: profile.displayName || fallback.name,
+                age: profile.age ?? fallback.age,
+                bio: profile.bio || fallback.bio,
+                photos: photos.length > 0 ? photos : fallback.photos,
+                pictures: photos.length > 0 ? photos : fallback.photos,
+                distance: candidate.distanceKm,
+                distanceKm: candidate.distanceKm,
+                score: candidate.score,
+                ...finderOf(candidate),
+              } as DiscoveryCandidate;
             } catch (pErr) {
               console.warn(`Could not hydrate profile for candidate ${candidate.userId}:`, pErr);
             }
             return fallback;
-          });
-
-          const mapped = await Promise.all(candidatePromises);
-          if (active) {
-            setCandidatesList(mapped);
-            setCandidates(mapped);
-            setError(null);
-          }
-        } else {
-          if (active) {
-            setCandidatesList([]);
-            setCandidates([]);
-            setError(null);
-          }
+          })
+        );
+        if (active) {
+          setCandidatesList(mapped);
+          setCandidates(mapped);
+          setError(null);
         }
       } catch (err: any) {
         console.error('Matching discover error:', err);
         if (active) {
           setCandidatesList([]);
           setCandidates([]);
-          const message =
-            err?.message ||
-            err?.name ||
-            'Unable to load discovery candidates. Please try again.';
-          const status = err?.status || err?.$metadata?.httpStatusCode || 500;
-          const code = err?.code || err?.name;
+          const code = errorCode(err);
+          if (errorStatus(err) === 403 && code && DECK_REFUSALS.has(code)) {
+            // Not an error to show: the shell re-reads the state and switches to the paused overlay
+            // or the chat-only tabs.
+            setError(null);
+            onRefusedRef.current?.();
+            return;
+          }
+          // SDK exceptions carry the text in `error` (their `message` is "UnknownError").
+          const message = errorMessage(err, DISCOVER_LOAD_FAILED_COPY);
+          const status = errorStatus(err) ?? 500;
           const apiError =
             err instanceof ApiError
               ? err
@@ -317,14 +321,18 @@ export function useCandidates(activeCoords?: Coordinates) {
     return () => {
       active = false;
     };
-  }, [uid, lat, lon, refreshKey, category, setCandidates]);
+  }, [enabled, lat, lon, refreshKey, category, setCandidates]);
 
   const refresh = useCallback(() => {
     setRefreshKey((prev) => prev + 1);
   }, []);
 
+  // A hook formed while this page was on screen (accepting a request, a mutual like) removes the new
+  // partner from the cards still to come.
+  const visible = useMemo(() => dropHookPartners(candidatesList, hooks), [candidatesList, hooks]);
+
   return {
-    candidates: candidatesList,
+    candidates: visible,
     loading,
     error,
     refresh,
@@ -350,6 +358,7 @@ export function useSwipe() {
         return await MatchingApi.pass(targetId, viewedSection);
       } catch (err) {
         setError(err as ApiError);
+        refreshStateOnDeckRefusal(err);
         throw err;
       } finally {
         setLoading(false);
@@ -377,6 +386,7 @@ export function useSwipe() {
         return await MatchingApi.like(input);
       } catch (err) {
         setError(err as ApiError);
+        refreshStateOnDeckRefusal(err);
         throw err;
       } finally {
         setLoading(false);
@@ -392,15 +402,22 @@ export function useSwipe() {
  * Received likes ("Likes you"): who liked the caller, on which profile element, with what comment.
  * Newest first. Refetches on demand via {@link refresh}.
  */
-export function useReceivedLikes() {
+export function useReceivedLikes(enabled = true) {
   const [likes, setLikes] = useState<ReceivedLike[]>([]);
   const [count, setCount] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<ApiError | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let active = true;
+    // /matching/likes is a Matching route: never called unless the member's matching is ON.
+    if (!enabled) {
+      setLikes([]);
+      setCount(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     MatchingApi.getReceivedLikes()
@@ -421,7 +438,7 @@ export function useReceivedLikes() {
     return () => {
       active = false;
     };
-  }, [refreshKey]);
+  }, [refreshKey, enabled]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -937,16 +954,26 @@ export function useChatMessages(matchId: string, recipientId?: string) {
   };
 }
 
-export function usePreferences(userId?: string) {
+/**
+ * Matching preferences (`/matching/{userId}/preferences`). A Matching route, so it loads only while
+ * `enabled` (the member's matching is ON).
+ */
+export function usePreferences(userId: string | undefined, enabled: boolean) {
   const { currentUser } = useAppStore();
   const uid = userId || currentUser?.id || 'me';
 
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
+  const prefsRef = useRef<UserPreferences | null>(null);
+  prefsRef.current = prefs;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
+    if (!enabled) {
+      setPrefs(null);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -957,7 +984,7 @@ export function usePreferences(userId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [uid]);
+  }, [uid, enabled]);
 
   useEffect(() => {
     void load();
@@ -967,8 +994,10 @@ export function usePreferences(userId?: string) {
     async (updates: Partial<UserPreferences>) => {
       try {
         setSaving(true);
-        await PreferencesApi.upsert(uid, updates);
-        setPrefs((prev) => ({ ...(prev ?? { userId: uid }), ...updates }) as UserPreferences);
+        // The PUT replaces the stored set, so send the current preferences with the change merged in.
+        const merged = { ...(prefsRef.current ?? { userId: uid }), ...updates } as UserPreferences;
+        await PreferencesApi.upsert(uid, merged);
+        setPrefs(merged);
       } finally {
         setSaving(false);
       }
@@ -977,6 +1006,73 @@ export function usePreferences(userId?: string) {
   );
 
   return { prefs, loading, saving, error, save, refetch: load };
+}
+
+/**
+ * Chat profiles of hook partners (or request senders), keyed by user id, read with the State chat
+ * pass. `undefined` while loading, `null` when the profile could not be opened (no pass covers them
+ * any more, or the account is gone). Refetches only when the set of ids changes.
+ */
+export function usePartnerProfiles(peerIds: readonly string[]): Record<string, PartnerProfile | null | undefined> {
+  const [profiles, setProfiles] = useState<Record<string, PartnerProfile | null>>({});
+  const key = [...new Set(peerIds.filter(Boolean))].sort().join(',');
+
+  useEffect(() => {
+    if (!key) return;
+    let active = true;
+    for (const id of key.split(',')) {
+      ProfileApi.getChat(id)
+        .then((p) => {
+          if (active) setProfiles((prev) => ({ ...prev, [id]: toPartnerProfile(p, id) }));
+        })
+        .catch(() => {
+          if (active) setProfiles((prev) => ({ ...prev, [id]: null }));
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [key]);
+
+  return profiles;
+}
+
+/**
+ * The member's hook requests (`GET /state/hook-requests`): received (locked rows name nobody) and sent.
+ * Refetches whenever the store's `requestsVersion` moves (a HOOK_REQUESTED notification, an accept).
+ */
+export function useHookRequests(enabled = true) {
+  const requestsVersion = useAppStore((s) => s.requestsVersion);
+  const [incoming, setIncoming] = useState<HookRequestItem[]>([]);
+  const [outgoing, setOutgoing] = useState<HookRequestItem[]>([]);
+  const [loading, setLoading] = useState(enabled);
+  const [error, setError] = useState<unknown>(null);
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    setLoading(true);
+    Promise.all([StateApi.listIncomingRequests(), StateApi.listOutgoingRequests()])
+      .then(([inc, out]) => {
+        if (!active) return;
+        setIncoming(inc.requests);
+        setOutgoing(out.requests);
+        setError(null);
+      })
+      .catch((err) => {
+        if (active) setError(err);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [enabled, requestsVersion, nonce]);
+
+  const refresh = useCallback(() => setNonce((n) => n + 1), []);
+  return { incoming, outgoing, loading, error, refresh };
 }
 
 export function useCompleteOnboarding() {

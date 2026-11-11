@@ -162,7 +162,8 @@ export interface MemberSessionMetadata {
  * a OneHook suggestion; people who fit it then appear in Discover as "Mr. OneHook" cards with `reasoning`.
  */
 export interface MemberMatchSuggestion {
-  status: 'RECORDED' | 'PREMIUM_REQUIRED' | 'UNAVAILABLE';
+  /** MATCHING_OFF: the member's matching is off, so there is no Discover feed to add to. */
+  status: 'RECORDED' | 'PREMIUM_REQUIRED' | 'MATCHING_OFF' | 'UNAVAILABLE';
   reasoning: string;
 }
 
@@ -173,6 +174,8 @@ export function matchSuggestionNote(suggestion: MemberMatchSuggestion): string {
       return `Added to your Discover feed: ${suggestion.reasoning}`;
     case 'PREMIUM_REQUIRED':
       return 'Upgrade to Super to have Mr. OneHook find people for you.';
+    case 'MATCHING_OFF':
+      return 'Turn on matching in Settings to get suggestions in Discover.';
     default:
       return "I couldn't save that to your Discover feed right now. Please try again later.";
   }
@@ -270,6 +273,7 @@ export function parseMemberChatResponse(data: unknown): MemberChatResponse {
   if (isRecord(data.matchSuggestion)
     && (data.matchSuggestion.status === 'RECORDED'
       || data.matchSuggestion.status === 'PREMIUM_REQUIRED'
+      || data.matchSuggestion.status === 'MATCHING_OFF'
       || data.matchSuggestion.status === 'UNAVAILABLE')) {
     response.matchSuggestion = {
       status: data.matchSuggestion.status,

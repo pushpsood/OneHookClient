@@ -2,27 +2,40 @@
 // onehook-api-client is the single source of truth. Do NOT duplicate these
 // types locally — if a shape is wrong, fix it in the backend codegen.
 export type {
-  ProfileResponse,
+  ChatProfile,
+  MatchingProfile,
+  MyProfileResponse,
+  BirthDetails,
   CandidateDto,
   DiscoverResponse,
   UserPreferencesResponse,
   UserResponse,
   MatchRecord,
   UserStateResponse,
+  HookSummary,
+  HookRequestItem,
+  ListHookRequestsResponse,
 } from 'onehook-api-client';
+export { MatchingMode, HookOrigin, MatchingProfileStatus, MediaPurpose, HookRequestDirection } from 'onehook-api-client';
 
 import type {
-  ProfileResponse,
+  MatchingProfile,
+  BirthDetails,
   MatchRecord,
   UserPreferencesResponse,
   CandidateDto,
+  MatchingMode,
+  HookOrigin,
+  MatchingProfileStatus,
 } from 'onehook-api-client';
 
+/** State's `current_state` (docs/chat-only-profiles.md §6.2). */
 export enum UserState {
   ONBOARDING = 'ONBOARDING',
   AVAILABLE = 'AVAILABLE',
-  LOCK_PENDING = 'LOCK_PENDING',
   HOOKED = 'HOOKED',
+  /** After a tier downgrade below the current hooks: the member must choose which hooks to keep. */
+  SELECTION_REQUIRED = 'SELECTION_REQUIRED',
 }
 
 // Membership tiers are owned by the backend Smithy model (club.onehook.common#SubscriptionTier) and
@@ -31,51 +44,79 @@ export enum UserState {
 export { SubscriptionTier } from 'onehook-api-client';
 import type { SubscriptionTier } from 'onehook-api-client';
 
-/**
- * Authoritative, server-owned view of a user's connection state and entitlement.
- *
- * <p>This is the response of `GET /state/{userId}` from the State service, which is the single
- * source of truth for the subscription tier and the connection state machine. It is deliberately
- * NOT derived from the profile: the Profile service intentionally omits `subscriptionTier` from its
- * read model (see ProfileDtoMapper), so reading the tier off a profile always yields `undefined`.</p>
- *
- * <p>Treat these values as a <strong>rendering input only</strong>. Entitlement is enforced
- * server-side (DynamoDB capacity conditions, paid-tier chat resolvers, the verified JWT claim), so a
- * tampered client can reveal a paid-tier control but cannot use it.</p>
- */
-export type UserStateSnapshot = {
-  userId: string;
-  /** ONBOARDING | AVAILABLE | HOOKED */
-  state: UserState;
-  activeConnections: number;
-  matchIds: string[];
-  subscriptionTier: SubscriptionTier;
+/** One of the member's current hooks, as `GET /state/{userId}` returns it. */
+export type Hook = {
+  matchId: string;
+  /** The other member of the hook. */
+  peerId: string;
+  origin: HookOrigin;
+  /** Epoch seconds. */
+  hookedAt: number;
+  /** True while the conversation is read-only (a member of it must choose which hooks to keep). */
+  suspended: boolean;
 };
 
 /**
- * The full user model as understood by the UI. It is built on top of the
- * backend {@link ProfileResponse} contract and augmented with client-only view
- * concerns (photos, location, live connection state) that are hydrated from the
- * state and identity services.
+ * Authoritative, server-owned view of a user's connection state, entitlement and matching mode.
+ *
+ * <p>This is the normalised response of `GET /state/{userId}` from the State service, which is the
+ * single source of truth for the subscription tier, the hooks, capacity, the downgrade selection and
+ * the matching mode. It is deliberately NOT derived from the profile.</p>
+ *
+ * <p>Treat these values as a <strong>rendering input only</strong>. Entitlement and capacity are
+ * enforced server-side, so a tampered client can reveal a control but cannot use it.</p>
  */
-export type UserProfile = ProfileResponse & {
+export type UserStateSnapshot = {
+  userId: string;
+  state: UserState;
+  activeConnections: number;
+  subscriptionTier: SubscriptionTier;
+  hooks: Hook[];
+  /** How many hooks the member may hold right now (tier ceiling plus bonus slots). */
+  effectiveCapacity: number;
+  /** At capacity: no discovery, hidden from everyone else's, no accepting requests. */
+  discoveryPaused: boolean;
+  matching: { status: MatchingMode; generation: number };
+  /** A downgrade left more hooks than the tier allows; every conversation is suspended until chosen. */
+  selectionRequired: boolean;
+  /** How many hooks to keep, while `selectionRequired`. */
+  keepLimit?: number;
+  /** Epoch seconds after which the most recently active hooks are kept automatically. */
+  selectionDeadline?: number;
+  /** View pass naming every current hook partner (absent without hooks). */
+  chatViewPass?: string;
+};
+
+/**
+ * The signed-in member as the UI understands them: their chat profile (every account has one) merged
+ * with their matching profile when one exists (DRAFT or ACTIVE). Built from `GET /profile` by
+ * {@link import('./lib/profile-model').toUserProfile}.
+ */
+export type UserProfile = Omit<MatchingProfile, 'userId' | 'status'> & {
+  userId: string;
   id: string;
   name: string;
+  /** Chat-profile avatar (purpose CHAT media key). */
+  avatarKey?: string;
+  birthDetails?: BirthDetails;
+  /** True when a real (non-provisional) birth date is on file. */
+  birthDateOnFile?: boolean;
   birthDate?: string;
+  /** Matching-profile pictures (purpose MATCHING media keys). Empty for a chat-only member. */
   photos: string[];
   /** Display-only focal point/zoom keyed by original picture object key. */
   pictureTransforms?: Record<string, string>;
-  location: { lat: number; lng: number; geohash: string };
+  location?: { lat: number; lng: number; geohash: string };
   moderationStatus?: 'APPROVED' | 'PENDING_REVIEW' | 'PENDING_MEDIA' | 'PENDING_TEXT' | 'REJECTED' | string;
   fieldModerationStatus?: Record<string, 'APPROVED' | 'PENDING' | 'REJECTED' | string>;
-  /**
-   * Connection-state fields below are owned by the State service, not the profile read model.
-   * They are optional here because a profile response never carries them — read them from
-   * {@link UserStateSnapshot} (see the `userState` store slice) instead.
-   */
+  /** DRAFT until matching is turned on, ACTIVE while it is on; absent without a matching profile. */
+  matchingStatus?: MatchingProfileStatus;
+  /** DRAFT only: epoch seconds when the draft is erased unless edited again. */
+  draftExpiresAt?: number;
+  /** Epoch seconds of the last matching-profile edit. */
+  lastEditedAt?: number;
+  /** Set locally right after onboarding; the State snapshot is authoritative. */
   currentState?: UserState;
-  currentMatches?: string[];
-  activeConnections?: number;
   inviteCode?: string;
 };
 
@@ -108,18 +149,13 @@ export type RankedCandidate = CandidateDto & {
   score?: number;
 };
 
-
-
 /**
- * Client-facing matching preferences. The backend contract only supports the
- * fields below (age range, distance, and interested-in genders). Lifestyle and
- * relationship attributes (relationshipType, wantsKids, smokingStatus, ...) are
- * PROFILE fields, not preferences, and are persisted via the profile service.
+ * Client-facing matching preferences (`GET /matching/{userId}/preferences`). Only read while the
+ * member's matching is ON — every /matching/* route answers 403 MATCHING_OFF otherwise.
  */
 export type UserPreferences = UserPreferencesResponse;
 
 export type Match = MatchRecord;
-
 
 // ── Canonical GraphQL type re-exports ────────────────────────────────────────
 // Chat message types come from the backend's generated GraphQL SDK (onehook-api-client).

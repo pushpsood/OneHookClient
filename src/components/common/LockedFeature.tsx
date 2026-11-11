@@ -21,6 +21,7 @@ export function UpgradeDialog({
   detail,
   element,
   onClose,
+  tierName = UNLOCK_TIER_NAME,
 }: {
   /** e.g. "Mr. OneHook picks". */
   feature: string;
@@ -28,6 +29,8 @@ export function UpgradeDialog({
   /** Telemetry element for the "See plans" / "Not now" buttons. */
   element: UiElementId;
   onClose: () => void;
+  /** The lowest tier that unlocks this feature; Super unless the feature needs a higher one. */
+  tierName?: string;
 }) {
   const navigate = useNavigate();
   useEffect(() => {
@@ -55,11 +58,11 @@ export function UpgradeDialog({
         <div className="flex items-center gap-2">
           <LockIcon className="w-4 h-4" />
           <h2 id="upgrade-dialog-title" className="text-sm font-black">
-            {feature} is a {UNLOCK_TIER_NAME} feature
+            {feature} is a {tierName} feature
           </h2>
         </div>
         <p className="text-xs text-text-secondary">
-          {detail ?? `Upgrade to ${UNLOCK_TIER_NAME} or above to unlock it.`}
+          {detail ?? `Upgrade to ${tierName} or above to unlock it.`}
         </p>
         <div className="flex justify-end gap-2 pt-1">
           <button

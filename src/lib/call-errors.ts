@@ -1,5 +1,17 @@
 import { GraphQLOperationError } from '../api/graphql-error';
 import type { CallEndReason } from '../api/calls';
+import { errorCode } from './api-errors';
+
+/**
+ * True for a chat or call write refused because the hook is suspended (Chat's verify-not-suspended
+ * step answers AppSync errorType CONVERSATION_SUSPENDED for sends, reactions, typing and call signalling).
+ */
+export function isConversationSuspended(err: unknown): boolean {
+  return (
+    (err instanceof GraphQLOperationError && err.errorType === 'CONVERSATION_SUSPENDED') ||
+    errorCode(err) === 'CONVERSATION_SUSPENDED'
+  );
+}
 
 /**
  * Maps a call failure to friendly, user-facing copy, keyed off the AppSync `errorType` the backend
@@ -14,10 +26,16 @@ const ERROR_COPY: Record<string, string> = {
   Unauthorized: 'You can only call your active match.',
   NotFound: 'That call is no longer available.',
   BadRequest: 'That call could not be started.',
+  // The hook is suspended while a member chooses which hooks to keep (chat-only profiles §8.5).
+  CONVERSATION_SUSPENDED: 'This chat is paused, so calls are paused too.',
 };
+
+/** Shown on the call buttons of a suspended chat, and when a call is refused as suspended. */
+export const SUSPENDED_CALL_COPY = ERROR_COPY.CONVERSATION_SUSPENDED;
 
 /** The friendly message for a failed call operation. */
 export function friendlyCallError(error: unknown): string {
+  if (isConversationSuspended(error)) return SUSPENDED_CALL_COPY;
   if (error instanceof GraphQLOperationError && error.errorType && ERROR_COPY[error.errorType]) {
     return ERROR_COPY[error.errorType];
   }

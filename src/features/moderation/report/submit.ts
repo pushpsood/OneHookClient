@@ -12,12 +12,8 @@
  * Fully dependency-injected (report API, evidence transport, telemetry, clock) so it is unit-testable
  * without a browser or the network.
  */
-import {
-  ReportsApi,
-  type CreateReportRequest,
-  type CreateReportResponse,
-  type ReportCategoryCode,
-} from '../../../api/rest';
+import type { CreateReportRequest, CreateReportResponse, ReportCategoryCode } from '../../../api/rest';
+import { StateApi } from '../../../api/state';
 import {
   buildBundle,
   canonicalByteLength,
@@ -177,13 +173,23 @@ export async function uploadEvidence(
   }
 }
 
+/** `POST /state/reports` (State owns reports since chat-only profiles; Matching no longer does). */
+async function fileReportWithState(body: CreateReportRequest): Promise<CreateReportResponse> {
+  const res = await StateApi.reportMember(body);
+  return {
+    reportId: String(res.reportId),
+    severity: String(res.severity),
+    evidenceAllowed: Boolean(res.evidenceAllowed),
+  };
+}
+
 /**
  * File the report and, when applicable, attach the decrypted chat. Report failures throw (the UI
  * shows a friendly message, handling 429 specially). Evidence failures never throw — they are
  * reported through `evidenceOutcome: 'failed'`.
  */
 export async function submitReport(sub: ReportSubmission, deps: SubmitDeps = {}): Promise<SubmitResult> {
-  const createReport = deps.createReport ?? ((body) => ReportsApi.create(body));
+  const createReport = deps.createReport ?? fileReportWithState;
   const emit = deps.telemetry ?? trackReport;
 
   const evidenceOffered = sub.shareEvidence;

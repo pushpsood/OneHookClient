@@ -58,7 +58,7 @@ const withEvidence = (over: Partial<ReportSubmission> = {}): ReportSubmission =>
 function presignFailingTransport(status: number, code: string): EvidenceTransport {
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
-    if (url.endsWith('/evidence/presign')) return jsonResponse(status, { code });
+    if (url.endsWith('/evidence/presign')) return jsonResponse(status, { error: { code, message: code, retryable: false } });
     if (url.endsWith('/evidence/complete')) return jsonResponse(200, { evidenceId: 'ev', status: 'recorded', idempotent: false });
     if ((init?.method ?? 'GET') === 'PUT') return new Response(null, { status: 200 });
     throw new Error(`unexpected ${url}`);

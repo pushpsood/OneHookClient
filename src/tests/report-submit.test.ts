@@ -204,7 +204,7 @@ describe('completeEvidence — 503 EVIDENCE_FINALIZE_RETRY backoff', () => {
     let n = 0;
     const transport = makeTransport(() => {
       n++;
-      if (n <= 2) return jsonResponse(503, { code: 'EVIDENCE_FINALIZE_RETRY', message: 'finalizing' });
+      if (n <= 2) return jsonResponse(503, { error: { code: 'EVIDENCE_FINALIZE_RETRY', message: 'finalizing', retryable: true } });
       return jsonResponse(200, { evidenceId: 'ev_test', status: 'recorded', idempotent: false });
     }, log);
     const sleeps: number[] = [];
@@ -221,7 +221,7 @@ describe('completeEvidence — 503 EVIDENCE_FINALIZE_RETRY backoff', () => {
   it('gives up after maxRetries and throws', async () => {
     const log = newLog();
     const transport = makeTransport(
-      () => jsonResponse(503, { code: 'EVIDENCE_FINALIZE_RETRY' }),
+      () => jsonResponse(503, { error: { code: 'EVIDENCE_FINALIZE_RETRY', message: 'finalizing', retryable: true } }),
       log
     );
     await expect(
@@ -236,14 +236,40 @@ describe('completeEvidence — 503 EVIDENCE_FINALIZE_RETRY backoff', () => {
 
   it('does NOT retry a non-retryable error', async () => {
     const log = newLog();
-    const transport = makeTransport(() => jsonResponse(409, { code: 'EVIDENCE_ALREADY_COMPLETED' }), log);
+    const transport = makeTransport(() => jsonResponse(409, { error: { code: 'EVIDENCE_ALREADY_COMPLETED', message: 'already', retryable: false } }), log);
     await expect(
       completeEvidence(
         { ...transport, sleep: async () => {} },
         { reportId: 'r', evidenceId: 'ev_test', messageIds: ['m1'], firstSentAt: NOW, lastSentAt: NOW }
       )
-    ).rejects.toMatchObject({ status: 409, code: 'EVIDENCE_ALREADY_COMPLETED' });
+    ).rejects.toMatchObject({ status: 409, code: 'EVIDENCE_ALREADY_COMPLETED', retryable: false });
     expect(log.complete).toBe(1);
+  });
+
+  it('reads the code only from the portal envelope, so a flat {code} is not retried', async () => {
+    const log = newLog();
+    const transport = makeTransport(() => jsonResponse(503, { code: 'EVIDENCE_FINALIZE_RETRY' }), log);
+    const err = await completeEvidence(
+      { ...transport, sleep: async () => {} },
+      { reportId: 'r', evidenceId: 'ev_test', messageIds: ['m1'], firstSentAt: NOW, lastSentAt: NOW }
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(EvidenceError);
+    expect((err as EvidenceError).code).toBeUndefined();
+    expect(log.complete).toBe(1);
+  });
+
+  it('carries the envelope message and retryable flag on the error', async () => {
+    const log = newLog();
+    const transport = makeTransport(
+      () => jsonResponse(503, { error: { code: 'EVIDENCE_FINALIZE_RETRY', message: 'please retry', retryable: true } }),
+      log
+    );
+    const err = await completeEvidence(
+      { ...transport, sleep: async () => {} },
+      { reportId: 'r', evidenceId: 'ev_test', messageIds: ['m1'], firstSentAt: NOW, lastSentAt: NOW },
+      { maxRetries: 0 }
+    ).catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 503, code: 'EVIDENCE_FINALIZE_RETRY', message: 'please retry', retryable: true });
   });
 });
 

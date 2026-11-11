@@ -8,8 +8,9 @@ import {
   type ReactNode,
 } from 'react';
 import { CallApi } from '../api/calls';
-import { StateApi } from '../api/state';
 import { ProfileApi } from '../api/profile';
+import { useAppStore } from '../store/app-store';
+import { refreshUserStateInStore } from '../hooks/use-api';
 import { ChatSettingsApi } from '../api/rest';
 import { ChatEncryptionManager } from '../lib/chat-encryption';
 import { CallSession, type CallSessionDeps } from '../lib/call-session';
@@ -19,7 +20,7 @@ import {
   type StartCallArgs,
 } from '../lib/call-controller';
 import { createWebCaptionPorts, webCaptionsSupported } from '../lib/call-captions-web';
-import { friendlyCallError, friendlyEndReason } from '../lib/call-errors';
+import { friendlyCallError, friendlyEndReason, isConversationSuspended } from '../lib/call-errors';
 import { useToast } from '../components/common/Toast';
 import { Screen, trackScreenView } from '../lib/analytics/analytics';
 import { IncomingCallModal } from '../components/call/IncomingCallModal';
@@ -89,20 +90,31 @@ function buildController(currentUserId: string): GlobalCallController {
     declineCall: CallApi.declineCall,
     makeSession,
     resolvePeer: async (matchId: string) => {
-      const record: any = await StateApi.getMatch(matchId);
-      const peerId = record?.userA === currentUserId ? record?.userB : record?.userA;
+      // The partner comes from the state's hooks; a call on a hook formed moments ago re-reads it.
+      const findPeer = () => useAppStore.getState().userState?.hooks.find((h) => h.matchId === matchId)?.peerId;
+      let peerId = findPeer();
+      if (!peerId) {
+        await refreshUserStateInStore();
+        peerId = findPeer();
+      }
       let peerName = 'Your Match';
       try {
         if (peerId) {
-          const profile: any = await ProfileApi.get(peerId);
-          peerName = profile?.displayName || profile?.name || 'Your Match';
+          // Chat profile through the state's chat view pass (names every hook partner).
+          const profile = await ProfileApi.getChat(peerId);
+          peerName = profile?.displayName || 'Your Match';
         }
       } catch {
         /* best effort — a generic label still rings the call */
       }
       return { peerId: peerId || '', peerName };
     },
-    friendlyError: friendlyCallError,
+    friendlyError: (error: unknown) => {
+      // Refused because the hook is suspended: the state we hold is stale, so re-read it (the chat
+      // then shows as paused, with its composer and call buttons locked).
+      if (isConversationSuspended(error)) void refreshUserStateInStore();
+      return friendlyCallError(error);
+    },
     makeCaptionPorts: () => createWebCaptionPorts(),
     captionsSupported: webCaptionsSupported(),
     getHelpTranslateCaptions: async () => {

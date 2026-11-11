@@ -24,10 +24,14 @@ export interface UserLocationState {
  * - Tier 1: Live Browser GPS (navigator.geolocation)
  * - Tier 2: Fallback to user's last known location (localStorage) or profile city
  * - Tier 3: Default fallback metro center (e.g. SF Bay Area / env config)
+ *
+ * Location exists only for discovery, so nothing runs (no permission prompt, no `POST
+ * /matching/location`) unless `enabled` — the member's matching is ON (docs/chat-only-profiles.md §12).
  */
 export function useUserLocation(
   userId?: string,
-  profileCityText?: string | null
+  profileCityText?: string | null,
+  enabled = true
 ): UserLocationState {
   const initialFallback = resolveFallbackCoordinates(profileCityText);
 
@@ -45,7 +49,7 @@ export function useUserLocation(
       if (lastIndexedCoordsRef.current === key) return;
 
       try {
-        await MatchingApi.indexLocation(targetUserId, targetCoords.lat, targetCoords.lon);
+        await MatchingApi.indexLocation(targetCoords.lat, targetCoords.lon);
         lastIndexedCoordsRef.current = key;
       } catch (err) {
         console.warn('MatchingApi.indexLocation skipped or failed:', err);
@@ -127,8 +131,12 @@ export function useUserLocation(
   }, [userId, profileCityText, indexLocationIfChanged]);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     requestLocation();
-  }, [requestLocation]);
+  }, [requestLocation, enabled]);
 
   return {
     coords,

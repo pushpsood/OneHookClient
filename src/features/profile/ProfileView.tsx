@@ -19,18 +19,21 @@ import {
   Eye,
 } from 'lucide-react';
 import type { UserProfile } from '../../types';
+import { SubscriptionTier } from '../../types';
 import { ProfileApi } from '../../api/profile';
+import { ChatProfileCard } from './ChatProfileCard';
+import { isMatchingOn } from '../../lib/app-mode';
+import { errorCode } from '../../lib/api-errors';
+import { MATCHING_COPY, draftNotice, gapCopy, useMatchingMode } from '../settings/matching-mode';
+import { LockIcon, UpgradeDialog } from '../../components/common/LockedFeature';
 import { SuggestionsSection } from './CurrentSuggestionCard';
 import { TraditionsSection } from './TraditionsSection';
-import { isPaidSubscriptionTier } from 'onehook-api-client/membership';
+import { isPaidSubscriptionTier, subscriptionTierDisplayName as tierName } from 'onehook-api-client/membership';
 import { usePreferences } from '../../hooks/use-api';
 import { useAppStore } from '../../store/app-store';
 import { useToast } from '../../components/common/Toast';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { MediaImage } from '../../components/common/MediaImage';
-import { DateOfBirthField, LockedDateOfBirth } from '../../components/onboarding/DateOfBirthField';
-import { BirthTimePlaceFields, birthDetailsPayload, sameTimePlace, type BirthTimePlace } from '../../components/onboarding/BirthTimePlaceFields';
-import { DOB_LOCKED_HINT, DOB_PROVISIONAL_HINT, ageOn, validateDob } from '../../utils/dob';
 import { pictureTransformStyle } from '../../utils/photo-transform';
 import { useMediaSrc } from '../../utils/media-url';
 import { ModerationBadge } from '../../components/ui/ModerationBadge';
@@ -166,18 +169,39 @@ const LANGUAGE_PRESETS = [
   { value: 'ITALIAN', label: 'Italian' },
 ];
 
+/**
+ * The member's own profiles (docs/chat-only-profiles.md §8.1). The chat profile (name, age, avatar)
+ * is always here. The matching profile editor appears once the member has one (a DRAFT or ACTIVE) or
+ * starts building one; a chat-only member is never asked for matching fields, and nothing on this page
+ * calls /matching/* unless their matching is ON.
+ */
 export function ProfileView({
   user,
+  onSaved,
+  onOpenSettings,
 }: {
   key?: string;
   user: UserProfile;
+  /** Re-read `GET /profile` after a save (moderation state, draft clock). */
+  onSaved?: () => unknown;
+  onOpenSettings?: () => void;
 }) {
   const { userState, setCurrentUser } = useAppStore();
+  const matchingOn = isMatchingOn(userState);
+  const erasing = userState?.matching.status === 'ERASING';
+  const hasMatchingProfile = Boolean(user.matchingStatus);
+  const [building, setBuilding] = useState(false);
+  const showEditor = !erasing && (hasMatchingProfile || building);
+  const matchingMode = useMatchingMode(async () => {
+    await onSaved?.();
+  });
+  const [enableMessage, setEnableMessage] = useState<string | null>(null);
   const tierLabel = userState?.subscriptionTier
     ? subscriptionTierDisplayName(userState.subscriptionTier)
     : '—';
   const { showToast } = useToast();
-  const { prefs, save: savePreferences, saving } = usePreferences(user.id);
+  // Preferences are a Matching route: loaded only while matching is ON.
+  const { prefs, save: savePreferences } = usePreferences(user.id, matchingOn);
   const fieldStatus = user.fieldModerationStatus || {};
 
   // Owner-only photo stats (identity from the JWT server-side) + full-screen viewer for own photos.
@@ -279,7 +303,6 @@ export function ProfileView({
   );
 
   const [basic, setBasic] = useState({
-    displayName: user.displayName || user.name || '',
     bio: user.bio || '',
     work: user.work || '',
     education: user.education || '',
@@ -288,27 +311,8 @@ export function ProfileView({
     height: user.height ? String(user.height) : '',
   });
 
-  // Date of birth is read-only. The one exception: an existing member whose date is a provisional
-  // estimate may enter their real date ONCE (the server then locks it).
-  const dobIsProvisional = Boolean(user.birthDetails?.provisional);
-  const lockedDob = user.birthDetails?.date && !dobIsProvisional ? user.birthDetails.date : '';
-  const [realDob, setRealDob] = useState('');
-  const [realDobConfirmed, setRealDobConfirmed] = useState(false);
-  const realDobReady = dobIsProvisional && realDob !== '' && realDobConfirmed && !validateDob(realDob);
-  const displayAge = (realDobReady ? ageOn(realDob) : null) ?? user.age;
-  // Birth time and place: optional, editable any time (only the date is locked).
-  const storedExtra: BirthTimePlace = {
-    time: user.birthDetails?.time ?? undefined,
-    timeZone: user.birthDetails?.timeZone ?? undefined,
-    latitude: user.birthDetails?.latitude ?? undefined,
-    longitude: user.birthDetails?.longitude ?? undefined,
-    placeName: user.birthDetails?.placeName ?? undefined,
-  };
-  const [birthExtra, setBirthExtra] = useState<BirthTimePlace>(storedExtra);
-  const birthDateForSave = realDobReady ? realDob : lockedDob;
-  const birthExtraChanged = !sameTimePlace(birthExtra, storedExtra) || birthExtra.placeName !== storedExtra.placeName;
-  const birthDetailsToSend =
-    birthDateForSave && (realDobReady || birthExtraChanged) ? birthDetailsPayload(birthDateForSave, birthExtra) : undefined;
+  // Age comes from the chat profile's birth date (edited in ChatProfileCard).
+  const displayAge = user.age;
 
   const [optional, setOptional] = useState({
     maxDistanceKm: String(prefs?.maxDistanceKm || '50'),
@@ -362,7 +366,6 @@ export function ProfileView({
       );
 
       setBasic({
-        displayName: user.displayName || user.name || '',
         bio: user.bio || '',
         work: user.work || '',
         education: user.education || '',
@@ -440,17 +443,50 @@ export function ProfileView({
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   };
 
+  /**
+   * `PUT /profile/matching` (a patch-merge). It stays a DRAFT until matching is turned on; every edit
+   * restarts the draft's 30-day clock, which the response carries.
+   */
+  const saveMatching = async (patch: Parameters<typeof ProfileApi.upsertMatching>[0]) => {
+    try {
+      const res = await ProfileApi.upsertMatching(patch);
+      const latest = useAppStore.getState().currentUser ?? user;
+      setCurrentUser({
+        ...latest,
+        matchingStatus: res.status,
+        lastEditedAt: res.lastEditedAt,
+        draftExpiresAt: res.draftExpiresAt,
+      });
+      return res;
+    } catch (err) {
+      if (errorCode(err) === 'MATCHING_ERASING') {
+        showToast(MATCHING_COPY.erasingConflict, 'error');
+      }
+      throw err;
+    }
+  };
+
+  const turnOnMatching = async () => {
+    setEnableMessage(null);
+    const result = await matchingMode.enable();
+    if (result.ok) {
+      showToast('Matching is on. Discover is ready for you.', 'success');
+    } else {
+      setEnableMessage(result.message);
+    }
+  };
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploadingPhoto(true);
     try {
-      const key = await ProfileApi.uploadMedia(user.id, file);
+      const key = await ProfileApi.uploadMedia(file, 'MATCHING');
 
       const updatedPhotos = [...photos, key];
       setPhotos(updatedPhotos);
-      await ProfileApi.upsert(user.id, { pictures: updatedPhotos });
+      await saveMatching({ pictures: updatedPhotos });
       if (user) {
         // New media triggers asynchronous moderation server-side. Reflect that honestly rather than
         // showing an approved (or stale) badge: mark the new key PENDING and escalate the overall
@@ -478,9 +514,9 @@ export function ProfileView({
     const updatedPhotos = photos.filter((_, i) => i !== index);
     setPhotos(updatedPhotos);
     try {
-      await ProfileApi.upsert(user.id, { pictures: updatedPhotos });
+      await saveMatching({ pictures: updatedPhotos });
       if (user) {
-        setCurrentUser({ ...user, pictures: updatedPhotos, photos: updatedPhotos });
+        setCurrentUser({ ...useAppStore.getState().currentUser ?? user, pictures: updatedPhotos, photos: updatedPhotos });
       }
       showToast('Photo removed.', 'success');
     } catch {
@@ -494,10 +530,10 @@ export function ProfileView({
       const localUrl = URL.createObjectURL(file);
       setAudioPreviewUrl(localUrl);
 
-      const key = await ProfileApi.uploadMedia(user.id, file);
+      const key = await ProfileApi.uploadMedia(file, 'MATCHING');
 
       setAudioPromptKey(key);
-      await ProfileApi.upsert(user.id, { audioPrompt: key });
+      await saveMatching({ audioPrompt: key });
       if (user) {
         // New media triggers asynchronous moderation server-side. Reflect that honestly rather than
         // showing an approved (or stale) badge: mark the new key PENDING and escalate the overall
@@ -533,7 +569,7 @@ export function ProfileView({
       // merge server-side: an omitted/undefined field means "keep existing", so `undefined` here
       // would silently NOT delete the voice note. A blank string is the backend's "clear" signal —
       // it drops the audioPrompt attribute and deletes the S3 object as an orphan.
-      await ProfileApi.upsert(user.id, { audioPrompt: '' });
+      await saveMatching({ audioPrompt: '' });
       if (user) {
         const nextFieldStatus = { ...(user.fieldModerationStatus || {}) };
         delete nextFieldStatus.audioPrompt;
@@ -587,22 +623,7 @@ export function ProfileView({
     const [selected] = updatedPhotos.splice(index, 1);
     updatedPhotos.unshift(selected);
     setPhotos(updatedPhotos);
-    ProfileApi.upsert(user.id, { pictures: updatedPhotos }).catch(() => {});
-    if (user) {
-      setCurrentUser({ ...user, pictures: updatedPhotos, photos: updatedPhotos });
-    }
-  };
-
-  const cyclePrimaryPhoto = () => {
-    if (photos.length <= 1) {
-      fileInputRef.current?.click();
-      return;
-    }
-    const updatedPhotos = [...photos];
-    const first = updatedPhotos.shift();
-    if (first) updatedPhotos.push(first);
-    setPhotos(updatedPhotos);
-    ProfileApi.upsert(user.id, { pictures: updatedPhotos }).catch(() => {});
+    saveMatching({ pictures: updatedPhotos }).catch(() => {});
     if (user) {
       setCurrentUser({ ...user, pictures: updatedPhotos, photos: updatedPhotos });
     }
@@ -616,19 +637,15 @@ export function ProfileView({
     );
     const finalLanguages = selectedLanguages.map((l) => l.toUpperCase().replace(/[\s&-]+/g, '_'));
 
-    const trimmedDisplayName = basic.displayName.trim();
     const trimmedBio = basic.bio.trim();
     const trimmedWork = basic.work.trim();
     const trimmedEducation = basic.education.trim();
     const trimmedHometown = basic.hometown.trim();
     const trimmedLocation = basic.currentLocation.trim();
 
-    const profilePayload: Record<string, unknown> = {
-      displayName: trimmedDisplayName,
+    const profilePayload: Parameters<typeof ProfileApi.upsertMatching>[0] = {
+      // Display name and birth date belong to the chat profile (ChatProfileCard), not here.
       bio: trimmedBio,
-      // Age is derived server-side from the immutable birth date and is never sent. A provisional
-      // date may be replaced once by the real one, and only after the member confirmed it.
-      ...(birthDetailsToSend ? { birthDetails: birthDetailsToSend } : {}),
       gender: gender || 'MALE',
       interestedIn: interestedInGenders.length > 0 ? interestedInGenders : ['FEMALE'],
       pictures: photos,
@@ -663,7 +680,6 @@ export function ProfileView({
       }
     };
 
-    checkFieldChanged('displayName', trimmedDisplayName, user?.displayName || user?.name);
     checkFieldChanged('bio', trimmedBio, user?.bio);
     checkFieldChanged('work', trimmedWork, user?.work);
     checkFieldChanged('education', trimmedEducation, user?.education);
@@ -695,11 +711,7 @@ export function ProfileView({
     if (user) {
       setCurrentUser({
         ...user,
-        name: trimmedDisplayName,
-        displayName: trimmedDisplayName,
         bio: trimmedBio,
-        age: displayAge,
-        ...(birthDetailsToSend ? { birthDetails: birthDetailsToSend } : {}),
         gender,
         interestedIn: interestedInGenders,
         pictures: photos,
@@ -746,15 +758,18 @@ export function ProfileView({
     };
 
     const prefsChanged =
-      targetPrefs.maxDistanceKm !== prefs?.maxDistanceKm ||
+      matchingOn &&
+      (targetPrefs.maxDistanceKm !== prefs?.maxDistanceKm ||
       targetPrefs.minAge !== prefs?.minAge ||
       targetPrefs.maxAge !== prefs?.maxAge ||
-      JSON.stringify(targetPrefs.interestedInGenders) !== JSON.stringify(prefs?.interestedInGenders);
+      JSON.stringify(targetPrefs.interestedInGenders) !== JSON.stringify(prefs?.interestedInGenders));
 
-    ProfileApi.upsert(user.id, profilePayload).catch((err) => {
-      console.error('Profile save failed:', err);
-      showToast('Profile save failed — please try again.', 'error');
-    });
+    saveMatching(profilePayload)
+      .then(() => void onSaved?.())
+      .catch((err) => {
+        console.error('Profile save failed:', err);
+        if (errorCode(err) !== 'MATCHING_ERASING') showToast('Profile save failed — please try again.', 'error');
+      });
 
     if (prefsChanged) {
       savePreferences(targetPrefs).catch((prefErr) => {
@@ -767,8 +782,8 @@ export function ProfileView({
 
   const previewProfileData: DiscoveryProfileData = {
     id: user.id,
-    name: basic.displayName || user.name || 'Anonymous',
-    displayName: basic.displayName || user.name || 'Anonymous',
+    name: user.displayName || user.name || 'Anonymous',
+    displayName: user.displayName || user.name || 'Anonymous',
     age: displayAge || 25,
     bio: basic.bio || user.bio || '',
     work: basic.work || user.work || '',
@@ -797,6 +812,25 @@ export function ProfileView({
       animate={{ opacity: 1, y: 0 }}
       className="max-w-4xl mx-auto space-y-12 pb-24"
     >
+      <div className="bg-surface-card text-text">
+        <ChatProfileCard user={user} onSaved={onSaved} />
+      </div>
+
+      <MatchingStatusCard
+        matchingStatus={userState?.matching.status}
+        hasMatchingProfile={hasMatchingProfile}
+        draftExpiresAt={user.matchingStatus === 'DRAFT' ? user.draftExpiresAt : undefined}
+        building={building}
+        busy={matchingMode.busy}
+        gaps={matchingMode.gaps}
+        message={enableMessage}
+        onBuild={() => setBuilding(true)}
+        onTurnOn={() => void turnOnMatching()}
+        onOpenSettings={onOpenSettings}
+      />
+
+      {showEditor && (
+      <>
       {ownPhotoLightbox}
       <input
         type="file"
@@ -840,7 +874,7 @@ export function ProfileView({
                 <MediaImage
                   src={primaryPhoto}
                   style={pictureTransformStyle(user.pictureTransforms?.[primaryPhoto])}
-                  alt={basic.displayName}
+                  alt={user.displayName}
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -865,7 +899,7 @@ export function ProfileView({
           <div className="text-center space-y-1">
             <div className="flex items-center justify-center gap-2">
               <h2 className="text-lg font-semibold text-text">
-                {basic.displayName || 'Anonymous'}, {displayAge ?? '—'}
+                {user.displayName || 'Anonymous'}, {displayAge ?? '—'}
               </h2>
               {user.verified && (
                 <CheckCircle2 className="w-4 h-4 text-ig-blue fill-ig-blue" />
@@ -1172,45 +1206,12 @@ export function ProfileView({
           <section className="space-y-6">
             <div>
               <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent">
-                Your Basics & Identity
+                Your Matching Basics
               </div>
               <p className="mt-1 text-xs opacity-50 leading-relaxed">
-                Core information visible on your discovery card.
+                Shown on your discovery card, to people Discover shows you to.
               </p>
             </div>
-
-            <Field
-              label="Display Name *"
-              badge={<ModerationBadge status={fieldStatus.displayName || (user.moderationStatus === 'APPROVED' ? 'APPROVED' : undefined)} showLabel />}
-            >
-              <input
-                value={basic.displayName}
-                onChange={(e) => setBasic((prev) => ({ ...prev, displayName: e.target.value }))}
-                className="field-input"
-              />
-            </Field>
-
-            {lockedDob ? (
-              <Field label="Date of birth">
-                <LockedDateOfBirth isoDate={lockedDob} hint={DOB_LOCKED_HINT} />
-              </Field>
-            ) : dobIsProvisional ? (
-              <div className="space-y-2">
-                <p className="text-sm font-bold">{DOB_PROVISIONAL_HINT}</p>
-                <DateOfBirthField
-                  value={realDob}
-                  onChange={setRealDob}
-                  confirmed={realDobConfirmed}
-                  onConfirmedChange={setRealDobConfirmed}
-                />
-              </div>
-            ) : null}
-
-            {(lockedDob || realDobReady) && (
-              <Field label="Birth time and place">
-                <BirthTimePlaceFields value={birthExtra} onChange={setBirthExtra} surface="profile" />
-              </Field>
-            )}
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Age">
@@ -1352,6 +1353,13 @@ export function ProfileView({
               </p>
             </div>
 
+            {!matchingOn && (
+              <p className="text-xs text-text-secondary">
+                Discovery preferences open once matching is on.
+              </p>
+            )}
+            {matchingOn && (
+            <>
             <div className="grid grid-cols-3 gap-4">
               <Field label="Distance (km)">
                 <input
@@ -1384,9 +1392,23 @@ export function ProfileView({
               </Field>
             </div>
 
+            <HidePastHooksPreference
+              tier={userState?.subscriptionTier}
+              value={Boolean(prefs?.hidePastHooks)}
+              onChange={async (next) => {
+                try {
+                  await savePreferences({ hidePastHooks: next });
+                } catch {
+                  showToast('Could not save that preference. Please try again.', 'error');
+                }
+              }}
+            />
+
             <SuggestionsSection paid={isPaidSubscriptionTier(userState?.subscriptionTier)} />
 
             <TraditionsSection />
+            </>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="Relationship Goal">
@@ -1551,7 +1573,174 @@ export function ProfileView({
         onClose={() => setShowFullPreview(false)}
         profileData={previewProfileData}
       />
+      </>
+      )}
     </motion.div>
+  );
+}
+
+/**
+ * Where the member stands with matching: off (offer to build a matching profile), a draft (its 30-day
+ * clock, and turning matching on), on, or erasing after an opt-out.
+ */
+function MatchingStatusCard({
+  matchingStatus,
+  hasMatchingProfile,
+  draftExpiresAt,
+  building,
+  busy,
+  gaps,
+  message,
+  onBuild,
+  onTurnOn,
+  onOpenSettings,
+}: {
+  matchingStatus?: string;
+  hasMatchingProfile: boolean;
+  draftExpiresAt?: number;
+  building: boolean;
+  busy: boolean;
+  gaps: string[];
+  message: string | null;
+  onBuild: () => void;
+  onTurnOn: () => void;
+  onOpenSettings?: () => void;
+}) {
+  if (matchingStatus === 'ON') return null;
+  return (
+    <section
+      aria-labelledby="matching-status-title"
+      className="bg-surface border border-border rounded-2xl p-5 space-y-3 text-text"
+    >
+      <h2 id="matching-status-title" className="text-sm font-semibold">
+        {matchingStatus === 'ERASING' ? MATCHING_COPY.erasingTitle : 'Your matching profile'}
+      </h2>
+      {matchingStatus === 'ERASING' ? (
+        <p className="text-xs text-text-secondary leading-relaxed">{MATCHING_COPY.erasingBody}</p>
+      ) : (
+        <>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            {hasMatchingProfile
+              ? draftNotice(draftExpiresAt)
+              : 'Matching is off, so you use OneHook for chats only. Build a matching profile to find someone new in Discover; it stays private until you turn matching on.'}
+          </p>
+          {gaps.length > 0 && (
+            <ul className="list-disc pl-5 text-xs text-red-600 space-y-0.5" aria-label="What your matching profile still needs">
+              {gaps.map((g) => (
+                <li key={g}>{gapCopy(g)}</li>
+              ))}
+            </ul>
+          )}
+          {message && gaps.length === 0 && <p className="text-xs text-red-600" role="alert">{message}</p>}
+          <div className="flex flex-wrap gap-2">
+            {!hasMatchingProfile && !building && (
+              <button
+                type="button"
+                onClick={onBuild}
+                {...trackProps(UiElement.SETTINGS_MATCHING_PROFILE_OPEN, { context: Screen.PROFILE })}
+                className="py-2 px-4 bg-accent text-bg text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+              >
+                Build a matching profile
+              </button>
+            )}
+            {hasMatchingProfile && (
+              <button
+                type="button"
+                onClick={onTurnOn}
+                disabled={busy}
+                {...trackProps(UiElement.SETTINGS_MATCHING_ENABLE, { context: Screen.PROFILE })}
+                className="py-2 px-4 bg-accent text-bg text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer"
+              >
+                {busy ? 'Turning on…' : 'Turn on matching'}
+              </button>
+            )}
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                {...trackProps(UiElement.PROFILE_SETTINGS_OPEN, { context: Screen.PROFILE })}
+                className="py-2 px-4 border border-border text-xs font-semibold rounded-lg hover:bg-surface-hover transition-colors cursor-pointer"
+              >
+                Matching settings
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * INFINITY-only history filter (R26, E39): "Hide people I've hooked with before". Gated by the session
+ * tier on the server too (403 PREMIUM_REQUIRED, and neutralised after a downgrade); other tiers see it
+ * locked with the upgrade prompt.
+ */
+function HidePastHooksPreference({
+  tier,
+  value,
+  onChange,
+}: {
+  tier?: SubscriptionTier;
+  value: boolean;
+  onChange: (next: boolean) => Promise<void>;
+}) {
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const label = 'Hide people I’ve hooked with before';
+  const detail = 'Discover never shows you anyone you have been hooked with, even after the 30-day pause ends.';
+  if (tier !== SubscriptionTier.INFINITY) {
+    return (
+      <div className="space-y-2" data-testid="hide-past-hooks-locked">
+        <button
+          type="button"
+          onClick={() => setUpgradeOpen(true)}
+          {...trackProps(UiElement.PREFERENCES_LOCKED_FILTER_TAP)}
+          className="w-full text-left border border-dashed border-border p-3 space-y-1 cursor-pointer opacity-80"
+          aria-label={`${label}, locked`}
+        >
+          <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.3em] font-black opacity-60">
+            <LockIcon /> {label}
+          </span>
+          <span className="block text-xs text-text-secondary">{detail}</span>
+        </button>
+        {upgradeOpen && (
+          <UpgradeDialog
+            feature={label}
+            detail={detail}
+            tierName={tierName(SubscriptionTier.INFINITY)}
+            element={UiElement.PREFERENCES_UPGRADE_OPEN}
+            onClose={() => setUpgradeOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
+  return (
+    <label className="flex items-start justify-between gap-4 border border-border p-3 cursor-pointer" data-testid="hide-past-hooks">
+      <span className="space-y-1">
+        <span className="block text-[10px] uppercase tracking-[0.3em] font-black opacity-60">{label}</span>
+        <span className="block text-xs text-text-secondary">{detail}</span>
+      </span>
+      <input
+        type="checkbox"
+        role="switch"
+        className="mt-1 w-5 h-5 accent-current shrink-0"
+        checked={value}
+        disabled={saving}
+        aria-checked={value}
+        onChange={async (e) => {
+          const next = e.target.checked;
+          trackUi(UiElement.PREFERENCES_HIDE_PAST_HOOKS_TOGGLE, { value: next ? 'on' : 'off' });
+          setSaving(true);
+          try {
+            await onChange(next);
+          } finally {
+            setSaving(false);
+          }
+        }}
+      />
+    </label>
   );
 }
 

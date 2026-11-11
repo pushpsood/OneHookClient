@@ -172,10 +172,10 @@ export function LikesYouView() {
     void Promise.all(
       ids.map(async (id): Promise<[string, LikerProfile]> => {
         try {
-          const p: any = await ProfileApi.get(id);
-          const photos: string[] =
-            (p?.pictures && p.pictures.length > 0 ? p.pictures : p?.photos) || [];
-          return [id, { displayName: p?.displayName || p?.name, photo: photos[0] }];
+          // Opened with the likes list's matching view pass (lib/view-pass.ts).
+          const p = await ProfileApi.getMatching(id);
+          const photos: string[] = p?.pictures ?? [];
+          return [id, { displayName: p?.displayName, photo: photos[0] }];
         } catch {
           return [id, {}];
         }

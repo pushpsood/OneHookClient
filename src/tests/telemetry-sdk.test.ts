@@ -38,8 +38,8 @@ describe('resolveUiInteraction: representative newly-instrumented elements', () 
     expect(resolveUiInteraction(UiElement.CHAT_SETTINGS_NOTIFICATION_TOGGLE)).toBeNull();
     expect(resolveUiInteraction(UiElement.SETTINGS_THEME_SELECT)).toBeNull();
     expect(
-      resolveUiInteraction(UiElement.CHAT_SETTINGS_NOTIFICATION_TOGGLE, { value: 'off', targetId: 'readReceipts' })
-    ).toEqual({ elementId: 'chat_settings.notification_toggle', action: 'toggle', value: 'off', targetId: 'readReceipts' });
+      resolveUiInteraction(UiElement.CHAT_SETTINGS_NOTIFICATION_TOGGLE, { value: 'off', targetId: 'show_previews' })
+    ).toEqual({ elementId: 'chat_settings.notification_toggle', action: 'toggle', value: 'off', targetId: 'show_previews' });
     expect(resolveUiInteraction(UiElement.SETTINGS_THEME_SELECT, { value: 'dark' })).toEqual({
       elementId: 'settings.theme_select',
       action: 'select',

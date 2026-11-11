@@ -1,26 +1,29 @@
 import { create } from 'zustand';
 import { isPaidSubscriptionTier } from 'onehook-api-client/membership';
-import { DiscoveryCandidate, UserProfile, Match, UserStateSnapshot } from '../types';
+import { DiscoveryCandidate, UserProfile, UserStateSnapshot } from '../types';
+import { viewPasses } from '../lib/view-pass';
 
 interface AppState {
   // User state
   currentUser: UserProfile | null;
   /**
-   * Authoritative connection state + entitlement from the State service
-   * (`GET /state/{userId}`). This — not `currentUser` — is the source of truth for the
-   * subscription tier, because the Profile read model intentionally omits it.
+   * Authoritative connection state, entitlement and matching mode from the State service
+   * (`GET /state/{userId}`). This — not `currentUser` — is the source of truth for the subscription
+   * tier, the hooks and whether matching is on.
    */
   userState: UserStateSnapshot | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 
-  // Matches
-  matches: Match[];
-  activeMatch: Match | null;
-
   // Discovery
   candidates: DiscoveryCandidate[];
   currentCandidate: DiscoveryCandidate | null;
+
+  /**
+   * Bumped whenever hook requests may have changed (a HOOK_REQUESTED notification, an accept or a
+   * decline elsewhere), so every requests view refetches.
+   */
+  requestsVersion: number;
 
   // UI state
   error: string | null;
@@ -30,10 +33,9 @@ interface AppState {
   setUserState: (state: UserStateSnapshot | null) => void;
   setAuthenticated: (isAuth: boolean) => void;
   setLoading: (loading: boolean) => void;
-  setMatches: (matches: Match[]) => void;
-  setActiveMatch: (match: Match | null) => void;
   setCandidates: (candidates: DiscoveryCandidate[]) => void;
   setCurrentCandidate: (candidate: DiscoveryCandidate | null) => void;
+  bumpRequests: () => void;
   setError: (error: string | null) => void;
   clearError: () => void;
   logout: () => void;
@@ -45,10 +47,9 @@ export const useAppStore = create<AppState>((set) => ({
   userState: null,
   isAuthenticated: false,
   isLoading: false,
-  matches: [],
-  activeMatch: null,
   candidates: [],
   currentCandidate: null,
+  requestsVersion: 0,
   error: null,
 
   // Actions
@@ -60,13 +61,11 @@ export const useAppStore = create<AppState>((set) => ({
 
   setLoading: (loading) => set({ isLoading: loading }),
 
-  setMatches: (matches) => set({ matches }),
-
-  setActiveMatch: (match) => set({ activeMatch: match }),
-
   setCandidates: (candidates) => set({ candidates }),
 
   setCurrentCandidate: (candidate) => set({ currentCandidate: candidate }),
+
+  bumpRequests: () => set((s) => ({ requestsVersion: s.requestsVersion + 1 })),
 
   setError: (error) => set({ error }),
 
@@ -76,12 +75,11 @@ export const useAppStore = create<AppState>((set) => ({
     localStorage.removeItem('id_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('accessToken');
+    viewPasses.clear();
     set({
       currentUser: null,
       userState: null,
       isAuthenticated: false,
-      matches: [],
-      activeMatch: null,
       candidates: [],
       currentCandidate: null,
       error: null,

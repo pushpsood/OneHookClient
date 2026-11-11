@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, X, AlertTriangle, Phone, ChevronLeft, Check, ChevronRight } from 'lucide-react';
-import { ApiError } from '../../../lib/api-client';
+import { errorStatus } from '../../../lib/api-errors';
 import {
   REPORT_CATEGORIES,
   getCategoryMeta,
@@ -245,8 +245,7 @@ export function ReportFlowDialog({
       setResult(r);
       setStep('confirmation');
     } catch (err) {
-      const status = err instanceof ApiError ? err.status : (err as { status?: number })?.status;
-      setError(status === 429 ? S.rateLimited : S.submitError);
+      setError(errorStatus(err) === 429 ? S.rateLimited : S.submitError);
     } finally {
       setSubmitting(false);
     }

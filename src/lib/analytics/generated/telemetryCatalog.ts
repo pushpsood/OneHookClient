@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 69623fb2407fa47f0bdb55c5dffc92e06e45b4fd15d51cd50015e879720d8e8f
+// telemetry-integrity: sha256 e522ecdb5494b4e4d7f0c92491538c1ef8e5acc63968ca25b290e0be8ee43b0e
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.14.0, hash 4d228919bd9883a5.
+// Catalog version 1.15.0, hash c0613025308ddfc0.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.14.0";
-export const TELEMETRY_CATALOG_HASH = "4d228919bd9883a5";
+export const TELEMETRY_CATALOG_VERSION = "1.15.0";
+export const TELEMETRY_CATALOG_HASH = "c0613025308ddfc0";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -57,6 +57,7 @@ export const Screen = {
   LIKES_YOU: "LIKES_YOU",
   CHAT: "CHAT",
   CHAT_SETTINGS: "CHAT_SETTINGS",
+  HOOK_REQUESTS: "HOOK_REQUESTS",
   CALL: "CALL",
   NOTIFICATIONS: "NOTIFICATIONS",
   PROFILE: "PROFILE",
@@ -86,6 +87,7 @@ export const ViewableScreen = {
   LIKES_YOU: "LIKES_YOU",
   CHAT: "CHAT",
   CHAT_SETTINGS: "CHAT_SETTINGS",
+  HOOK_REQUESTS: "HOOK_REQUESTS",
   CALL: "CALL",
   NOTIFICATIONS: "NOTIFICATIONS",
   PROFILE: "PROFILE",
@@ -194,6 +196,10 @@ export const NotificationType = {
   NEW_LIKE: "new_like",
   NEW_MESSAGE: "new_message",
   REENGAGEMENT: "reengagement",
+  CONVERSATION_SUSPENDED: "conversation_suspended",
+  CONVERSATION_RESUMED: "conversation_resumed",
+  HOOK_REQUESTED: "hook_requested",
+  MATCHING_DRAFT_EXPIRING: "matching_draft_expiring",
   OTHER: "other",
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
@@ -371,6 +377,11 @@ export const UiElement = {
   CHAT_SETTINGS_OPEN: "chat.settings_open",
   CHAT_WALLPAPER_OPEN: "chat.wallpaper_open",
   CHAT_ADD_HOOK_OPEN: "chat.add_hook_open",
+  CHAT_REQUESTS_OPEN: "chat.requests_open",
+  CHAT_KEEP_HOOKS_OPEN: "chat.keep_hooks_open",
+  CHAT_KEEP_HOOK_TOGGLE: "chat.keep_hook_toggle",
+  CHAT_KEEP_HOOKS_SUBMIT: "chat.keep_hooks_submit",
+  CHAT_KEEP_HOOKS_CONFIRM: "chat.keep_hooks_confirm",
   CHAT_PRIVACY_TOGGLE: "chat.privacy_toggle",
   CHAT_CALL: "chat.call",
   CHAT_VIDEO_CALL: "chat.video_call",
@@ -424,6 +435,13 @@ export const UiElement = {
   CHAT_SETTINGS_WALLPAPER_SELECT: "chat_settings.wallpaper_select",
   CHAT_SETTINGS_EXPORT_CHAT: "chat_settings.export_chat",
   CHAT_SETTINGS_CLEAR_CACHE: "chat_settings.clear_cache",
+  HOOK_REQUESTS_CLOSE: "hook_requests.close",
+  HOOK_REQUESTS_REFRESH: "hook_requests.refresh",
+  HOOK_REQUESTS_RETRY: "hook_requests.retry",
+  HOOK_REQUESTS_ACCEPT: "hook_requests.accept",
+  HOOK_REQUESTS_DECLINE: "hook_requests.decline",
+  HOOK_REQUESTS_BLOCK: "hook_requests.block",
+  HOOK_REQUESTS_CANCEL: "hook_requests.cancel",
   NOTIFICATIONS_ITEM_OPEN: "notifications.item_open",
   NOTIFICATIONS_ITEM_DISMISS: "notifications.item_dismiss",
   PROFILE_EDIT_OPEN: "profile.edit_open",
@@ -459,6 +477,7 @@ export const UiElement = {
   PREFERENCES_SAVE: "preferences.save",
   PREFERENCES_UPGRADE_OPEN: "preferences.upgrade_open",
   PREFERENCES_LOCKED_FILTER_TAP: "preferences.locked_filter_tap",
+  PREFERENCES_HIDE_PAST_HOOKS_TOGGLE: "preferences.hide_past_hooks_toggle",
   PREFERENCES_SUGGESTION_REMOVE: "preferences.suggestion_remove",
   PREFERENCES_OWN_SUGGESTION_SAVE: "preferences.own_suggestion_save",
   PREFERENCES_TRADITION_TOGGLE: "preferences.tradition_toggle",
@@ -482,6 +501,10 @@ export const UiElement = {
   SETTINGS_DELETE_ACCOUNT_CONFIRM: "settings.delete_account_confirm",
   SETTINGS_UNBLOCK_USER: "settings.unblock_user",
   SETTINGS_UNBLOCK_CONFIRM: "settings.unblock_confirm",
+  SETTINGS_MATCHING_ENABLE: "settings.matching_enable",
+  SETTINGS_MATCHING_PROFILE_OPEN: "settings.matching_profile_open",
+  SETTINGS_MATCHING_DISABLE: "settings.matching_disable",
+  SETTINGS_MATCHING_DISABLE_CONFIRM: "settings.matching_disable_confirm",
   SETTINGS_VERIFY_CODE_SUBMIT: "settings.verify_code_submit",
   SETTINGS_PASSWORD_SET_CONFIRM: "settings.password_set_confirm",
   SETTINGS_HELP_LINK: "settings.help_link",
@@ -588,10 +611,10 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "onboarding.photo_add": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "onboarding.photo_remove": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "onboarding.photo_remove_confirm": { screen: "ONBOARDING", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["web"] },
-  "onboarding.prompt_add": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
-  "onboarding.prompt_remove": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
-  "onboarding.voice_add": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
-  "onboarding.voice_remove": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
+  "onboarding.prompt_add": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: [] },
+  "onboarding.prompt_remove": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: [] },
+  "onboarding.voice_add": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: [] },
+  "onboarding.voice_remove": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: [] },
   "onboarding.choice_select": { screen: "ONBOARDING", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios", "android"] },
   "discover.pass_button": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "discover.like_button": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["android"] },
@@ -606,7 +629,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "discover.retry": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "discover.category_select": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: ["all", "profile_match", "onehook_suggested", "similar"], platforms: ["web", "ios", "android"] },
   "discover.highlight_swipe": { screen: "DISCOVER", kind: "gesture", actions: ["tap"], values: ["onehook_intelligence", "mr_onehook", "kundali", "western", "bazi", "zi_wei_dou_shu", "tzolkin", "tibetan", "hebrew", "arabic_parts", "buddhist", "celtic", "egyptian", "hellenistic", "babylonian"], platforms: ["web", "ios", "android"] },
-  "discover.add_hook_submit": { screen: "DISCOVER", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios"] },
+  "discover.add_hook_submit": { screen: "DISCOVER", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
   "discover.upgrade_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "like_composer.send": { screen: "LIKE_COMPOSER", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
   "like_composer.send_without_comment": { screen: "LIKE_COMPOSER", kind: "button", actions: ["submit"], values: null, platforms: ["ios"] },
@@ -639,7 +662,12 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.block_confirm": { screen: "CHAT", kind: "dialog_button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.settings_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios"] },
   "chat.wallpaper_open": { screen: "CHAT", kind: "menu_item", actions: ["tap", "dismiss"], values: null, platforms: ["web"] },
-  "chat.add_hook_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios"] },
+  "chat.add_hook_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.requests_open": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.keep_hooks_open": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["android"] },
+  "chat.keep_hook_toggle": { screen: "CHAT", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
+  "chat.keep_hooks_submit": { screen: "CHAT", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.keep_hooks_confirm": { screen: "CHAT", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["ios", "android"] },
   "chat.privacy_toggle": { screen: "CHAT", kind: "toggle", actions: ["toggle"], values: ["hidden", "visible"], platforms: [] },
   "chat.call": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.video_call": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
@@ -687,12 +715,19 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.history_reset_confirm": { screen: "CHAT", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["web"] },
   "chat_settings.last_seen_select": { screen: "CHAT_SETTINGS", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios"] },
   "chat_settings.disappearing_select": { screen: "CHAT_SETTINGS", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios"] },
-  "chat_settings.notification_toggle": { screen: "CHAT_SETTINGS", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios"] },
+  "chat_settings.notification_toggle": { screen: "CHAT_SETTINGS", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
   "chat_settings.privacy_toggle": { screen: "CHAT_SETTINGS", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios"] },
   "chat_settings.font_size_select": { screen: "CHAT_SETTINGS", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["ios"] },
   "chat_settings.wallpaper_select": { screen: "CHAT_SETTINGS", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios"] },
   "chat_settings.export_chat": { screen: "CHAT_SETTINGS", kind: "button", actions: ["tap", "select", "dismiss"], values: null, platforms: ["ios"] },
   "chat_settings.clear_cache": { screen: "CHAT_SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "hook_requests.close": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
+  "hook_requests.refresh": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["android"] },
+  "hook_requests.retry": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "hook_requests.accept": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "hook_requests.decline": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "hook_requests.block": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "hook_requests.cancel": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "notifications.item_open": { screen: "NOTIFICATIONS", kind: "list_item", actions: ["tap"], values: null, platforms: ["ios"] },
   "notifications.item_dismiss": { screen: "NOTIFICATIONS", kind: "gesture", actions: ["dismiss"], values: null, platforms: ["ios"] },
   "profile.edit_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios", "android"] },
@@ -728,6 +763,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "preferences.save": { screen: "PREFERENCES", kind: "button", actions: ["submit"], values: null, platforms: ["ios", "android"] },
   "preferences.upgrade_open": { screen: "PREFERENCES", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.locked_filter_tap": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "preferences.hide_past_hooks_toggle": { screen: "PREFERENCES", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
   "preferences.suggestion_remove": { screen: "PREFERENCES", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.own_suggestion_save": { screen: "PREFERENCES", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
   "preferences.tradition_toggle": { screen: "PREFERENCES", kind: "toggle", actions: ["toggle"], values: ["kundali", "western", "bazi", "zi_wei_dou_shu", "tzolkin", "tibetan", "hebrew", "arabic_parts", "buddhist", "celtic", "egyptian", "hellenistic", "babylonian"], platforms: ["web", "ios", "android"] },
@@ -751,6 +787,10 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "settings.delete_account_confirm": { screen: "SETTINGS", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "settings.unblock_user": { screen: "SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "settings.unblock_confirm": { screen: "SETTINGS", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["ios"] },
+  "settings.matching_enable": { screen: "SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
+  "settings.matching_profile_open": { screen: "SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "settings.matching_disable": { screen: "SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "settings.matching_disable_confirm": { screen: "SETTINGS", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "settings.verify_code_submit": { screen: "SETTINGS", kind: "button", actions: ["submit", "dismiss"], values: ["email", "phone"], platforms: ["ios", "android"] },
   "settings.password_set_confirm": { screen: "SETTINGS", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["ios"] },
   "settings.help_link": { screen: "SETTINGS", kind: "link", actions: ["tap"], values: ["help_center", "faq", "contact", "safety", "privacy", "terms", "other"], platforms: ["ios"] },

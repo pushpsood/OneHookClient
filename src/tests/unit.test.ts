@@ -13,15 +13,13 @@ describe('MatchingApi: Unit Tests', () => {
     photos: [],
     location: { lat: 0, lng: 0, geohash: '' },
     subscriptionTier: SubscriptionTier.MUST,
-    activeConnections: 0,
     currentState: UserState.AVAILABLE,
-    currentMatches: [],
     inviteCode: '',
   };
 
-  it('should construct discover query with correct params', () => {
-    const url = `/matching/discover?userId=${mockUser.id}&lat=${mockUser.location.lat}&lon=${mockUser.location.lng}`;
-    expect(url).toContain('userId=1');
+  it('should construct discover query with correct params (the caller is the JWT sub, never a param)', () => {
+    const url = `/matching/discover?lat=${mockUser.location!.lat}&lon=${mockUser.location!.lng}`;
+    expect(url).not.toContain('userId=');
     expect(url).toContain('lat=0');
     expect(url).toContain('lon=0');
   });
@@ -307,9 +305,7 @@ describe('Discovery Profile & Preview: Shared Data Representation', () => {
       interests: ['Design', 'Coffee', 'Running'],
       location: { lat: 37.77, lng: -122.41, geohash: '9q8yy' },
       subscriptionTier: SubscriptionTier.MUST,
-      activeConnections: 0,
       currentState: UserState.AVAILABLE,
-      currentMatches: [],
     };
 
     const previewData = {

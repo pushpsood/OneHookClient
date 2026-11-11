@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Compass, MessageCircle, Heart, Settings, LogOut } from 'lucide-react';
 import { MediaImage } from '../components/common/MediaImage';
-import type { AppTab } from './BottomTabBar';
+import type { AppTab } from '../lib/app-mode';
 import type { UserProfile } from '../types';
 import { UiElement, APP_TAB_SCREEN, trackProps } from '../lib/analytics/analytics';
+import { ownAvatar } from '../lib/profile-model';
 
 interface DesktopSidebarProps {
   activeTab: AppTab;
+  /** Tabs the shell has for the member's matching mode (lib/app-mode.ts `appTabsFor`). */
+  tabs: readonly AppTab[];
   onTabChange: (tab: AppTab) => void;
   currentUser: UserProfile | null;
   likesCount?: number;
@@ -19,6 +22,7 @@ interface DesktopSidebarProps {
 
 export function DesktopSidebar({
   activeTab,
+  tabs,
   onTabChange,
   currentUser,
   likesCount = 0,
@@ -31,7 +35,7 @@ export function DesktopSidebar({
   const handleMouseLeave = () => setIsHovered(false);
   const handleWheel = () => setIsHovered(true);
 
-  const userPhoto = currentUser?.photos?.[0] || (currentUser as any)?.pictures?.[0];
+  const userPhoto = ownAvatar(currentUser);
 
   const navItems = [
     {
@@ -64,7 +68,7 @@ export function DesktopSidebar({
       icon: Settings,
       badge: 0,
     },
-  ];
+  ].filter((item) => tabs.includes(item.id));
 
   return (
     <div

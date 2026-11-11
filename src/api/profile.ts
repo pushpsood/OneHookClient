@@ -1,71 +1,109 @@
 import { sdkClient } from './sdk-client';
-import { UserProfile } from '../types';
-import type { ProfileUpdateRequest, MediaUploadUrlResponse } from 'onehook-api-client';
+import type {
+  ChatProfile,
+  ChatProfileUpdateRequest,
+  MatchingProfile,
+  MatchingProfileUpdateRequest,
+  MatchingProfileUpsertResponse,
+  MediaPurpose,
+  MediaUploadUrlResponse,
+  MyProfileResponse,
+} from 'onehook-api-client';
 import { setCachedMediaPreview, blobToDataUrl } from '../utils/profile-image';
+import { mediaKeyOwner, refreshViewPass, viewPasses, withViewPass } from '../lib/view-pass';
+import { isNotFound } from '../lib/api-errors';
 
 /**
  * Profile service wrapper.
  *
- * Design philosophy (see OneHookBackend/packages/profile): PUT /profile is a
- * patch-merge (only non-null fields overwrite). Media is uploaded by requesting
- * a presigned URL and PUTting or POSTing the binary directly to S3; moderation then runs
- * ASYNCHRONOUSLY (EventBridge -> Rekognition) and writes back `moderationStatus`
- * (APPROVED | REJECTED).
+ * Design (OneHookBackend/docs/chat-only-profiles.md §8.1, §9.2): every account has a CHAT profile
+ * (`PUT /profile/chat`: display name, avatar, birth date) and may have a MATCHING profile
+ * (`PUT /profile/matching`: everything else), which stays a DRAFT until matching is turned on in
+ * State. Both are patch-merges (only non-null fields overwrite). The owner reads both with
+ * `GET /profile`; another member's profile needs a view pass (see lib/view-pass.ts). Media is
+ * uploaded to a presigned URL with a `purpose` (CHAT or MATCHING; only matching media is erased when
+ * matching is turned off) and moderated asynchronously.
  */
 export const ProfileApi = {
-  get: async (userId: string) => {
-    // Single source of truth: the Smithy-generated SDK. It now deserializes `fieldModerationStatus`
-    // (the model is the contract; the client is generated from it) and resolves the endpoint through
-    // the Vite dev proxy on localhost, so no bespoke fetch/URL logic is needed here.
-    return (await sdkClient.getProfile({ userId })) as unknown as UserProfile;
+  /** The caller's own chat profile and, when one exists, matching profile. 404 before either exists. */
+  getMine: async (): Promise<MyProfileResponse> => {
+    return sdkClient.getMyProfile({});
   },
 
-  upsert: async (userId: string, data: Partial<Omit<ProfileUpdateRequest, 'userId'>>) => {
-    return (sdkClient as any).updateProfile({ userId, ...data });
+  /** Creates or updates the chat profile. `birthDetails.date` is required on creation, then immutable. */
+  upsertChat: async (data: ChatProfileUpdateRequest) => {
+    return sdkClient.upsertChatProfile(data);
+  },
+
+  /**
+   * Creates or updates the matching profile. It stays a DRAFT (erased after 30 days without edits)
+   * until matching is turned on. 409 MATCHING_ERASING while an opt-out is still erasing.
+   */
+  upsertMatching: async (data: MatchingProfileUpdateRequest): Promise<MatchingProfileUpsertResponse> => {
+    return sdkClient.upsertMatchingProfile(data);
+  },
+
+  /** A hook partner's (or an unlocked request sender's) chat profile, through a State pass. */
+  getChat: async (userId: string): Promise<ChatProfile> => {
+    return withViewPass('profile.chat', userId, (viewPass) => sdkClient.getChatProfile({ userId, viewPass }));
+  },
+
+  /** Another matching member's matching profile, through a Matching pass (discover page or likes). */
+  getMatching: async (userId: string): Promise<MatchingProfile> => {
+    return withViewPass('profile.matching', userId, (viewPass) =>
+      sdkClient.getMatchingProfile({ userId, viewPass })
+    );
   },
 
   delete: async (userId: string) => {
     return sdkClient.deleteProfile({ userId });
   },
 
-  /**
-   * Requests a presigned S3 upload URL.
-   */
+  /** Requests a presigned S3 upload URL for media of the given purpose. */
   getUploadUrl: async (
-    userId: string,
     contentType: string,
-    contentLength: number
+    contentLength: number,
+    purpose: MediaPurpose
   ): Promise<MediaUploadUrlResponse> => {
-    return (await (sdkClient as any).generateUploadUrl({ contentType, contentLength })) as MediaUploadUrlResponse;
+    return sdkClient.generateUploadUrl({ contentType, contentLength, purpose });
   },
 
   /**
-   * Requests a short-lived presigned GET URL for a private media object so it can be displayed.
-   *
-   * The media bucket blocks public access, so this endpoint (GET /profile/media/download-url) is
-   * the only read path. Routed through the generated SDK — the single source of truth for the API.
-   *
-   * @param key the S3 object key, e.g. "media/{userId}/{uuid}"
-   * @returns the presigned URL and its lifetime in seconds
+   * A short-lived presigned GET URL for a private media object. Another member's media needs the pass
+   * of the profile it belongs to (`media/{u}/chat/...` a chat pass, `media/{u}/matching/...` a
+   * matching pass); one's own media needs none. A 404 refreshes the pass once and retries.
    */
   getDownloadUrl: async (key: string): Promise<{ downloadUrl: string; expiresInSeconds: number }> => {
-    const res: any = await (sdkClient as any).generateDownloadUrl({ key });
-    return { downloadUrl: res.downloadUrl, expiresInSeconds: res.expiresInSeconds };
+    const owner = mediaKeyOwner(key);
+    const read = async (viewPass: string | undefined) => {
+      const res = await sdkClient.generateDownloadUrl({ key, viewPass });
+      return { downloadUrl: String(res.downloadUrl), expiresInSeconds: Number(res.expiresInSeconds ?? 0) };
+    };
+    const passFor = () => (owner?.aud ? viewPasses.passFor(owner.aud, owner.ownerId) : undefined);
+    try {
+      return await read(passFor());
+    } catch (err) {
+      if (!isNotFound(err) || !owner?.aud) throw err;
+      await refreshViewPass(owner.aud, [owner.ownerId]);
+      const pass = passFor();
+      if (!pass) throw err;
+      return read(pass);
+    }
   },
 
   /**
-   * Uploads a media file end-to-end: obtains a presigned URL, POSTs or PUTs the bytes to
-   * S3, caches the local preview, and returns the object key to store on the profile.
+   * Uploads a media file end-to-end: obtains a presigned URL for `purpose`, POSTs or PUTs the bytes to
+   * S3, caches the local preview, and returns the object key to store on the profile of that purpose.
    */
-  uploadMedia: async (userId: string, file: Blob): Promise<string> => {
+  uploadMedia: async (file: Blob, purpose: MediaPurpose): Promise<string> => {
     let contentType = file.type;
     if (!contentType || contentType === 'application/octet-stream') {
       contentType = 'image/jpeg';
     }
 
     const contentLength = file.size > 0 ? file.size : 1024;
-    const resUrl: any = await ProfileApi.getUploadUrl(userId, contentType, contentLength);
-    const { uploadUrl, objectKey, formData } = resUrl;
+    const { uploadUrl, objectKey, formData } = await ProfileApi.getUploadUrl(contentType, contentLength, purpose);
+    if (!uploadUrl || !objectKey) throw new Error('Media upload is unavailable. Please try again.');
 
     // Cache local data preview immediately for instantaneous rendering in UI
     try {
