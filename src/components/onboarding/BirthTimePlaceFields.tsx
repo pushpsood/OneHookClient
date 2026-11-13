@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin, Clock, X } from 'lucide-react';
+import type { BirthTimePlace as ApiBirthTimePlace } from 'onehook-api-client';
 import { sdkClient } from '../../api/sdk-client';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
-/** The optional parts of birthDetails. Only the date is locked; these can change at any time. */
+/**
+ * The matching profile's optional birth time and birthplace (`MatchingProfile.birthTimePlace`). They
+ * only refine traditional compatibility, are never shown to other members, and are erased with the
+ * matching profile. The chat profile carries only the birth date.
+ */
 export interface BirthTimePlace {
   time?: string;
   timeZone?: string;
@@ -15,7 +20,10 @@ export interface BirthTimePlace {
 interface Props {
   value: BirthTimePlace;
   onChange: (next: BirthTimePlace) => void;
-  /** Where the fields are shown: onboarding or the profile editor (telemetry id; never a value). */
+  /**
+   * Where the fields are shown (telemetry id; never a value). `profile` is the matching profile
+   * builder/editor, which records `profile_edit.choice_select`.
+   */
   surface?: 'onboarding' | 'profile';
 }
 
@@ -53,6 +61,11 @@ export function BirthTimePlaceFields({ value, onChange, surface = 'onboarding' }
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
+
+  // Keep the search box in step with a stored place that arrives (or is cleared) from outside.
+  useEffect(() => {
+    setQuery(value.placeName ?? '');
+  }, [value.placeName]);
 
   useEffect(() => {
     const q = query.trim();
@@ -99,15 +112,16 @@ export function BirthTimePlaceFields({ value, onChange, surface = 'onboarding' }
     onChange({ ...value, placeName: undefined, latitude: undefined, longitude: undefined });
   };
 
-  const zones = useMemo(() => allZones, []);
   const zone = value.timeZone ?? (value.time ? browserZone : undefined);
+  // The engine's list can use legacy ids (Asia/Calcutta) where the place lookup returns current ones
+  // (Asia/Kolkata); always offer the zone that is set so the select shows it.
+  const zones = useMemo(() => (zone && !allZones.includes(zone) ? [zone, ...allZones] : allZones), [zone]);
 
   return (
     <div className="space-y-4 border border-border p-4">
       <p className="text-xs opacity-70">
-        Optional. Your birth time and place only refine traditional compatibility (Kundali, natal
-        chart, Bazi and more). They are never shown to other members, and you can add or change them
-        at any time.
+        Optional. Your birth time and place only refine traditional compatibility (for example
+        Kundali). They&apos;re never shown to anyone, and they&apos;re erased if you turn matching off.
       </p>
 
       <div className="space-y-2">
@@ -233,16 +247,30 @@ export function BirthTimePlaceFields({ value, onChange, surface = 'onboarding' }
   );
 }
 
-/** The birthDetails payload: the (locked) date plus whatever optional fields are set. */
-export function birthDetailsPayload(date: string, extra: BirthTimePlace) {
-  const timeZone = extra.timeZone ?? (extra.time ? browserZone : undefined);
+/** The stored value as the fields edit it (the API may send nulls). */
+export function fromApiBirthTimePlace(api: ApiBirthTimePlace | null | undefined): BirthTimePlace {
   return {
-    date,
-    ...(extra.time ? { time: extra.time } : {}),
+    time: api?.time ?? undefined,
+    timeZone: api?.timeZone ?? undefined,
+    latitude: api?.latitude ?? undefined,
+    longitude: api?.longitude ?? undefined,
+    placeName: api?.placeName ?? undefined,
+  };
+}
+
+/**
+ * The `birthTimePlace` of `PUT /profile/matching`. It replaces the stored value whole, so it carries
+ * every part that is set: a time always with a time zone (the place's, else the device's), and the
+ * coordinates only as a pair, with the place label. `{}` when nothing is set, which clears it.
+ */
+export function birthTimePlacePayload(value: BirthTimePlace): ApiBirthTimePlace {
+  const timeZone = value.timeZone ?? (value.time ? browserZone : undefined);
+  const hasPlace = value.latitude !== undefined && value.longitude !== undefined;
+  return {
+    ...(value.time ? { time: value.time } : {}),
     ...(timeZone ? { timeZone } : {}),
-    ...(extra.latitude !== undefined && extra.longitude !== undefined
-      ? { latitude: extra.latitude, longitude: extra.longitude, placeName: extra.placeName }
-      : {}),
+    ...(hasPlace ? { latitude: value.latitude, longitude: value.longitude } : {}),
+    ...(hasPlace && value.placeName ? { placeName: value.placeName } : {}),
   };
 }
 
@@ -251,6 +279,21 @@ export function sameTimePlace(a: BirthTimePlace, b: BirthTimePlace): boolean {
     a.time === b.time &&
     a.timeZone === b.timeZone &&
     a.latitude === b.latitude &&
-    a.longitude === b.longitude
+    a.longitude === b.longitude &&
+    a.placeName === b.placeName
   );
+}
+
+/**
+ * The `birthTimePlace` part of a `PUT /profile/matching` request: nothing when the edit leaves the
+ * stored value as it was (omitted keeps it), else the whole new value (`{}` when cleared).
+ */
+export function birthTimePlaceUpdate(
+  edited: BirthTimePlace,
+  stored: ApiBirthTimePlace | null | undefined
+): { birthTimePlace?: ApiBirthTimePlace } {
+  const next = birthTimePlacePayload(edited);
+  return sameTimePlace(next, birthTimePlacePayload(fromApiBirthTimePlace(stored)))
+    ? {}
+    : { birthTimePlace: next };
 }

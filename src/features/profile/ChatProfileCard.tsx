@@ -8,12 +8,6 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import { MediaImage } from '../../components/common/MediaImage';
 import { ModerationBadge } from '../../components/ui/ModerationBadge';
 import { DateOfBirthField, LockedDateOfBirth } from '../../components/onboarding/DateOfBirthField';
-import {
-  BirthTimePlaceFields,
-  birthDetailsPayload,
-  sameTimePlace,
-  type BirthTimePlace,
-} from '../../components/onboarding/BirthTimePlaceFields';
 import { DOB_LOCKED_HINT, DOB_PROVISIONAL_HINT, ageOn, validateDob } from '../../utils/dob';
 import { Screen, UiElement, trackProps } from '../../lib/analytics/analytics';
 
@@ -21,7 +15,8 @@ import { Screen, UiElement, trackProps } from '../../lib/analytics/analytics';
  * The chat profile (docs/chat-only-profiles.md R1): display name, date of birth (18+, immutable) and an
  * optional avatar. Every account has one, and it is all a hook partner — or the recipient of a request —
  * ever sees. Saved with `PUT /profile/chat`; the avatar is media of purpose CHAT, so turning matching
- * off never touches it.
+ * off never touches it. Birth time and place are not asked for here: they belong to the matching
+ * profile (ProfileView's matching editor).
  */
 export function ChatProfileCard({ user, onSaved }: { user: UserProfile; onSaved?: () => unknown }) {
   const { setCurrentUser } = useAppStore();
@@ -44,22 +39,8 @@ export function ChatProfileCard({ user, onSaved }: { user: UserProfile; onSaved?
   const [realDobConfirmed, setRealDobConfirmed] = useState(false);
   const realDobReady = dobIsProvisional && realDob !== '' && realDobConfirmed && !validateDob(realDob);
   const displayAge = (realDobReady ? ageOn(realDob) : null) ?? user.age;
-  // Birth time and place: optional, editable any time (only the date is locked).
-  const storedExtra: BirthTimePlace = {
-    time: user.birthDetails?.time ?? undefined,
-    timeZone: user.birthDetails?.timeZone ?? undefined,
-    latitude: user.birthDetails?.latitude ?? undefined,
-    longitude: user.birthDetails?.longitude ?? undefined,
-    placeName: user.birthDetails?.placeName ?? undefined,
-  };
-  const [birthExtra, setBirthExtra] = useState<BirthTimePlace>(storedExtra);
-  const birthDateForSave = realDobReady ? realDob : lockedDob;
-  const birthExtraChanged =
-    !sameTimePlace(birthExtra, storedExtra) || birthExtra.placeName !== storedExtra.placeName;
-  const birthDetailsToSend =
-    birthDateForSave && (realDobReady || birthExtraChanged)
-      ? birthDetailsPayload(birthDateForSave, birthExtra)
-      : undefined;
+  // birthDetails is sent only to replace a provisional date, and then carries only the date.
+  const birthDetailsToSend = realDobReady ? { date: realDob } : undefined;
 
   const uploadAvatar = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -209,12 +190,6 @@ export function ChatProfileCard({ user, onSaved }: { user: UserProfile; onSaved?
           />
         </div>
       ) : null}
-
-      {(lockedDob || realDobReady) && (
-        <Field label="Birth time and place">
-          <BirthTimePlaceFields value={birthExtra} onChange={setBirthExtra} surface="profile" />
-        </Field>
-      )}
 
       <Field label="Age">
         <div className="field-input opacity-80" aria-readonly>

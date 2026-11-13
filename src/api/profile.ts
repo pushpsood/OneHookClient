@@ -18,7 +18,8 @@ import { isNotFound } from '../lib/api-errors';
  *
  * Design (OneHookBackend/docs/chat-only-profiles.md §8.1, §9.2): every account has a CHAT profile
  * (`PUT /profile/chat`: display name, avatar, birth date) and may have a MATCHING profile
- * (`PUT /profile/matching`: everything else), which stays a DRAFT until matching is turned on in
+ * (`PUT /profile/matching`: everything else, including the optional birth time and place), which
+ * stays a DRAFT until matching is turned on in
  * State. Both are patch-merges (only non-null fields overwrite). The owner reads both with
  * `GET /profile`; another member's profile needs a view pass (see lib/view-pass.ts). Media is
  * uploaded to a presigned URL with a `purpose` (CHAT or MATCHING; only matching media is erased when
@@ -30,7 +31,10 @@ export const ProfileApi = {
     return sdkClient.getMyProfile({});
   },
 
-  /** Creates or updates the chat profile. `birthDetails.date` is required on creation, then immutable. */
+  /**
+   * Creates or updates the chat profile. `birthDetails` is only `{ date }`: required on creation, then
+   * immutable (a provisional date may be replaced once). Birth time and place go on the matching profile.
+   */
   upsertChat: async (data: ChatProfileUpdateRequest) => {
     return sdkClient.upsertChatProfile(data);
   },
@@ -38,6 +42,7 @@ export const ProfileApi = {
   /**
    * Creates or updates the matching profile. It stays a DRAFT (erased after 30 days without edits)
    * until matching is turned on. 409 MATCHING_ERASING while an opt-out is still erasing.
+   * `birthTimePlace`: omitted keeps what is stored, an object replaces it whole, `{}` clears it.
    */
   upsertMatching: async (data: MatchingProfileUpdateRequest): Promise<MatchingProfileUpsertResponse> => {
     return sdkClient.upsertMatchingProfile(data);

@@ -6,6 +6,7 @@ export type {
   MatchingProfile,
   MyProfileResponse,
   BirthDetails,
+  BirthTimePlace,
   CandidateDto,
   DiscoverResponse,
   UserPreferencesResponse,
@@ -90,7 +91,9 @@ export type UserStateSnapshot = {
 /**
  * The signed-in member as the UI understands them: their chat profile (every account has one) merged
  * with their matching profile when one exists (DRAFT or ACTIVE). Built from `GET /profile` by
- * {@link import('./lib/profile-model').toUserProfile}.
+ * {@link import('./lib/profile-model').toUserProfile}. The optional birth time and place
+ * (`birthTimePlace`, owner only) come from the matching profile; the chat profile carries only the
+ * birth date.
  */
 export type UserProfile = Omit<MatchingProfile, 'userId' | 'status'> & {
   userId: string;
@@ -98,6 +101,7 @@ export type UserProfile = Omit<MatchingProfile, 'userId' | 'status'> & {
   name: string;
   /** Chat-profile avatar (purpose CHAT media key). */
   avatarKey?: string;
+  /** Chat-profile birth date (`date`, `provisional`). Birth time and place live in `birthTimePlace`. */
   birthDetails?: BirthDetails;
   /** True when a real (non-provisional) birth date is on file. */
   birthDateOnFile?: boolean;

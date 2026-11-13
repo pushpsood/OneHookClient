@@ -22,9 +22,15 @@ import type { UserProfile } from '../../types';
 import { SubscriptionTier } from '../../types';
 import { ProfileApi } from '../../api/profile';
 import { ChatProfileCard } from './ChatProfileCard';
+import {
+  BirthTimePlaceFields,
+  birthTimePlaceUpdate,
+  fromApiBirthTimePlace,
+  type BirthTimePlace,
+} from '../../components/onboarding/BirthTimePlaceFields';
 import { ProfileAccountRows } from './ProfileAccountRows';
 import { isMatchingOn } from '../../lib/app-mode';
-import { errorCode } from '../../lib/api-errors';
+import { errorCode, errorMessage } from '../../lib/api-errors';
 import { MATCHING_COPY, draftNotice, gapCopy, useMatchingMode } from '../settings/matching-mode';
 import { LockIcon, UpgradeDialog } from '../../components/common/LockedFeature';
 import { SuggestionsSection } from './CurrentSuggestionCard';
@@ -360,6 +366,11 @@ export function ProfileView({
     user.languages && user.languages.length > 0 ? user.languages : ['ENGLISH']
   );
 
+  // Optional birth time and place: matching-profile only (owner only, erased with it).
+  const [birthTimePlace, setBirthTimePlace] = useState<BirthTimePlace>(
+    fromApiBirthTimePlace(user.birthTimePlace)
+  );
+
   useEffect(() => {
     if (!user) return;
     if (!initialUserLoadedRef.current || user.id !== lastUserIdRef.current) {
@@ -419,6 +430,8 @@ export function ProfileView({
       if (user.languages && user.languages.length > 0) {
         setSelectedLanguages(user.languages);
       }
+
+      setBirthTimePlace(fromApiBirthTimePlace(user.birthTimePlace));
     }
   }, [prefs, user]);
 
@@ -662,6 +675,10 @@ export function ProfileView({
     const trimmedHometown = basic.hometown.trim();
     const trimmedLocation = basic.currentLocation.trim();
 
+    // Sent only when it changed (omitted keeps what is stored); it replaces the stored value whole,
+    // and `{}` clears it.
+    const birthTimePlaceEdit = birthTimePlaceUpdate(birthTimePlace, user.birthTimePlace);
+
     const profilePayload: Parameters<typeof ProfileApi.upsertMatching>[0] = {
       // Display name and birth date belong to the chat profile (ChatProfileCard), not here.
       bio: trimmedBio,
@@ -686,6 +703,7 @@ export function ProfileView({
       starSign: optional.starSign || undefined,
       interests: finalInterests.length > 0 ? finalInterests : undefined,
       languages: finalLanguages.length > 0 ? finalLanguages : undefined,
+      ...birthTimePlaceEdit,
     };
 
     // Detect moderated text changes to show optimistic 'PENDING' (Under Review) status immediately
@@ -750,6 +768,14 @@ export function ProfileView({
         starSign: optional.starSign,
         interests: finalInterests,
         languages: finalLanguages,
+        ...(birthTimePlaceEdit.birthTimePlace
+          ? {
+              birthTimePlace:
+                Object.keys(birthTimePlaceEdit.birthTimePlace).length > 0
+                  ? birthTimePlaceEdit.birthTimePlace
+                  : undefined,
+            }
+          : {}),
         fieldModerationStatus: nextFieldStatus,
         moderationStatus: anyMediaChanged
           ? anyTextChanged
@@ -787,7 +813,13 @@ export function ProfileView({
       .then(() => void onSaved?.())
       .catch((err) => {
         console.error('Profile save failed:', err);
-        if (errorCode(err) !== 'MATCHING_ERASING') showToast('Profile save failed — please try again.', 'error');
+        if (errorCode(err) === 'MATCHING_ERASING') return;
+        // A birth time/place the server rejects says which part (400, "birthTimePlace.…").
+        const message = errorMessage(err, '');
+        showToast(
+          message.startsWith('birthTimePlace.') ? message : 'Profile save failed — please try again.',
+          'error'
+        );
       });
 
     if (prefsChanged) {
@@ -1583,6 +1615,16 @@ export function ProfileView({
             </div>
           </section>
         </div>
+
+        <section className="space-y-3 pt-6 border-t border-border" aria-labelledby="birth-time-place-title">
+          <h3
+            id="birth-time-place-title"
+            className="text-[10px] uppercase tracking-[0.3em] font-black text-accent flex items-center gap-2"
+          >
+            <MapPin className="w-3.5 h-3.5" aria-hidden="true" /> Birth time and place
+          </h3>
+          <BirthTimePlaceFields value={birthTimePlace} onChange={setBirthTimePlace} surface="profile" />
+        </section>
 
         <div className="flex gap-6 pt-4 border-t border-border">
           <button

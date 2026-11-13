@@ -8,7 +8,10 @@
  */
 import type { ChatProfile, MatchingProfile, MyProfileResponse, UserProfile } from '../types';
 
-/** The signed-in member: chat fields over matching fields (the chat profile owns name and birth date). */
+/**
+ * The signed-in member: chat fields over matching fields (the chat profile owns name and birth date;
+ * the matching profile owns the optional birth time and place).
+ */
 export function toUserProfile(res: MyProfileResponse): UserProfile {
   const chat: ChatProfile = res.chat ?? ({ userId: '' } as ChatProfile);
   const matching: MatchingProfile | undefined = res.matching ?? undefined;
@@ -25,8 +28,11 @@ export function toUserProfile(res: MyProfileResponse): UserProfile {
     name: displayName,
     avatarKey: chat.avatarKey || undefined,
     age: chat.age ?? matching?.age,
+    // The chat profile owns the birth date; the optional birth time and place belong to the
+    // matching profile (owner only) and are erased with it.
     birthDetails: chat.birthDetails,
     birthDateOnFile: chat.birthDateOnFile,
+    birthTimePlace: matching?.birthTimePlace,
     pictures,
     photos: pictures,
     moderationStatus: matching?.moderationStatus ?? chat.moderationStatus,

@@ -106,3 +106,23 @@ describe('onboarding is chat-only (§7.1)', () => {
     expect(wizard).toContain("uploadMedia(file, 'CHAT')");
   });
 });
+
+describe('birth time and place live on the matching profile only', () => {
+  it('only the matching profile editor renders the fields', () => {
+    const users = code.filter((f) => /<BirthTimePlaceFields\b/.test(f.text)).map((f) => f.path);
+    expect(users).toEqual(['features/profile/ProfileView.tsx']);
+  });
+
+  it('no chat-profile write carries them', () => {
+    for (const rel of ['features/profile/ChatProfileCard.tsx', 'components/onboarding/OnboardingWizard.tsx']) {
+      const src = stripComments(read(rel));
+      expect(src, rel).not.toMatch(/BirthTimePlace|birthTimePlace|birthDetailsPayload/);
+    }
+    expect(code.filter((f) => /birthDetailsPayload/.test(f.text)).map((f) => f.path)).toEqual([]);
+  });
+
+  it('the matching editor saves them with PUT /profile/matching', () => {
+    const view = stripComments(read('features/profile/ProfileView.tsx'));
+    expect(view).toMatch(/const profilePayload[\s\S]*?\.\.\.birthTimePlaceEdit,[\s\S]*?saveMatching\(profilePayload\)/);
+  });
+});
