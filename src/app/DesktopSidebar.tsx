@@ -39,6 +39,13 @@ export function DesktopSidebar({
 
   const navItems = [
     {
+      // Chat-only members only (appTabsFor): what matching is, and the way to turn it on.
+      id: 'MATCHING_INTRO' as AppTab,
+      label: 'Matching',
+      icon: Heart,
+      badge: 0,
+    },
+    {
       id: 'DISCOVERY' as AppTab,
       label: 'Discover',
       icon: Compass,
@@ -132,7 +139,7 @@ export function DesktopSidebar({
                       <Icon
                         className="w-6 h-6 transition-transform group-hover:scale-105"
                         strokeWidth={isActive ? 2.5 : 1.75}
-                        fill={isActive && (item.id === 'LIKES' || item.id === 'DISCOVERY') ? 'currentColor' : 'none'}
+                        fill={isActive && (item.id === 'LIKES' || item.id === 'DISCOVERY' || item.id === 'MATCHING_INTRO') ? 'currentColor' : 'none'}
                       />
                     )}
 

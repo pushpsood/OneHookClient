@@ -66,6 +66,29 @@ export const IdentityApi = {
     return sdkClient.updatePhoneNumber({ phoneNumber, otp });
   },
 
+  // --- Username and password (signed-in member) ---
+  /**
+   * `GET /identity/user/username/availability/{username}`. The SDK path-escapes the label. Answers
+   * AVAILABLE, TAKEN, INVALID (with a `reason`) or CURRENT (already the caller's own); 429 after 120
+   * checks an hour.
+   */
+  checkUsernameAvailability: async (username: string) => {
+    return sdkClient.checkUsernameAvailability({ username });
+  },
+
+  /** `PUT /identity/user/username`. 400 when the handle is invalid, reserved, unchanged or taken. */
+  updateUsername: async (username: string) => {
+    return sdkClient.updateUsername({ username });
+  },
+
+  /**
+   * `PUT /identity/user/password`: the member's FIRST password, no old one needed. 400 when it fails the
+   * pool policy; 409 PASSWORD_ALREADY_SET once one was chosen.
+   */
+  setPassword: async (password: string) => {
+    return sdkClient.setPassword({ password });
+  },
+
   // --- User lookups ---
   getUser: async (userId: string) => {
     return sdkClient.getUser({ userId });

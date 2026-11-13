@@ -6,8 +6,7 @@ import { ProfileApi } from '../../api/profile';
 import { ChatEncryptionManager } from '../../lib/chat-encryption';
 import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
-import { requestGoogleIdToken } from '../../lib/google-identity';
-import { googleClientId } from '../../utils/env.config';
+import { linkGoogleAccount } from '../../lib/social-link';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 export function AccountSettingsCard() {
@@ -73,8 +72,7 @@ export function AccountSettingsCard() {
   const handleLinkGoogle = async () => {
     try {
       setLoading('google');
-      const token = await requestGoogleIdToken(googleClientId);
-      await IdentityApi.linkSocial('GOOGLE', token);
+      await linkGoogleAccount();
       showToast('Google account linked successfully!', 'success');
     } catch (err: any) {
       showToast(err?.message || 'Could not link Google account.', 'error');

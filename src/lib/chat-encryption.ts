@@ -56,7 +56,7 @@ import {
  *    epoch is established through an endpoint that REQUIRES a wrap set in the same call, so an account
  *    can never hold a history key that nothing can unlock.
  *  - A device without a wrap is not in a dead end. `unlockHistoryKey` walks the ladder — a device wrap
- *    sealed to it, then PRF — and `resetHistoryKey` is the floor when every rung fails. QR transfer
+ *    sealed to it, then PRF. QR transfer
  *    (see key-recovery.ts, `exportRecoveryBundle` / `importRecoveryBundle`) is the manual fallback, no
  *    longer the mechanism. Every path that obtains the key also PUBLISHES a wrap for the device that
  *    obtained it, so the holder set grows and the account becomes progressively harder to strand.
@@ -122,7 +122,7 @@ const PLATFORM = 'WEB';
  * history public key but had lost the registration race and could therefore never read history without
  * a device-to-device transfer. That state no longer exists: a device either holds a wrap for the active
  * epoch or it does not yet, and if it does not, the unlock ladder (platform escrow, passkey PRF, a
- * device wrap, QR, reset) is how it gets one. Keeping a `future-only` label would tell users a
+ * device wrap, QR) is how it gets one. Keeping a `future-only` label would tell users a
  * limitation is permanent when it is usually one biometric prompt away from being resolved.
  */
 export type HistoryKeyStatus = 'holding' | 'not-yet';
@@ -746,7 +746,7 @@ export class ChatEncryptionManager {
    *   3. PRF, supplied by the caller because deriving it needs a user gesture this layer must not
    *      trigger on its own.
    *
-   * QR transfer and reset sit ABOVE this in the UI rather than here: both need explicit user
+   * QR transfer sits ABOVE this in the UI rather than here: it needs explicit user
    * involvement, and this method must be safe to call unattended at sign-in.
    *
    * @param derivePrfSecret optional: given a credential id, returns that passkey's PRF output
@@ -894,7 +894,7 @@ export class ChatEncryptionManager {
    *
    * Must be called on a device that already holds the key. Returns the credential id used, or null when
    * PRF is unavailable — an ordinary outcome on Windows 10, Firefox-on-Android and Chrome-profile
-   * authenticators, where the caller keeps QR and reset as the available paths.
+   * authenticators, where the caller keeps QR as the available path.
    */
   async addPasskeyUnlock(): Promise<string | null> {
     const identity = await this.loadIdentity();
@@ -945,88 +945,12 @@ export class ChatEncryptionManager {
   }
 
   /**
-   * Establishes a NEW epoch after every unlock method has failed, deliberately abandoning history.
-   *
-   * The floor of the ladder. Without it a stranded key leaves the account permanently broken: every
-   * future message would keep being wrapped to a key nobody holds, with no way to establish a
-   * replacement. This trades "old messages lost" for "account works again".
-   *
-   * Records a HORIZON rather than deleting anything. `ChatTable` stores one shared copy per match, so
-   * deleting would destroy the peer's copy too — and the peer may still read it perfectly well. It also
-   * buys no confidentiality, since that ciphertext is already unreadable without the key. See
-   * docs/account-key-recovery.md §4.1.
-   *
-   * Callers MUST confirm with the user first and should re-authenticate: reset cannot reveal history,
-   * but it can destroy this account's access to it.
-   *
-   * @returns true when this device established the new epoch; false when another device won the race,
-   *          in which case the caller should re-read and try unlocking against that epoch instead.
-   */
-  async resetHistoryKey(): Promise<boolean> {
-    const identity = await this.loadIdentity();
-    if (!identity.deviceId || !identity.devicePublicKey) {
-      throw new Error('This device is not registered for encrypted chat yet.');
-    }
-
-    const state = await ChatApi.getHistoryState();
-    const currentEpoch = state.activeEpoch ?? 0;
-    const nextEpoch = currentEpoch + 1;
-
-    // Extractable on purpose: this key must be transferable to future devices and to other unlock
-    // methods, exactly like the epoch it replaces.
-    const pair = await generateKeyPair(true);
-    const pkcs8 = new Uint8Array(await subtle().exportKey('pkcs8', pair.privateKey));
-    const keyId = randomId();
-
-    const established = await ChatApi.establishHistoryEpoch({
-      epoch: nextEpoch,
-      expectedEpoch: currentEpoch,
-      keyId,
-      publicKey: await exportPublicKey(pair.publicKey),
-      // Every epoch after the first is a reset, so the backend requires a horizon. This is the line
-      // the UI renders as "earlier messages aren't available on this account".
-      horizonAt: currentEpoch > 0 ? Date.now() : undefined,
-      wraps: [
-        {
-          method: 'DEVICE',
-          wrapId: identity.deviceId,
-          wrappedKey: await wrapToDeviceKey(pkcs8, await exportPublicKey(identity.devicePublicKey), {
-            userId: this.userId,
-            epoch: nextEpoch,
-            method: 'DEVICE',
-            wrapId: identity.deviceId,
-          }),
-        },
-      ],
-    });
-
-    if (!established.established) return false;
-    this.invalidateHistoryState();
-
-    const db = await openDatabase();
-    identity.historyKeyId = keyId;
-    identity.historyEpoch = nextEpoch;
-    identity.historyPrivateKey = pair.privateKey;
-    identity.historyPublicKey = pair.publicKey;
-    identity.historyPrivateKeyPkcs8 = pkcs8;
-    await writeIdentity(db, identity);
-    this.identity = Promise.resolve(identity);
-
-    // Immediately add a second holder where possible, so the fresh epoch is not a single point of
-    // failure the way the one it replaced was.
-    try {
-      await this.addPasskeyUnlock();
-    } catch {
-      /* PRF is unavailable here; the device wrap above still stands */
-    }
-    return true;
-  }
-
-  /**
    * The active epoch's history horizon, if it has one.
    *
-   * Set only on an epoch created by a reset. Messages older than this cannot be read on this account,
-   * so the UI shows one marker instead of a wall of individually locked bubbles.
+   * Set only on an epoch created by a reset ("Start over on this device", offered by the iOS and Android
+   * apps; web has no reset, but another of the member's devices may have started over). Messages older
+   * than this cannot be read on this account, so the UI shows one marker instead of a wall of
+   * individually locked bubbles.
    */
   async historyHorizon(): Promise<number | undefined> {
     const state = await this.historyStateFresh();

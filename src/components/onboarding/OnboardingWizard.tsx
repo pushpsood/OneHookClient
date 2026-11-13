@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Plus, Trash2, LogOut, MessageCircle } from 'lucide-react';
+import { Plus, Trash2, LogOut, MessageCircle, Loader, Check } from 'lucide-react';
 import { ProfileApi } from '../../api/profile';
 import { StateApi } from '../../api/state';
+import { IdentityApi } from '../../api/identity';
 import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
 import { LoadingSpinner } from '../common/LoadingSpinner';
@@ -15,19 +16,60 @@ import { ageOn, onboardingGateMessage, validateDob } from '../../utils/dob';
 import { getCognitoAuth } from '../../lib/cognito-auth';
 import { errorStatus } from '../../lib/api-errors';
 import { toUserProfile } from '../../lib/profile-model';
-import { UiElement, trackProps, trackScreenView, Screen } from '../../lib/analytics/analytics';
+import { UiElement, trackProps, trackScreenView, trackUi, Screen } from '../../lib/analytics/analytics';
+import {
+  PASSWORD_RULES_COPY,
+  canContinueUsername,
+  checkFromError,
+  checkFromResponse,
+  isProviderCancel,
+  normalizeUsername,
+  onboardingNextValue,
+  onboardingSteps,
+  passwordError,
+  setPasswordFailure,
+  stepAfter,
+  stepBefore,
+  updateUsernameFailure,
+  usernameCheckMessage,
+  usernameFormatError,
+  type OnboardingStep,
+  type UsernameCheck,
+} from '../../lib/account-setup';
+import { RECOVERY_COPY, recoveryDepsFor, setUpAccountRecovery } from '../../lib/account-recovery';
+import { linkGoogleAccount } from '../../lib/social-link';
 
-/** Step order, so the label and the progress bar cannot disagree about where the user is. */
-const STEPS = ['basics', 'photo'] as const;
-type Step = (typeof STEPS)[number];
+type Step = OnboardingStep;
+
+const STEP_TITLES: Record<Step, string> = {
+  basics: 'Create Your Profile',
+  photo: 'Add a Photo',
+  username: 'Your Username',
+  password: 'Add a Password',
+  social: 'Sign-in Options',
+  recovery: 'Account Recovery',
+};
+
+export const ONBOARDING_COPY = {
+  username:
+    'This is your username. People can find and add you with it. You can change it now or later.',
+  password:
+    'Add a password (optional). Then you can also sign in with your phone, email or username and a password.',
+  social: 'Link Apple or Google (optional) so you can sign in with one tap.',
+  recovery:
+    'Set up account recovery. Without it, your earlier messages can’t be restored when you sign in on another device or a new phone. You can still sign in and chat on any device; you can set this up later from Profile > Account recovery.',
+} as const;
 
 /**
  * Chat-only onboarding (OneHookBackend/docs/chat-only-profiles.md §7.1, G1).
  *
  * Every account starts with a CHAT profile only: display name, date of birth (18+, immutable) and an
- * optional avatar. That is `PUT /profile/chat`, then `POST /state/complete-onboarding`, and the member
- * lands in a Messenger-only app. Matching is opt-in later, from Settings: the matching profile (photos,
- * prompts, voice, preferences) is built there, never here.
+ * optional avatar, saved with `PUT /profile/chat` when the photo step is done. Then the account steps:
+ * the username (prefilled with the random one from sign-up), an optional first password (skipped when
+ * GetUser says one exists), optional Google linking and optional account recovery. Last comes
+ * `POST /state/complete-onboarding`, and the member lands in a Messenger-only app. Every step is
+ * idempotent, so a member who closes the app part-way resumes without anything breaking. Matching is
+ * opt-in later: the matching profile (photos, prompts, voice, preferences) is built there, never here.
  */
 export function OnboardingWizard() {
   const navigate = useNavigate();
@@ -36,6 +78,29 @@ export function OnboardingWizard() {
 
   const [step, setStep] = useState<Step>('basics');
   const [saving, setSaving] = useState(false);
+  /** A call made by the current step (saving the chat profile, the username, the password, ...). */
+  const [stepBusy, setStepBusy] = useState(false);
+  const [stepError, setStepError] = useState<string | null>(null);
+  /** Completing onboarding failed; the recovery step offers Finish again. */
+  const [finishError, setFinishError] = useState<string | null>(null);
+
+  // From GetUser: the member's current username, whether a password exists, whether Google is linked.
+  const [hasPassword, setHasPassword] = useState(false);
+  const [currentUsername, setCurrentUsername] = useState('');
+  const [username, setUsername] = useState('');
+  const [lastCheckedUsername, setLastCheckedUsername] = useState('');
+  const [usernameCheck, setUsernameCheck] = useState<UsernameCheck>({ kind: 'idle' });
+  const checkSeq = useRef(0);
+  const usernameContinueRef = useRef<HTMLButtonElement | null>(null);
+
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [googleLinked, setGoogleLinked] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
+
+  const steps = onboardingSteps(hasPassword);
   const [loggingOut, setLoggingOut] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -79,6 +144,38 @@ export function OnboardingWizard() {
       active = false;
     };
   }, []);
+
+  // Prefill the account steps from GetUser: the username every member gets at sign-up, whether a
+  // password was chosen already (then the password step is skipped) and whether Google is linked.
+  // Without it the steps still work: UpdateUsername and SetPassword are the authorities.
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const uid = await getResolvedUserId();
+        if (!uid) return;
+        const me = await IdentityApi.getUser(uid);
+        if (!active) return;
+        const name = normalizeUsername(me.username ?? '');
+        setCurrentUsername(name);
+        setUsername((prev) => prev || name);
+        setLastCheckedUsername((prev) => prev || name);
+        setHasPassword(Boolean(me.hasPassword));
+        setGoogleLinked(Boolean(me.googleId));
+      } catch {
+        /* nothing to prefill */
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A step that drops out (the password step once GetUser says one exists) is never shown.
+  useEffect(() => {
+    if (step === 'password' && !steps.includes('password')) setStep('social');
+  }, [steps, step]);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -126,20 +223,210 @@ export function OnboardingWizard() {
       showToast('Please confirm your date of birth. It cannot be changed later.', 'error');
       return;
     }
-    setStep('photo');
+    advance('basics');
   };
 
-  const finishOnboarding = async () => {
-    setSaving(true);
+  const goTo = (next: Step | null) => {
+    setStepError(null);
+    if (next) setStep(next);
+  };
+
+  /** Moves past `from`; past the last step the wizard finishes. */
+  const advance = (from: Step) => {
+    const next = stepAfter(steps, from);
+    if (next) goTo(next);
+    else void finishOnboarding();
+  };
+
+  const back = (from: Step) => goTo(stepBefore(steps, from));
+
+  /**
+   * Saves the chat profile when the photo step is done, so a member who closes the app later in the
+   * wizard keeps it (the prefill above reads it back). `PUT /profile/chat` is idempotent.
+   */
+  const handleNextFromPhoto = async () => {
+    setStepBusy(true);
+    setStepError(null);
     try {
-      const uid = await getResolvedUserId();
-      const birthDetails = birthDetailsPayload(birthDate, birthExtra);
       await ProfileApi.upsertChat({
         displayName: displayName.trim(),
         // Age is derived by the server from birthDetails.date.
-        birthDetails,
+        birthDetails: birthDetailsPayload(birthDate, birthExtra),
         ...(avatarKey ? { avatarKey } : {}),
       });
+      // The date of birth is on file now and cannot change.
+      setStoredDob(birthDate);
+      setDobConfirmed(true);
+      advance('photo');
+    } catch (err) {
+      const status = errorStatus(err);
+      const message = (err as { message?: string })?.message ?? '';
+      if (status === 400 && /birthDetails|at least 18/.test(message)) {
+        showToast(message, 'error');
+        setStep('basics');
+      } else {
+        showToast('Could not save profile. Please try again.', 'error');
+      }
+    } finally {
+      setStepBusy(false);
+    }
+  };
+
+  // ── Username ──
+  /** The check shown applies only to the value it was made for; a new value is unchecked. */
+  const shownCheck: UsernameCheck =
+    normalizeUsername(username) === lastCheckedUsername ? usernameCheck : { kind: 'idle' };
+
+  /** On blur: check the value once, locally first, then with CheckUsernameAvailability. */
+  const checkUsername = async () => {
+    const value = normalizeUsername(username);
+    setUsername(value);
+    if (!value || value === lastCheckedUsername) return;
+    setLastCheckedUsername(value);
+    const formatError = usernameFormatError(value);
+    if (formatError) {
+      setUsernameCheck({ kind: 'invalid', reason: formatError });
+      return;
+    }
+    const seq = ++checkSeq.current;
+    setUsernameCheck({ kind: 'checking' });
+    try {
+      const res = await IdentityApi.checkUsernameAvailability(value);
+      if (seq === checkSeq.current) setUsernameCheck(checkFromResponse(res));
+    } catch (err) {
+      if (seq === checkSeq.current) setUsernameCheck(checkFromError(err));
+    }
+  };
+
+  const handleNextFromUsername = async () => {
+    const value = normalizeUsername(username);
+    setUsername(value);
+    const formatError = usernameFormatError(value);
+    if (formatError) {
+      setLastCheckedUsername(value);
+      setUsernameCheck({ kind: 'invalid', reason: formatError });
+      return;
+    }
+    if (currentUsername && value === currentUsername) {
+      advance('username');
+      return;
+    }
+    checkSeq.current += 1; // a check still in flight no longer applies
+    setStepBusy(true);
+    setStepError(null);
+    try {
+      const res = await IdentityApi.updateUsername(value);
+      const saved = normalizeUsername(res.username ?? value);
+      setCurrentUsername(saved);
+      setUsername(saved);
+      setLastCheckedUsername(saved);
+      setUsernameCheck({ kind: 'current' });
+      advance('username');
+    } catch (err) {
+      const failure = updateUsernameFailure(err);
+      if (failure.kind === 'taken') {
+        setLastCheckedUsername(value);
+        setUsernameCheck({ kind: 'taken' });
+      } else if (failure.kind === 'unchanged') {
+        setCurrentUsername(value);
+        advance('username');
+      } else {
+        setStepError(failure.message);
+      }
+    } finally {
+      setStepBusy(false);
+    }
+  };
+
+  // ── Password ──
+  const handleNextFromPassword = async () => {
+    const problem = passwordError(password, confirmPassword);
+    if (problem) {
+      setStepError(problem);
+      return;
+    }
+    setStepBusy(true);
+    setStepError(null);
+    try {
+      await IdentityApi.setPassword(password);
+      passwordDone();
+    } catch (err) {
+      const failure = setPasswordFailure(err);
+      if (failure.kind === 'already-set') passwordDone();
+      else setStepError(failure.message);
+    } finally {
+      setStepBusy(false);
+    }
+  };
+
+  /** The member has a password now: never offer the step again (Back from the next step skips it). */
+  const passwordDone = () => {
+    setPassword('');
+    setConfirmPassword('');
+    advance('password');
+    setHasPassword(true);
+  };
+
+  const skipPassword = () => {
+    setPassword('');
+    setConfirmPassword('');
+    advance('password');
+  };
+
+  // ── Sign-in options ──
+  const handleLinkGoogle = async () => {
+    setStepBusy(true);
+    setStepError(null);
+    try {
+      await linkGoogleAccount();
+      setGoogleLinked(true);
+    } catch (err) {
+      if (isProviderCancel(err)) {
+        trackUi(UiElement.ONBOARDING_SOCIAL_LINK, { action: 'dismiss', value: 'google' });
+      } else {
+        setStepError(err instanceof Error && err.message ? err.message : 'Could not link Google. Please try again.');
+      }
+    } finally {
+      setStepBusy(false);
+    }
+  };
+
+  // ── Account recovery ──
+  const handleSetUpRecovery = async () => {
+    setStepBusy(true);
+    setRecoveryMessage(null);
+    try {
+      const uid = await getResolvedUserId();
+      const result = uid
+        ? await setUpAccountRecovery(recoveryDepsFor(uid))
+        : ({ kind: 'error', message: RECOVERY_COPY.failed } as const);
+      if (result.kind === 'protected') {
+        trackUi(UiElement.ONBOARDING_NEXT, { value: onboardingNextValue('recovery') });
+        await finishOnboarding();
+      } else if (result.kind === 'cancelled') {
+        trackUi(UiElement.ONBOARDING_RECOVERY_SETUP, { action: 'dismiss' });
+        setRecoveryMessage(RECOVERY_COPY.cancelled);
+      } else if (result.kind === 'unsupported') {
+        setRecoveryMessage(RECOVERY_COPY.unsupported);
+      } else {
+        setRecoveryMessage(result.message);
+      }
+    } finally {
+      setStepBusy(false);
+    }
+  };
+
+  /**
+   * The very last call: `POST /state/complete-onboarding`. `fromButton` is the Finish retry button,
+   * which reports itself; otherwise finishing is reported here.
+   */
+  const finishOnboarding = async (fromButton = false) => {
+    if (!fromButton) trackUi(UiElement.ONBOARDING_FINISH);
+    setSaving(true);
+    setFinishError(null);
+    try {
+      const uid = await getResolvedUserId();
+      const birthDetails = birthDetailsPayload(birthDate, birthExtra);
       // Completing onboarding is NOT optional: it transitions the authoritative user state
       // ONBOARDING → AVAILABLE in the State service. Until that happens the member cannot connect with
       // anyone (the hook transaction requires current_state IN (AVAILABLE, HOOKED)). Surface a failure
@@ -162,26 +449,20 @@ export function OnboardingWizard() {
       showToast('Welcome to OneHook!', 'success');
       navigate('/app', { replace: true });
     } catch (err) {
-      // Distinguish "your account is still finishing setup" from a genuine save failure. A 409 here
-      // means only that the caller's sign-in credentials were not live in Cognito yet — nothing the
-      // user entered is wrong, and nothing is lost. StateApi.completeOnboarding already retried with
+      // Distinguish "your account is still finishing setup" from a genuine failure. A 409 here means
+      // only that the caller's sign-in credentials were not live in Cognito yet — nothing the user
+      // entered is wrong, and nothing is lost. StateApi.completeOnboarding already retried with
       // backoff, so reaching this branch means it persisted (typically an Identity outage).
       const status = errorStatus(err);
       const message = (err as { message?: string })?.message ?? '';
       const gate = status === 409 ? onboardingGateMessage(message) : null;
-      if (gate) {
-        showToast(gate, 'error');
-      } else if (status === 400 && /birthDetails|at least 18/.test(message)) {
-        showToast(message, 'error');
-        setStep('basics');
-      } else if (status === 409) {
-        showToast(
-          'Your account is still finishing setup — your profile is saved. Please tap Finish again in a few moments.',
-          'error'
-        );
-      } else {
-        showToast('Could not save profile. Please try again.', 'error');
-      }
+      const shown = gate
+        ? gate
+        : status === 409
+          ? 'Your account is still finishing setup — your profile is saved. Please tap Finish again in a few moments.'
+          : 'Could not finish setting up. Please try again.';
+      showToast(shown, 'error');
+      setFinishError(shown);
     } finally {
       setSaving(false);
     }
@@ -204,7 +485,7 @@ export function OnboardingWizard() {
 
   if (saving || loggingOut) return <LoadingSpinner fullScreen />;
 
-  const stepIndex = STEPS.indexOf(step);
+  const stepIndex = Math.max(0, steps.indexOf(step));
 
   return (
     <div className="min-h-screen bg-[#F7F7F7] flex items-center justify-center p-6 sm:p-12">
@@ -222,31 +503,32 @@ export function OnboardingWizard() {
           <div className="flex items-start justify-between">
             <div className="space-y-4 flex-1">
               <span className="text-[11px] uppercase tracking-[0.4em] font-black text-accent">
-                Step {stepIndex + 1} of {STEPS.length}
+                Step {stepIndex + 1} of {steps.length}
               </span>
               <h1 className="text-4xl sm:text-5xl font-serif italic tracking-tighter uppercase">
-                {step === 'basics' && 'Create Your Profile'}
-                {step === 'photo' && 'Add a Photo'}
+                {STEP_TITLES[step]}
               </h1>
               <div
                 className="flex items-center gap-1.5"
                 role="progressbar"
                 aria-valuemin={1}
-                aria-valuemax={STEPS.length}
+                aria-valuemax={steps.length}
                 aria-valuenow={stepIndex + 1}
-                aria-label={`Step ${stepIndex + 1} of ${STEPS.length}`}
+                aria-label={`Step ${stepIndex + 1} of ${steps.length}`}
               >
-                {STEPS.map((s, index) => (
+                {steps.map((s, index) => (
                   <span
                     key={s}
                     className={`h-[3px] flex-1 transition-colors ${index <= stepIndex ? 'bg-accent' : 'bg-border'}`}
                   />
                 ))}
               </div>
-              <p className="text-sm opacity-60 italic">
-                This is what the people you connect with see. Matching is optional: you can turn it on
-                later in Settings.
-              </p>
+              {(step === 'basics' || step === 'photo') && (
+                <p className="text-sm opacity-60 italic">
+                  This is what the people you connect with see. Matching is optional: you can turn it on
+                  later in Settings.
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -396,28 +678,272 @@ export function OnboardingWizard() {
               </div>
             )}
 
-            <div className="flex gap-4 pt-4">
-              <button
-                type="button"
-                onClick={() => setStep('basics')}
-                {...trackProps(UiElement.ONBOARDING_BACK)}
-                className="py-4 px-6 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={finishOnboarding}
-                disabled={uploading}
-                {...trackProps(UiElement.ONBOARDING_FINISH)}
-                className="flex-1 py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 disabled:opacity-40 transition-all shadow-md"
-              >
-                {avatarKey ? 'Finish & Enter OneHook' : 'Skip photo & Enter OneHook'}
-              </button>
+            <StepNav
+              onBack={() => back('photo')}
+              onNext={() => void handleNextFromPhoto()}
+              nextValue={onboardingNextValue('photo')}
+              nextLabel={avatarKey ? 'Continue' : 'Skip photo & continue'}
+              disabled={uploading || stepBusy}
+              busy={stepBusy}
+            />
+          </div>
+        )}
+
+        {/* ── STEP 3: USERNAME ── */}
+        {step === 'username' && (
+          <div className="space-y-6">
+            <p className="text-sm text-muted-foreground leading-relaxed">{ONBOARDING_COPY.username}</p>
+            <Field label="Username" htmlFor="onboarding-username">
+              <div className="relative">
+                <input
+                  id="onboarding-username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase())}
+                  onBlur={(e) => {
+                    // Continue saves (and so checks) the value itself; checking here as well would
+                    // disable the button under the click.
+                    if (e.relatedTarget === usernameContinueRef.current) return;
+                    void checkUsername();
+                  }}
+                  maxLength={30}
+                  className="field-input pr-10"
+                  placeholder="yourusername"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  aria-describedby="onboarding-username-status"
+                />
+                {shownCheck.kind === 'checking' && (
+                  <Loader
+                    className="w-4 h-4 animate-spin absolute right-3 top-1/2 -translate-y-1/2 opacity-60"
+                    aria-label="Checking"
+                  />
+                )}
+              </div>
+            </Field>
+            <p
+              id="onboarding-username-status"
+              role="status"
+              className={`text-xs min-h-[1rem] ${shownCheck.kind === 'available' ? 'text-green-600' : 'text-red-600'}`}
+            >
+              {usernameCheckMessage(shownCheck)}
+            </p>
+            {stepError && <p className="text-xs text-red-600" role="alert">{stepError}</p>}
+            <StepNav
+              onBack={() => back('username')}
+              onNext={() => void handleNextFromUsername()}
+              nextValue={onboardingNextValue('username')}
+              disabled={stepBusy || !canContinueUsername(normalizeUsername(username), shownCheck)}
+              busy={stepBusy}
+              nextRef={usernameContinueRef}
+            />
+          </div>
+        )}
+
+        {/* ── STEP 4: OPTIONAL PASSWORD ── */}
+        {step === 'password' && (
+          <div className="space-y-6">
+            <p className="text-sm text-muted-foreground leading-relaxed">{ONBOARDING_COPY.password}</p>
+            <p className="text-xs font-bold">{PASSWORD_RULES_COPY}</p>
+            <div className="grid sm:grid-cols-2 gap-6">
+              <Field label="Password" htmlFor="onboarding-password">
+                <input
+                  id="onboarding-password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="field-input"
+                  autoComplete="new-password"
+                />
+              </Field>
+              <Field label="Confirm password" htmlFor="onboarding-password-confirm">
+                <input
+                  id="onboarding-password-confirm"
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="field-input"
+                  autoComplete="new-password"
+                />
+              </Field>
             </div>
+            <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showPassword}
+                onChange={(e) => setShowPassword(e.target.checked)}
+              />
+              Show password
+            </label>
+            {stepError && <p className="text-xs text-red-600" role="alert">{stepError}</p>}
+            <StepNav
+              onBack={() => back('password')}
+              onNext={() => void handleNextFromPassword()}
+              nextValue={onboardingNextValue('password')}
+              disabled={stepBusy || !password || !confirmPassword}
+              busy={stepBusy}
+              onSkip={skipPassword}
+              skipValue="password"
+            />
+          </div>
+        )}
+
+        {/* ── STEP 5: OPTIONAL SIGN-IN OPTIONS (web links Google only; Apple linking is not built) ── */}
+        {step === 'social' && (
+          <div className="space-y-6">
+            <p className="text-sm text-muted-foreground leading-relaxed">{ONBOARDING_COPY.social}</p>
+            <button
+              type="button"
+              onClick={() => void handleLinkGoogle()}
+              disabled={stepBusy || googleLinked}
+              {...trackProps(UiElement.ONBOARDING_SOCIAL_LINK, { value: 'google' })}
+              className="w-full py-4 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:border-accent transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {googleLinked ? (
+                <>
+                  <Check className="w-4 h-4 text-green-600" aria-hidden="true" /> Google · Linked
+                </>
+              ) : stepBusy ? (
+                <>
+                  <Loader className="w-4 h-4 animate-spin" aria-hidden="true" /> Linking Google…
+                </>
+              ) : (
+                'Link Google'
+              )}
+            </button>
+            {stepError && <p className="text-xs text-red-600" role="alert">{stepError}</p>}
+            <StepNav
+              onBack={() => back('social')}
+              onNext={() => advance('social')}
+              nextValue={onboardingNextValue('social')}
+              disabled={stepBusy}
+              onSkip={() => advance('social')}
+              skipValue="social"
+            />
+          </div>
+        )}
+
+        {/* ── STEP 6: OPTIONAL ACCOUNT RECOVERY, then finish ── */}
+        {step === 'recovery' && (
+          <div className="space-y-6">
+            <p className="text-sm text-muted-foreground leading-relaxed">{ONBOARDING_COPY.recovery}</p>
+            {recoveryMessage && (
+              <p className="text-xs text-muted-foreground leading-relaxed" role="alert">
+                {recoveryMessage}
+              </p>
+            )}
+            {finishError ? (
+              <div className="space-y-3">
+                <p className="text-xs text-red-600" role="alert">{finishError}</p>
+                <button
+                  type="button"
+                  onClick={() => void finishOnboarding(true)}
+                  {...trackProps(UiElement.ONBOARDING_FINISH)}
+                  className="w-full py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 transition-all shadow-md"
+                >
+                  Finish &amp; Enter OneHook
+                </button>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleSetUpRecovery()}
+                  disabled={stepBusy}
+                  {...trackProps(UiElement.ONBOARDING_RECOVERY_SETUP)}
+                  className="w-full py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 disabled:opacity-40 transition-all shadow-md flex items-center justify-center gap-2"
+                >
+                  {stepBusy && <Loader className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                  Set up recovery
+                </button>
+                <div className="flex gap-4">
+                  <button
+                    type="button"
+                    onClick={() => back('recovery')}
+                    disabled={stepBusy}
+                    {...trackProps(UiElement.ONBOARDING_BACK)}
+                    className="py-4 px-6 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all disabled:opacity-40"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void finishOnboarding()}
+                    disabled={stepBusy}
+                    {...trackProps(UiElement.ONBOARDING_STEP_SKIP, { value: 'recovery' })}
+                    className="flex-1 py-4 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all disabled:opacity-40"
+                  >
+                    Skip for now
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </motion.div>
+    </div>
+  );
+}
+
+/**
+ * Back / (Skip) / Continue for a step. Continue reports `onboarding.next` with the step completed, Skip
+ * `onboarding.step_skip`.
+ */
+function StepNav({
+  onBack,
+  onNext,
+  nextValue,
+  nextLabel = 'Continue',
+  disabled,
+  busy,
+  onSkip,
+  skipValue,
+  nextRef,
+}: {
+  onBack: () => void;
+  onNext: () => void;
+  nextValue: string;
+  nextLabel?: string;
+  disabled?: boolean;
+  busy?: boolean;
+  onSkip?: () => void;
+  skipValue?: 'password' | 'social' | 'recovery';
+  nextRef?: React.Ref<HTMLButtonElement>;
+}) {
+  return (
+    <div className="flex gap-4 pt-4">
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={busy}
+        {...trackProps(UiElement.ONBOARDING_BACK)}
+        className="py-4 px-6 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all disabled:opacity-40"
+      >
+        Back
+      </button>
+      {onSkip && skipValue && (
+        <button
+          type="button"
+          onClick={onSkip}
+          disabled={busy}
+          {...trackProps(UiElement.ONBOARDING_STEP_SKIP, { value: skipValue })}
+          className="py-4 px-6 border border-border text-xs font-bold uppercase tracking-[0.2em] hover:bg-bg transition-all disabled:opacity-40"
+        >
+          Skip
+        </button>
+      )}
+      <button
+        type="button"
+        ref={nextRef}
+        onClick={onNext}
+        disabled={disabled}
+        {...trackProps(UiElement.ONBOARDING_NEXT, { value: nextValue })}
+        className="flex-1 py-4 bg-accent text-white text-xs font-bold uppercase tracking-[0.3em] hover:bg-accent/90 disabled:opacity-40 transition-all shadow-md flex items-center justify-center gap-2"
+      >
+        {busy && <Loader className="w-4 h-4 animate-spin" aria-hidden="true" />}
+        {nextLabel}
+      </button>
     </div>
   );
 }

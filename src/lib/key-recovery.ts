@@ -16,7 +16,8 @@
  * chat-encryption.ts tries the cheaper rungs first: platform escrow (already present after an OS
  * restore), a passkey via WebAuthn PRF (one biometric prompt, no second device), then a device wrap
  * written by a device that already has access. QR is what remains when none of those is available —
- * notably on platforms with no PRF support — and `resetHistoryKey` is the floor below it.
+ * notably on platforms with no PRF support. Below it, the iOS and Android apps offer "Start over on this
+ * device" (a new epoch with a horizon); web offers no reset.
  *
  * It earns its place by working everywhere and needing nothing but two screens and a camera. What it
  * costs is both devices present and awake, which is why it is tried last rather than first.

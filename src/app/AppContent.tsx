@@ -22,6 +22,7 @@ import { ChatView } from '../features/chat/ChatView';
 import { KeepHooksChooser } from '../features/chat/KeepHooksChooser';
 import { ProfileView } from '../features/profile/ProfileView';
 import { SettingsView } from '../features/settings/SettingsView';
+import { MatchingIntroView } from '../features/matching/MatchingIntroView';
 import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
 import { useHistoryUnlock } from '../hooks/use-history-unlock';
 import { startAnalytics, stopAnalytics, trackScreenView, trackHookedStateView, APP_TAB_SCREEN, HookedStateAction, UiElement, trackProps } from '../lib/analytics/analytics';
@@ -39,11 +40,19 @@ import { useTheme } from '../lib/theme';
 export function AppContent() {
   const navigate = useNavigate();
   const { currentUser, setCurrentUser, logout, userState } = useAppStore();
-  // The shell is computed from the matching mode: a chat-only member (OFF / ERASING) gets Chat,
-  // Profile and Settings, and nothing that calls /matching/* is mounted (lib/app-mode.ts).
+  // The shell is computed from the matching mode: a chat-only member (OFF / ERASING) gets the
+  // Matching intro, Chat, Profile and Settings, and nothing that calls /matching/* is mounted
+  // (lib/app-mode.ts).
   const [appState, setAppState] = useState<AppTab>(() => defaultTabFor(userState));
   const matchingOn = isMatchingOn(userState);
   const tabs = appTabsFor(userState);
+  // Set by every "Turn on matching" / "Edit matching profile" entry: Profile opens with the matching
+  // profile builder showing, and clears it once it has done so.
+  const [openMatchingBuilder, setOpenMatchingBuilder] = useState(false);
+  const showMatchingBuilder = () => {
+    setOpenMatchingBuilder(true);
+    setAppState('PROFILE');
+  };
   const { resolvedTheme } = useTheme();
 
   // Scope the theme strictly to the /app route and restore default non-app styles when leaving /app
@@ -381,6 +390,23 @@ export function AppContent() {
                 <LikesYouView />
               </motion.div>
             )}
+            {appState === 'MATCHING_INTRO' && !matchingOn && (
+              <motion.div
+                key="matching-intro"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="h-full overflow-y-auto bg-bg text-text"
+              >
+                <div className="max-w-[700px] mx-auto p-4 sm:p-8">
+                  <MatchingIntroView
+                    erasing={userState?.matching.status === 'ERASING'}
+                    onTurnOn={showMatchingBuilder}
+                  />
+                </div>
+              </motion.div>
+            )}
             {appState === 'MATCHES' && (
               <motion.div
                 key="chat"
@@ -413,7 +439,13 @@ export function AppContent() {
                 className="h-full overflow-y-auto bg-bg text-text"
               >
                 <div className="max-w-[700px] mx-auto p-4 sm:p-8">
-                  <ProfileView user={currentUser} onSaved={refetchProfile} onOpenSettings={() => setAppState('SETTINGS')} />
+                  <ProfileView
+                    user={currentUser}
+                    onSaved={refetchProfile}
+                    onOpenSettings={() => setAppState('SETTINGS')}
+                    openMatchingBuilder={openMatchingBuilder}
+                    onMatchingBuilderOpened={() => setOpenMatchingBuilder(false)}
+                  />
                 </div>
               </motion.div>
             )}
@@ -436,7 +468,7 @@ export function AppContent() {
                     onMatchingChanged={async () => {
                       await Promise.all([refetchUserState(), refetchProfile()]);
                     }}
-                    onOpenMatchingProfile={() => setAppState('PROFILE')}
+                    onOpenMatchingProfile={showMatchingBuilder}
                   />
                 </div>
               </motion.div>

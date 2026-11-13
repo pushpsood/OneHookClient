@@ -22,6 +22,7 @@ import type { UserProfile } from '../../types';
 import { SubscriptionTier } from '../../types';
 import { ProfileApi } from '../../api/profile';
 import { ChatProfileCard } from './ChatProfileCard';
+import { ProfileAccountRows } from './ProfileAccountRows';
 import { isMatchingOn } from '../../lib/app-mode';
 import { errorCode } from '../../lib/api-errors';
 import { MATCHING_COPY, draftNotice, gapCopy, useMatchingMode } from '../settings/matching-mode';
@@ -179,19 +180,37 @@ export function ProfileView({
   user,
   onSaved,
   onOpenSettings,
+  openMatchingBuilder,
+  onMatchingBuilderOpened,
 }: {
   key?: string;
   user: UserProfile;
   /** Re-read `GET /profile` after a save (moderation state, draft clock). */
   onSaved?: () => unknown;
   onOpenSettings?: () => void;
+  /** Open with the matching profile builder showing (a "Turn on matching" entry elsewhere). */
+  openMatchingBuilder?: boolean;
+  /** Called once the builder was opened for {@link openMatchingBuilder}. */
+  onMatchingBuilderOpened?: () => void;
 }) {
   const { userState, setCurrentUser } = useAppStore();
   const matchingOn = isMatchingOn(userState);
   const erasing = userState?.matching.status === 'ERASING';
   const hasMatchingProfile = Boolean(user.matchingStatus);
-  const [building, setBuilding] = useState(false);
+  const [building, setBuilding] = useState(Boolean(openMatchingBuilder));
   const showEditor = !erasing && (hasMatchingProfile || building);
+  const matchingSectionRef = useRef<HTMLDivElement | null>(null);
+  // The matching profile builder: the same entry the Matching tab, the profile row and Settings use.
+  const showMatchingBuilder = () => {
+    setBuilding(true);
+    requestAnimationFrame(() => matchingSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+  useEffect(() => {
+    if (!openMatchingBuilder) return;
+    showMatchingBuilder();
+    onMatchingBuilderOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openMatchingBuilder]);
   const matchingMode = useMatchingMode(async () => {
     await onSaved?.();
   });
@@ -816,6 +835,14 @@ export function ProfileView({
         <ChatProfileCard user={user} onSaved={onSaved} />
       </div>
 
+      <ProfileAccountRows
+        userId={user.id}
+        showMatching={!matchingOn}
+        erasing={erasing}
+        onOpenMatching={showMatchingBuilder}
+      />
+
+      <div ref={matchingSectionRef} className="scroll-mt-4 empty:hidden">
       <MatchingStatusCard
         matchingStatus={userState?.matching.status}
         hasMatchingProfile={hasMatchingProfile}
@@ -828,6 +855,7 @@ export function ProfileView({
         onTurnOn={() => void turnOnMatching()}
         onOpenSettings={onOpenSettings}
       />
+      </div>
 
       {showEditor && (
       <>

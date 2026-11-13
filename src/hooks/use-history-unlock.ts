@@ -18,7 +18,7 @@ import { derivePasskeySecret, isPrfSupported } from '../lib/passkey-prf';
  * unbidden at sign-in would be both alarming and usually pointless, so `promptForPasskey` is opt-in and
  * the silent rungs run on their own.
  *
- * QR transfer and reset stay in the UI above this: both need explicit user involvement.
+ * QR transfer stays in the UI above this: it needs explicit user involvement.
  */
 export type UnlockOutcome = 'idle' | 'unlocking' | 'already-held' | 'device-wrap' | 'prf' | 'unavailable';
 
@@ -63,7 +63,7 @@ export function useHistoryUnlock(userId: string | undefined, promptForPasskey = 
     outcome,
     /** True once history is readable on this device, however it was obtained. */
     unlocked: outcome === 'already-held' || outcome === 'device-wrap' || outcome === 'prf',
-    /** True when the silent rungs found nothing, so the UI should offer PRF, QR or reset. */
+    /** True when the silent rungs found nothing, so the UI should offer PRF or QR. */
     needsUserAction: outcome === 'unavailable',
   };
 }

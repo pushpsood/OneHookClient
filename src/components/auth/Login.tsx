@@ -12,14 +12,24 @@ import { Seo } from '../common/Seo';
 import { ROUTE_SEO } from '../../config/seo-routes';
 import { SOCIALS } from '../common/socials';
 import { useAppStore } from '../../store/app-store';
+import { normalizeUsername } from '../../lib/account-setup';
 import { UiElement, trackProps, trackScreenView, Screen } from '../../lib/analytics/analytics';
 
 /**
- * Sign in with a phone number OR an email — both support a one-time-code (OTP)
- * flow, and users who have set a password can toggle to password sign-in. All
- * of this is handled directly by Cognito's USER_AUTH flow (no backend call);
- * only social sign-in uses the federated redirect.
+ * Sign in with a phone number, an email or a username. Phone and email support a one-time-code (OTP)
+ * flow, and users who have set a password can toggle to password sign-in; a username signs in with a
+ * password only (it is a Cognito sign-in alias, `preferred_username`, with nowhere to send a code).
+ * All of this is handled directly by Cognito's USER_AUTH flow (no backend call); only social sign-in
+ * uses the federated redirect.
  */
+type IdentifierMode = 'phone' | 'email' | 'username';
+
+const IDENTIFIER_MODES: readonly { mode: IdentifierMode; label: string }[] = [
+  { mode: 'phone', label: 'Phone' },
+  { mode: 'email', label: 'Email' },
+  { mode: 'username', label: 'Username' },
+];
+
 export function Login() {
   const navigate = useNavigate();
   const { showToast } = useToast();
@@ -31,7 +41,7 @@ export function Login() {
    * global audience guessing whether to type a country code; a dedicated phone mode owns a country
    * selector and per-country length instead.
    */
-  const [identifierMode, setIdentifierMode] = useState<'phone' | 'email'>('phone');
+  const [identifierMode, setIdentifierMode] = useState<IdentifierMode>('phone');
   const [phone, setPhone] = useState<{ e164: string; isValid: boolean }>({ e164: '', isValid: false });
   const [phoneTouched, setPhoneTouched] = useState(false);
   /**
@@ -43,14 +53,19 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [usePassword, setUsePassword] = useState(false);
+  const [passwordChosen, setPasswordChosen] = useState(false);
+  // A username has no OTP: username mode always signs in with a password.
+  const usePassword = passwordChosen || identifierMode === 'username';
   const [step, setStep] = useState<'IDENTIFIER' | 'OTP' | 'SET_PASSWORD'>('IDENTIFIER');
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const identifierLabel = identifierMode === 'phone' ? 'phone' : 'email';
+  // Where Cognito sends codes. A username itself receives nothing; the code goes to the account's
+  // phone or email.
+  const identifierLabel =
+    identifierMode === 'phone' ? 'phone' : identifierMode === 'email' ? 'email' : 'phone or email';
 
   // Analytics: the login screen was shown (one screen_view on mount).
   useEffect(() => {
@@ -58,8 +73,9 @@ export function Login() {
   }, []);
 
   /**
-   * The Cognito username for the active mode: a normalised E.164 number, or the typed email.
-   * Returns null when the input is incomplete, having already surfaced the reason in place.
+   * The Cognito username for the active mode: a normalised E.164 number, the typed email, or the typed
+   * username trimmed and lower-cased (aliases match case-sensitively and usernames are stored lower
+   * case). Returns null when the input is incomplete, having already surfaced the reason in place.
    */
   const resolveIdentifier = (): string | null => {
     if (identifierMode === 'phone') {
@@ -69,6 +85,14 @@ export function Login() {
         return null;
       }
       return phone.e164;
+    }
+    if (identifierMode === 'username') {
+      const username = normalizeUsername(identifier);
+      if (!username) {
+        setError('Please enter your username');
+        return null;
+      }
+      return username;
     }
     const trimmed = identifier.trim();
     if (!trimmed) {
@@ -212,7 +236,7 @@ export function Login() {
       setLoading(true);
       await getCognitoAuth().confirmPasswordSet(submittedIdentifier, code.trim(), password);
       showToast('Password set. Sign in with your new password.', 'success');
-      setUsePassword(true);
+      setPasswordChosen(true);
       setStep('IDENTIFIER');
       setCode('');
       setPassword('');
@@ -315,7 +339,7 @@ export function Login() {
             )}
             <p className="text-sm opacity-60 italic">
               {step === 'IDENTIFIER'
-                ? 'Sign in with your phone number or email'
+                ? 'Sign in with your phone number, email or username'
                 : step === 'SET_PASSWORD'
                   ? `Enter the code sent to your ${identifierLabel}, then choose a password`
                   : `Enter the code sent to your ${identifierLabel}`}
@@ -354,6 +378,28 @@ export function Login() {
                     onEnter={() => void handleIdentifierSubmit(new Event('submit') as unknown as React.FormEvent)}
                     autoFocus
                   />
+                ) : identifierMode === 'username' ? (
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="identifier"
+                      className="block text-center text-xs font-bold uppercase tracking-widest opacity-60"
+                    >
+                      Username
+                    </label>
+                    <input
+                      id="identifier"
+                      type="text"
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder="yourusername"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value.toLowerCase())}
+                      disabled={loading}
+                      className="w-full px-4 py-3 border border-border rounded focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent placeholder:opacity-30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    />
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     <label
@@ -376,17 +422,30 @@ export function Login() {
                   </div>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIdentifierMode((mode) => (mode === 'phone' ? 'email' : 'phone'));
-                    setError(null);
-                  }}
-                  {...trackProps(UiElement.LOGIN_IDENTIFIER_MODE, { value: identifierMode === 'phone' ? 'email' : 'phone' })}
-                  className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity"
-                >
-                  {identifierMode === 'phone' ? 'Use email instead' : 'Use phone number instead'}
-                </button>
+                <div className="flex items-center justify-center gap-2" role="group" aria-label="Sign in with">
+                  {IDENTIFIER_MODES.map(({ mode, label }) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => {
+                        // Email and username share the text box; don't carry one into the other.
+                        if (mode !== 'phone' && identifierMode !== 'phone') setIdentifier('');
+                        setIdentifierMode(mode);
+                        setError(null);
+                      }}
+                      disabled={identifierMode === mode}
+                      aria-pressed={identifierMode === mode}
+                      {...trackProps(UiElement.LOGIN_IDENTIFIER_MODE, { value: mode })}
+                      className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.2em] rounded border transition-opacity ${
+                        identifierMode === mode
+                          ? 'border-accent text-accent'
+                          : 'border-transparent opacity-50 hover:opacity-100'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
 
                 {usePassword && (
                   <div className="space-y-2">
@@ -429,18 +488,20 @@ export function Login() {
                   )}
                 </button>
 
-                {/* Toggle: OTP <-> password */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsePassword((prev) => !prev);
-                    setError(null);
-                  }}
-                  {...trackProps(UiElement.LOGIN_PASSWORD_MODE, { value: usePassword ? 'otp' : 'password' })}
-                  className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity"
-                >
-                  {usePassword ? 'Use a one-time code instead' : 'Sign in with password instead'}
-                </button>
+                {/* Toggle: OTP <-> password (a username signs in with a password only) */}
+                {identifierMode !== 'username' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPasswordChosen((prev) => !prev);
+                      setError(null);
+                    }}
+                    {...trackProps(UiElement.LOGIN_PASSWORD_MODE, { value: usePassword ? 'otp' : 'password' })}
+                    className="w-full text-center text-[11px] font-bold uppercase tracking-[0.25em] opacity-50 hover:opacity-100 transition-opacity"
+                  >
+                    {usePassword ? 'Use a one-time code instead' : 'Sign in with password instead'}
+                  </button>
+                )}
 
                 <button
                   type="button"

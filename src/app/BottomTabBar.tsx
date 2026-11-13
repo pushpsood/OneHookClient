@@ -1,4 +1,4 @@
-import { Home, MessageCircle, Search, Clapperboard, Settings } from 'lucide-react';
+import { Home, MessageCircle, Search, Clapperboard, Settings, Heart } from 'lucide-react';
 import { MediaImage } from '../components/common/MediaImage';
 import { UiElement, APP_TAB_SCREEN, trackProps } from '../lib/analytics/analytics';
 import type { AppTab } from '../lib/app-mode';
@@ -30,12 +30,33 @@ export function BottomTabBar({
 }: BottomTabBarProps) {
   // Discovery, its search and its reels shortcut exist only while matching is ON.
   const discovery = tabs.includes('DISCOVERY');
+  // The Matching intro exists only while matching is NOT on (chat-only members).
+  const matchingIntro = tabs.includes('MATCHING_INTRO');
   return (
     <nav
       className="md:hidden sticky bottom-0 z-50 bg-surface-card border-t border-border flex items-center justify-around shrink-0 select-none"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       aria-label="Mobile Navigation"
     >
+      {/* Matching intro (chat-only members): first, before Chat */}
+      {matchingIntro && (
+      <button
+        type="button"
+        onClick={() => onTabChange('MATCHING_INTRO')}
+        aria-label="Matching"
+        {...trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN.MATCHING_INTRO })}
+        className={`relative flex items-center justify-center p-3 flex-1 min-h-[48px] transition-colors cursor-pointer ${
+          activeTab === 'MATCHING_INTRO' ? 'text-text' : 'text-text-muted hover:text-text'
+        }`}
+      >
+        <Heart
+          className="w-6 h-6"
+          strokeWidth={activeTab === 'MATCHING_INTRO' ? 2.5 : 1.75}
+          fill={activeTab === 'MATCHING_INTRO' ? 'currentColor' : 'none'}
+        />
+      </button>
+      )}
+
       {/* Home / Feed */}
       {discovery && (
       <button

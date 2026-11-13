@@ -2,14 +2,16 @@
  * The app shell by matching mode (docs/chat-only-profiles.md §12).
  *
  * A chat-only member (matching OFF, or ERASING while an opt-out is erased) gets a Messenger-only app:
- * Chat, Profile and Settings. Nothing that calls /matching/* may mount for them — Matching holds no
- * data about them and answers 403 MATCHING_OFF. Discovery and Likes exist only while matching is ON.
+ * a Matching intro tab (what matching is, and the way to turn it on), Chat, Profile and Settings.
+ * Nothing that calls /matching/* may mount for them — Matching holds no data about them and answers
+ * 403 MATCHING_OFF. Discovery and Likes exist only while matching is ON, and the intro tab only while
+ * it is not.
  * Everything here is pure so the rules are unit-tested without rendering.
  */
 import type { Hook, UserStateSnapshot } from '../types';
 
-/** Web shell tabs. LIKES and DISCOVERY are matching-only. */
-export type AppTab = 'DISCOVERY' | 'MATCHES' | 'LIKES' | 'PROFILE' | 'SETTINGS';
+/** Web shell tabs. LIKES and DISCOVERY are matching-only; MATCHING_INTRO is chat-only. */
+export type AppTab = 'DISCOVERY' | 'MATCHES' | 'LIKES' | 'PROFILE' | 'SETTINGS' | 'MATCHING_INTRO';
 
 type ModeInput = Pick<UserStateSnapshot, 'matching'> | null | undefined;
 
@@ -19,14 +21,14 @@ export function isMatchingOn(state: ModeInput): boolean {
 }
 
 const MATCHING_TABS: readonly AppTab[] = ['DISCOVERY', 'LIKES', 'MATCHES', 'PROFILE', 'SETTINGS'];
-const CHAT_ONLY_TABS: readonly AppTab[] = ['MATCHES', 'PROFILE', 'SETTINGS'];
+const CHAT_ONLY_TABS: readonly AppTab[] = ['MATCHING_INTRO', 'MATCHES', 'PROFILE', 'SETTINGS'];
 
 /** The tabs the shell shows. Unknown state fails closed to the chat-only shell. */
 export function appTabsFor(state: ModeInput): readonly AppTab[] {
   return isMatchingOn(state) ? MATCHING_TABS : CHAT_ONLY_TABS;
 }
 
-/** Where the app opens: Discover with matching on, otherwise Chat. */
+/** Where the app opens: Discover with matching on, otherwise Chat (never the Matching intro). */
 export function defaultTabFor(state: ModeInput): AppTab {
   return isMatchingOn(state) ? 'DISCOVERY' : 'MATCHES';
 }

@@ -135,6 +135,7 @@ export const APP_TAB_SCREEN = {
   LIKES: Screen.LIKES_YOU,
   PROFILE: Screen.PROFILE,
   SETTINGS: Screen.SETTINGS,
+  MATCHING_INTRO: Screen.MATCHING_INTRO,
 } as const satisfies Record<string, ViewableScreen>;
 
 /** Signed-out routes mapped to their catalog screen (for SHARED-element `context`). */

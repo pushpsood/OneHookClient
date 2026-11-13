@@ -12,9 +12,20 @@ import {
 const mode = (status: 'OFF' | 'ON' | 'ERASING') => ({ matching: { status, generation: 1 } });
 
 describe('shell by matching mode (docs/chat-only-profiles.md §12)', () => {
-  it('a chat-only member (OFF) gets Chat, Profile and Settings only', () => {
-    expect(appTabsFor(mode('OFF'))).toEqual(['MATCHES', 'PROFILE', 'SETTINGS']);
+  it('a chat-only member (OFF) gets Matching intro, Chat, Profile and Settings, and opens on Chat', () => {
+    expect(appTabsFor(mode('OFF'))).toEqual(['MATCHING_INTRO', 'MATCHES', 'PROFILE', 'SETTINGS']);
     expect(defaultTabFor(mode('OFF'))).toBe('MATCHES');
+  });
+
+  it('ERASING keeps the Matching intro tab (Turn on is disabled there until erasing ends)', () => {
+    expect(appTabsFor(mode('ERASING'))).toEqual(['MATCHING_INTRO', 'MATCHES', 'PROFILE', 'SETTINGS']);
+    expect(defaultTabFor(mode('ERASING'))).toBe('MATCHES');
+  });
+
+  it('the Matching intro tab disappears once matching is ON', () => {
+    expect(appTabsFor(mode('ON'))).not.toContain('MATCHING_INTRO');
+    expect(resolveTab('MATCHING_INTRO', mode('ON'))).toBe('DISCOVERY');
+    expect(resolveTab('MATCHING_INTRO', mode('OFF'))).toBe('MATCHING_INTRO');
   });
 
   it('ERASING is chat-only too: nothing that calls /matching/* may mount', () => {
@@ -29,7 +40,7 @@ describe('shell by matching mode (docs/chat-only-profiles.md §12)', () => {
   });
 
   it('an unknown state fails closed to the chat-only shell', () => {
-    expect(appTabsFor(null)).toEqual(['MATCHES', 'PROFILE', 'SETTINGS']);
+    expect(appTabsFor(null)).toEqual(['MATCHING_INTRO', 'MATCHES', 'PROFILE', 'SETTINGS']);
     expect(isMatchingOn(undefined)).toBe(false);
   });
 

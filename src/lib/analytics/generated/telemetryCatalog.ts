@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 e522ecdb5494b4e4d7f0c92491538c1ef8e5acc63968ca25b290e0be8ee43b0e
+// telemetry-integrity: sha256 5c64cc9ea3b7de7c31d449a818194c7177bc36c67f4f58ef128f77f4fa10fd27
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.15.0, hash c0613025308ddfc0.
+// Catalog version 1.16.0, hash 3d27632e55e2d44f.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.15.0";
-export const TELEMETRY_CATALOG_HASH = "c0613025308ddfc0";
+export const TELEMETRY_CATALOG_VERSION = "1.16.0";
+export const TELEMETRY_CATALOG_HASH = "3d27632e55e2d44f";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -53,6 +53,7 @@ export const Screen = {
   ADMISSIONS_STATUS: "ADMISSIONS_STATUS",
   ONBOARDING: "ONBOARDING",
   DISCOVER: "DISCOVER",
+  MATCHING_INTRO: "MATCHING_INTRO",
   LIKE_COMPOSER: "LIKE_COMPOSER",
   LIKES_YOU: "LIKES_YOU",
   CHAT: "CHAT",
@@ -83,6 +84,7 @@ export const ViewableScreen = {
   ADMISSIONS_STATUS: "ADMISSIONS_STATUS",
   ONBOARDING: "ONBOARDING",
   DISCOVER: "DISCOVER",
+  MATCHING_INTRO: "MATCHING_INTRO",
   LIKE_COMPOSER: "LIKE_COMPOSER",
   LIKES_YOU: "LIKES_YOU",
   CHAT: "CHAT",
@@ -109,6 +111,7 @@ export const TabScreen = {
   LIKES_YOU: "LIKES_YOU",
   CHAT: "CHAT",
   PROFILE: "PROFILE",
+  MATCHING_INTRO: "MATCHING_INTRO",
 } as const;
 export type TabScreen = (typeof TabScreen)[keyof typeof TabScreen];
 
@@ -318,6 +321,9 @@ export const UiElement = {
   ADMISSIONS_STATUS_WITHDRAW: "admissions_status.withdraw",
   ADMISSIONS_STATUS_TRAINING_OPT_OUT: "admissions_status.training_opt_out",
   ONBOARDING_NEXT: "onboarding.next",
+  ONBOARDING_STEP_SKIP: "onboarding.step_skip",
+  ONBOARDING_SOCIAL_LINK: "onboarding.social_link",
+  ONBOARDING_RECOVERY_SETUP: "onboarding.recovery_setup",
   ONBOARDING_BACK: "onboarding.back",
   ONBOARDING_FINISH: "onboarding.finish",
   ONBOARDING_SKIP_SIGN_OUT: "onboarding.skip_sign_out",
@@ -330,6 +336,8 @@ export const UiElement = {
   ONBOARDING_VOICE_ADD: "onboarding.voice_add",
   ONBOARDING_VOICE_REMOVE: "onboarding.voice_remove",
   ONBOARDING_CHOICE_SELECT: "onboarding.choice_select",
+  MATCHING_INTRO_TURN_ON: "matching_intro.turn_on",
+  MATCHING_INTRO_SHOULD_I_JOIN: "matching_intro.should_i_join",
   DISCOVER_PASS_BUTTON: "discover.pass_button",
   DISCOVER_LIKE_BUTTON: "discover.like_button",
   DISCOVER_ROSE_BUTTON: "discover.rose_button",
@@ -445,6 +453,8 @@ export const UiElement = {
   NOTIFICATIONS_ITEM_OPEN: "notifications.item_open",
   NOTIFICATIONS_ITEM_DISMISS: "notifications.item_dismiss",
   PROFILE_EDIT_OPEN: "profile.edit_open",
+  PROFILE_MATCHING_OPEN: "profile.matching_open",
+  PROFILE_RECOVERY_OPEN: "profile.recovery_open",
   PROFILE_PREVIEW_OPEN: "profile.preview_open",
   PROFILE_PREFERENCES_OPEN: "profile.preferences_open",
   PROFILE_SETTINGS_OPEN: "profile.settings_open",
@@ -549,7 +559,7 @@ export interface UiElementSpec {
 }
 
 export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
-  "nav.tab_select": { screen: "NAV", kind: "tab", actions: ["select"], values: ["DISCOVER", "LIKES_YOU", "CHAT", "PROFILE"], platforms: ["web", "ios", "android"] },
+  "nav.tab_select": { screen: "NAV", kind: "tab", actions: ["select"], values: ["DISCOVER", "LIKES_YOU", "CHAT", "PROFILE", "MATCHING_INTRO"], platforms: ["web", "ios", "android"] },
   "nav.search_open": { screen: "NAV", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web"] },
   "nav.menu_open": { screen: "NAV", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web"] },
   "nav.back": { screen: "NAV", kind: "button", actions: ["tap"], values: null, platforms: ["web"] },
@@ -575,7 +585,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "login.google": { screen: "LOGIN", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "login.apple": { screen: "LOGIN", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "login.passkey": { screen: "LOGIN", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
-  "login.identifier_mode": { screen: "LOGIN", kind: "toggle", actions: ["toggle"], values: ["phone", "email"], platforms: ["web", "ios", "android"] },
+  "login.identifier_mode": { screen: "LOGIN", kind: "toggle", actions: ["toggle"], values: ["phone", "email", "username"], platforms: ["web", "ios", "android"] },
   "login.password_mode": { screen: "LOGIN", kind: "toggle", actions: ["toggle"], values: ["password", "otp"], platforms: ["web", "ios", "android"] },
   "login.forgot_password": { screen: "LOGIN", kind: "link", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "login.resend_code": { screen: "LOGIN", kind: "link", actions: ["tap"], values: null, platforms: ["web", "ios"] },
@@ -603,8 +613,11 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "admissions_status.continue_invite": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "admissions_status.withdraw": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "admissions_status.training_opt_out": { screen: "ADMISSIONS_STATUS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
-  "onboarding.next": { screen: "ONBOARDING", kind: "button", actions: ["submit"], values: ["basics", "photos", "media", "prompts", "details"], platforms: ["web", "ios"] },
-  "onboarding.back": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
+  "onboarding.next": { screen: "ONBOARDING", kind: "button", actions: ["submit"], values: ["basics", "photos", "media", "prompts", "details", "username", "password", "social", "recovery"], platforms: ["web", "ios", "android"] },
+  "onboarding.step_skip": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: ["password", "social", "recovery"], platforms: ["web", "ios", "android"] },
+  "onboarding.social_link": { screen: "ONBOARDING", kind: "button", actions: ["tap", "dismiss"], values: ["apple", "google"], platforms: ["web", "ios", "android"] },
+  "onboarding.recovery_setup": { screen: "ONBOARDING", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
+  "onboarding.back": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "onboarding.finish": { screen: "ONBOARDING", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios", "android"] },
   "onboarding.skip_sign_out": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "onboarding.skip_sign_out_confirm": { screen: "ONBOARDING", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["ios", "android"] },
@@ -616,6 +629,8 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "onboarding.voice_add": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: [] },
   "onboarding.voice_remove": { screen: "ONBOARDING", kind: "button", actions: ["tap"], values: null, platforms: [] },
   "onboarding.choice_select": { screen: "ONBOARDING", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios", "android"] },
+  "matching_intro.turn_on": { screen: "MATCHING_INTRO", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "matching_intro.should_i_join": { screen: "MATCHING_INTRO", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "discover.pass_button": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "discover.like_button": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["android"] },
   "discover.rose_button": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
@@ -712,7 +727,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.intro_get_started": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.history_recover_method": { screen: "CHAT", kind: "menu_item", actions: ["tap", "dismiss"], values: ["device", "qr_scan", "qr_import", "passkey"], platforms: ["web", "ios", "android"] },
   "chat.history_recover_step": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: ["retry", "qr_retry", "done", "reset_open", "cancel"], platforms: ["web", "ios", "android"] },
-  "chat.history_reset_confirm": { screen: "CHAT", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["web"] },
+  "chat.history_reset_confirm": { screen: "CHAT", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["ios", "android"] },
   "chat_settings.last_seen_select": { screen: "CHAT_SETTINGS", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios"] },
   "chat_settings.disappearing_select": { screen: "CHAT_SETTINGS", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios"] },
   "chat_settings.notification_toggle": { screen: "CHAT_SETTINGS", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
@@ -731,6 +746,8 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "notifications.item_open": { screen: "NOTIFICATIONS", kind: "list_item", actions: ["tap"], values: null, platforms: ["ios"] },
   "notifications.item_dismiss": { screen: "NOTIFICATIONS", kind: "gesture", actions: ["dismiss"], values: null, platforms: ["ios"] },
   "profile.edit_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios", "android"] },
+  "profile.matching_open": { screen: "PROFILE", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "profile.recovery_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "profile.preview_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios"] },
   "profile.preferences_open": { screen: "PROFILE", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "profile.settings_open": { screen: "PROFILE", kind: "button", actions: ["tap"], values: null, platforms: ["web"] },

@@ -63,6 +63,7 @@ describe('generated telemetry catalog (backend-owned)', () => {
       LIKES: Screen.LIKES_YOU,
       PROFILE: Screen.PROFILE,
       SETTINGS: Screen.SETTINGS,
+      MATCHING_INTRO: Screen.MATCHING_INTRO,
     });
   });
 });
