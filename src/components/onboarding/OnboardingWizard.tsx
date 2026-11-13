@@ -11,7 +11,6 @@ import { LoadingSpinner } from '../common/LoadingSpinner';
 import { UserState } from '../../types';
 import { MediaImage } from '../common/MediaImage';
 import { DateOfBirthField } from './DateOfBirthField';
-import { BirthTimePlaceFields, birthDetailsPayload, type BirthTimePlace } from './BirthTimePlaceFields';
 import { ageOn, onboardingGateMessage, validateDob } from '../../utils/dob';
 import { getCognitoAuth } from '../../lib/cognito-auth';
 import { errorStatus } from '../../lib/api-errors';
@@ -57,7 +56,7 @@ export const ONBOARDING_COPY = {
     'Add a password (optional). Then you can also sign in with your phone, email or username and a password.',
   social: 'Link Apple or Google (optional) so you can sign in with one tap.',
   recovery:
-    'Set up account recovery. Without it, your earlier messages can’t be restored when you sign in on another device or a new phone. You can still sign in and chat on any device; you can set this up later from Profile > Account recovery.',
+    'A device you’re signed in on can pass your messages to a new one. Add a passkey so you can also restore them with no other device at hand. You can do this later from Profile > Account recovery.',
 } as const;
 
 /**
@@ -119,7 +118,6 @@ export function OnboardingWizard() {
   const [birthDate, setBirthDate] = useState(storedDob);
   const [dobConfirmed, setDobConfirmed] = useState(Boolean(storedDob));
   const age = birthDate ? ageOn(birthDate) ?? 0 : 0;
-  const [birthExtra, setBirthExtra] = useState<BirthTimePlace>({});
   const [avatarKey, setAvatarKey] = useState(currentUser?.avatarKey || '');
 
   // Prefill from a chat profile that already exists (registration stores the display name; a member
@@ -251,7 +249,7 @@ export function OnboardingWizard() {
       await ProfileApi.upsertChat({
         displayName: displayName.trim(),
         // Age is derived by the server from birthDetails.date.
-        birthDetails: birthDetailsPayload(birthDate, birthExtra),
+        birthDetails: { date: birthDate },
         ...(avatarKey ? { avatarKey } : {}),
       });
       // The date of birth is on file now and cannot change.
@@ -426,7 +424,7 @@ export function OnboardingWizard() {
     setFinishError(null);
     try {
       const uid = await getResolvedUserId();
-      const birthDetails = birthDetailsPayload(birthDate, birthExtra);
+      const birthDetails = { date: birthDate };
       // Completing onboarding is NOT optional: it transitions the authoritative user state
       // ONBOARDING → AVAILABLE in the State service. Until that happens the member cannot connect with
       // anyone (the hook transaction requires current_state IN (AVAILABLE, HOOKED)). Surface a failure
@@ -575,12 +573,8 @@ export function OnboardingWizard() {
               />
             )}
 
-            <details className="group">
-              <summary className="cursor-pointer text-sm font-bold">Add birth time and place (optional)</summary>
-              <div className="pt-3">
-                <BirthTimePlaceFields value={birthExtra} onChange={setBirthExtra} />
-              </div>
-            </details>
+            {/* No birth time or place here: they only refine traditional compatibility, so they
+                belong to the matching profile, not to chat-only onboarding. */}
 
             <button
               onClick={handleNextFromBasics}
