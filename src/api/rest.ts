@@ -9,7 +9,8 @@
  *
  * Every /matching/* route answers 403 MATCHING_OFF unless the caller's matching is ON, so nothing here
  * may be called for a chat-only member (docs/chat-only-profiles.md §12). Blocks, reports and hook
- * requests are State routes and live in api/state.ts.
+ * requests are State routes and live in api/state.ts. The one State route here is
+ * `PUT /state/matching/tab-hidden` (SetMatchingTabHidden), which the SDK does not model yet.
  *
  * It authenticates exactly like `sdk-client.ts` does — the Cognito **ID token** (falling back to the
  * access token) is read from the Amplify auth session and attached as a `Bearer` token — and it
@@ -385,3 +386,26 @@ export interface CreateReportResponse {
   evidenceAllowed: boolean;
 }
 
+// ── Matching tab visibility (PUT /state/matching/tab-hidden) ──────────────────
+
+/**
+ * State operation SetMatchingTabHidden (state.smithy): `PUT /state/matching/tab-hidden`
+ * `{hidden}` -> 200 `{hidden}`; 400 on a missing or non-boolean `hidden`, 500 otherwise. It goes
+ * through this helper because the installed `onehook-api-client` does not model the operation yet.
+ * Callers use `StateApi.setMatchingTabHidden` (api/state.ts).
+ */
+export interface MatchingTabHiddenResponse {
+  hidden: boolean;
+}
+
+export const MatchingTabApi = {
+  setHidden: async (hidden: boolean): Promise<MatchingTabHiddenResponse> => {
+    const res = await request<Partial<MatchingTabHiddenResponse> | undefined>(
+      'PUT',
+      '/state/matching/tab-hidden',
+      { hidden }
+    );
+    // The answer is authoritative; a body without it means the server stored what was sent.
+    return { hidden: typeof res?.hidden === 'boolean' ? res.hidden : hidden };
+  },
+};

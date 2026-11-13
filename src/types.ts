@@ -86,6 +86,11 @@ export type UserStateSnapshot = {
   selectionDeadline?: number;
   /** View pass naming every current hook partner (absent without hooks). */
   chatViewPass?: string;
+  /**
+   * The member hid the Matching tab (the locked Discover preview) from the chat-only shell. Only
+   * matters while matching is not ON; kept as is when matching is turned on or off.
+   */
+  matchingTabHidden: boolean;
 };
 
 /**

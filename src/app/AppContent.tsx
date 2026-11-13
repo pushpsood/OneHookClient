@@ -5,11 +5,12 @@ import { Lock } from 'lucide-react';
 import { UserState } from '../types';
 import { isPaidSubscriptionTier, subscriptionTierDisplayName } from 'onehook-api-client/membership';
 import { isPaidTier, useAppStore } from '../store/app-store';
-import { useCandidates, useProfile, useSwipe, useUserState } from '../hooks/use-api';
+import { setMatchingTabHiddenInStore, useCandidates, useProfile, useSwipe, useUserState } from '../hooks/use-api';
 import { useUserLocation } from '../hooks/use-user-location';
 import { useAppNotifications } from '../hooks/use-app-notifications';
 import { useViewPassRefreshers } from '../hooks/use-view-pass-refreshers';
 import { ApiError } from '../lib/api-client';
+import { errorMessage } from '../lib/api-errors';
 import { StateApi } from '../api/state';
 import { getCognitoAuth } from '../lib/cognito-auth';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -22,7 +23,7 @@ import { ChatView } from '../features/chat/ChatView';
 import { KeepHooksChooser } from '../features/chat/KeepHooksChooser';
 import { ProfileView } from '../features/profile/ProfileView';
 import { SettingsView } from '../features/settings/SettingsView';
-import { MatchingIntroView } from '../features/matching/MatchingIntroView';
+import { MATCHING_INTRO_COPY, MatchingIntroView } from '../features/matching/MatchingIntroView';
 import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
 import { useHistoryUnlock } from '../hooks/use-history-unlock';
 import { startAnalytics, stopAnalytics, trackScreenView, trackHookedStateView, APP_TAB_SCREEN, HookedStateAction, UiElement, trackProps } from '../lib/analytics/analytics';
@@ -72,10 +73,11 @@ export function AppContent() {
     };
   }, [resolvedTheme]);
 
-  // Matching turned off (here or on another device): leave a tab the shell no longer has.
+  // Matching turned off, or the Matching tab hidden (here or on another device): leave a tab the
+  // shell no longer has.
   useEffect(() => {
     setAppState((tab) => resolveTab(tab, userState));
-  }, [userState?.matching.status]);
+  }, [userState?.matching.status, userState?.matchingTabHidden]);
 
   useHistoryUnlock(currentUser?.id);
   const {
@@ -141,6 +143,19 @@ export function AppContent() {
   });
   const { pass, like } = useSwipe();
   const { showToast } = useToast();
+
+  // "Hide matching screen": the tab goes at once and the app shows Chat; a failure brings it back.
+  const hideMatchingTab = async () => {
+    setAppState('MATCHES');
+    try {
+      await setMatchingTabHiddenInStore(true);
+      showToast(MATCHING_INTRO_COPY.hidden, 'info');
+    } catch (error) {
+      console.error('Hiding the Matching tab failed:', error);
+      setAppState('MATCHING_INTRO');
+      showToast(errorMessage(error, MATCHING_INTRO_COPY.hideFailed), 'error');
+    }
+  };
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -397,14 +412,14 @@ export function AppContent() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
-                className="h-full overflow-y-auto bg-bg text-text"
+                className="h-full"
               >
-                <div className="max-w-[700px] mx-auto p-4 sm:p-8">
-                  <MatchingIntroView
-                    erasing={userState?.matching.status === 'ERASING'}
-                    onTurnOn={showMatchingBuilder}
-                  />
-                </div>
+                {/* Mounted exactly like DiscoveryView above: it is a locked preview of that screen. */}
+                <MatchingIntroView
+                  erasing={userState?.matching.status === 'ERASING'}
+                  onTurnOn={showMatchingBuilder}
+                  onHide={hideMatchingTab}
+                />
               </motion.div>
             )}
             {appState === 'MATCHES' && (

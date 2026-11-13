@@ -39,10 +39,11 @@ export function DesktopSidebar({
 
   const navItems = [
     {
-      // Chat-only members only (appTabsFor): what matching is, and the way to turn it on.
+      // Chat-only members only (appTabsFor): the locked Discover preview, so it carries the Discover
+      // item's label and icon.
       id: 'MATCHING_INTRO' as AppTab,
-      label: 'Matching',
-      icon: Heart,
+      label: 'Discover',
+      icon: Compass,
       badge: 0,
     },
     {

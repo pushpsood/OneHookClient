@@ -30,6 +30,7 @@ const state = (over: Partial<UserStateSnapshot> = {}): UserStateSnapshot => ({
   discoveryPaused: true,
   matching: { status: 'OFF', generation: 0 },
   selectionRequired: false,
+  matchingTabHidden: false,
   ...over,
 });
 

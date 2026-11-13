@@ -7,7 +7,8 @@ import { DISCOVER_LOAD_FAILED_COPY } from '../../hooks/use-api';
 import type { LikeTargetType } from '../../api/rest';
 import { MatchingApi, type DiscoveryCategory } from '../../api/matching';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
-import { LockIcon, UpgradeDialog } from '../../components/common/LockedFeature';
+import { UpgradeDialog } from '../../components/common/LockedFeature';
+import { CATEGORY_LABELS, CategoryChips, DiscoveryEmptyState } from './DiscoveryEmptyState';
 import { DiscoveryCard } from './DiscoveryCard';
 import { CommentComposer } from './CommentComposer';
 import type { LikeTarget } from './like-target';
@@ -173,13 +174,11 @@ export function DiscoveryView({
 
   if (!currentCandidate) {
     return (
-      <div className="h-full flex flex-col items-center justify-center bg-bg text-text p-6 gap-6">
-        {selector}
-        <div className="max-w-sm w-full text-center space-y-3">
-          <h2 className="text-lg font-semibold text-text">You&rsquo;re All Caught Up</h2>
-          <p className="text-sm text-text-secondary">Check back soon for new people to meet.</p>
-        </div>
-      </div>
+      <DiscoveryEmptyState
+        chips={selector}
+        title={DISCOVER_EMPTY_COPY.title}
+        message={DISCOVER_EMPTY_COPY.message}
+      />
     );
   }
 
@@ -222,15 +221,13 @@ export function DiscoveryView({
   );
 }
 
-const CATEGORY_LABELS: Record<DiscoveryCategory, string> = {
-  ALL: 'For you',
-  PROFILE_MATCH: 'Matches your preferences',
-  ONEHOOK_SUGGESTED: 'Mr. OneHook picks',
-  SIMILAR: 'Similar to your likes',
-};
+export { ALL_CATEGORIES } from './DiscoveryEmptyState';
 
-/** Every discovery category, in display order. */
-export const ALL_CATEGORIES: DiscoveryCategory[] = ['ALL', 'PROFILE_MATCH', 'ONEHOOK_SUGGESTED', 'SIMILAR'];
+/** The real Discover screen's empty-state copy. */
+export const DISCOVER_EMPTY_COPY = {
+  title: 'You’re All Caught Up',
+  message: 'Check back soon for new people to meet.',
+} as const;
 
 /**
  * Discovery category chips. Categories outside `available` (from the backend, by tier) stay visible
@@ -246,46 +243,21 @@ export function CategorySelector({
   onChange: (c: DiscoveryCategory) => void;
 }) {
   const [lockedPick, setLockedPick] = useState<DiscoveryCategory | null>(null);
-  const open = new Set<DiscoveryCategory>(available.length ? available : ['ALL']);
-  const options = [...ALL_CATEGORIES, ...available.filter((c) => !ALL_CATEGORIES.includes(c))];
   return (
     <>
-      <div role="tablist" aria-label="Discovery category" className="flex gap-2 overflow-x-auto no-scrollbar">
-        {options.map((option) =>
-          open.has(option) ? (
-            <button
-              key={option}
-              type="button"
-              role="tab"
-              aria-selected={option === value}
-              onClick={() => option !== value && onChange(option)}
-              {...trackProps(UiElement.DISCOVER_CATEGORY_SELECT, { value: option.toLowerCase() })}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
-                option === value
-                  ? 'bg-ig-blue text-white border-ig-blue'
-                  : 'bg-surface border-border text-text-secondary hover:text-text'
-              }`}
-            >
-              {CATEGORY_LABELS[option] ?? option}
-            </button>
-          ) : (
-            <button
-              key={option}
-              type="button"
-              role="tab"
-              aria-selected={false}
-              aria-label={`${CATEGORY_LABELS[option] ?? option}, locked`}
-              data-locked="true"
-              onClick={() => setLockedPick(option)}
-              {...trackProps(UiElement.DISCOVER_UPGRADE_OPEN)}
-              className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border border-dashed border-border text-text-muted bg-surface cursor-pointer"
-            >
-              <LockIcon />
-              {CATEGORY_LABELS[option] ?? option}
-            </button>
-          )
-        )}
-      </div>
+      <CategoryChips
+        value={value}
+        available={available}
+        onPick={(option, open) => {
+          if (!open) setLockedPick(option);
+          else if (option !== value) onChange(option);
+        }}
+        trackAttrsFor={(option, open) =>
+          open
+            ? trackProps(UiElement.DISCOVER_CATEGORY_SELECT, { value: option.toLowerCase() })
+            : trackProps(UiElement.DISCOVER_UPGRADE_OPEN)
+        }
+      />
       {lockedPick && (
         <UpgradeDialog
           feature={CATEGORY_LABELS[lockedPick] ?? lockedPick}

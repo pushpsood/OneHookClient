@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 5c64cc9ea3b7de7c31d449a818194c7177bc36c67f4f58ef128f77f4fa10fd27
+// telemetry-integrity: sha256 b752b0edfd7d8457d07ac5e17b48f325c08caa65178d65d10a064185297ad7b4
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.16.0, hash 3d27632e55e2d44f.
+// Catalog version 1.17.0, hash 76d9d66743a9261c.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.16.0";
-export const TELEMETRY_CATALOG_HASH = "3d27632e55e2d44f";
+export const TELEMETRY_CATALOG_VERSION = "1.17.0";
+export const TELEMETRY_CATALOG_HASH = "76d9d66743a9261c";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -338,6 +338,8 @@ export const UiElement = {
   ONBOARDING_CHOICE_SELECT: "onboarding.choice_select",
   MATCHING_INTRO_TURN_ON: "matching_intro.turn_on",
   MATCHING_INTRO_SHOULD_I_JOIN: "matching_intro.should_i_join",
+  MATCHING_INTRO_LOCKED_TAP: "matching_intro.locked_tap",
+  MATCHING_INTRO_HIDE: "matching_intro.hide",
   DISCOVER_PASS_BUTTON: "discover.pass_button",
   DISCOVER_LIKE_BUTTON: "discover.like_button",
   DISCOVER_ROSE_BUTTON: "discover.rose_button",
@@ -513,6 +515,7 @@ export const UiElement = {
   SETTINGS_UNBLOCK_CONFIRM: "settings.unblock_confirm",
   SETTINGS_MATCHING_ENABLE: "settings.matching_enable",
   SETTINGS_MATCHING_PROFILE_OPEN: "settings.matching_profile_open",
+  SETTINGS_MATCHING_TAB_TOGGLE: "settings.matching_tab_toggle",
   SETTINGS_MATCHING_DISABLE: "settings.matching_disable",
   SETTINGS_MATCHING_DISABLE_CONFIRM: "settings.matching_disable_confirm",
   SETTINGS_VERIFY_CODE_SUBMIT: "settings.verify_code_submit",
@@ -631,6 +634,8 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "onboarding.choice_select": { screen: "ONBOARDING", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["web", "ios", "android"] },
   "matching_intro.turn_on": { screen: "MATCHING_INTRO", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "matching_intro.should_i_join": { screen: "MATCHING_INTRO", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
+  "matching_intro.locked_tap": { screen: "MATCHING_INTRO", kind: "gesture", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "matching_intro.hide": { screen: "MATCHING_INTRO", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "discover.pass_button": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "discover.like_button": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["android"] },
   "discover.rose_button": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
@@ -806,6 +811,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "settings.unblock_confirm": { screen: "SETTINGS", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["ios"] },
   "settings.matching_enable": { screen: "SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "settings.matching_profile_open": { screen: "SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "settings.matching_tab_toggle": { screen: "SETTINGS", kind: "toggle", actions: ["toggle"], values: ["show", "hide"], platforms: ["web", "ios", "android"] },
   "settings.matching_disable": { screen: "SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "settings.matching_disable_confirm": { screen: "SETTINGS", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "settings.verify_code_submit": { screen: "SETTINGS", kind: "button", actions: ["submit", "dismiss"], values: ["email", "phone"], platforms: ["ios", "android"] },

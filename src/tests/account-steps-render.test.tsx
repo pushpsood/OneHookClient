@@ -32,17 +32,21 @@ const tracked = (html: string) =>
     value ? `${id}=${value}` : id
   );
 
-describe('Matching intro tab (chat-only members)', () => {
-  it('explains matching and offers Turn on and the guide', () => {
-    const html = render(<MatchingIntroView erasing={false} onTurnOn={noop} />);
+describe('Matching tab (chat-only members)', () => {
+  it('shows the "Matching is off" message with Turn on, the guide and Hide', () => {
+    const html = render(<MatchingIntroView erasing={false} onTurnOn={noop} onHide={noop} />);
     expect(html).toContain(MATCHING_INTRO_COPY.title);
-    expect(html).toContain('Matching is off. Turn it on to build a matching profile and meet new people.');
-    expect(tracked(html)).toEqual(['matching_intro.turn_on', 'matching_intro.should_i_join']);
+    expect(html).toContain('Turn it on to build a matching profile and meet new people.');
+    expect(tracked(html).filter((t) => t !== 'matching_intro.locked_tap')).toEqual([
+      'matching_intro.turn_on',
+      'matching_intro.should_i_join',
+      'matching_intro.hide',
+    ]);
     expect(html).not.toContain(MATCHING_INTRO_COPY.erasing);
   });
 
   it('while ERASING, Turn on is disabled and says why', () => {
-    const html = render(<MatchingIntroView erasing onTurnOn={noop} />);
+    const html = render(<MatchingIntroView erasing onTurnOn={noop} onHide={noop} />);
     expect(html).toContain(MATCHING_INTRO_COPY.erasing);
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-track-id="matching_intro.turn_on"/);
   });
@@ -67,9 +71,13 @@ describe('Matching intro tab (chat-only members)', () => {
     ]);
   });
 
-  it('is gone once matching is ON', () => {
+  it('is gone once matching is ON, and when the member hid it', () => {
     const html = render(<BottomTabBar activeTab="DISCOVERY" tabs={appTabsFor(mode('ON'))} onTabChange={noop} />);
     expect(html).not.toContain('MATCHING_INTRO');
+    const hidden = render(
+      <BottomTabBar activeTab="MATCHES" tabs={appTabsFor({ ...mode('OFF'), matchingTabHidden: true })} onTabChange={noop} />
+    );
+    expect(tracked(hidden)).toEqual(['nav.tab_select=CHAT', 'nav.tab_select=PROFILE', 'profile.settings_open']);
   });
 });
 

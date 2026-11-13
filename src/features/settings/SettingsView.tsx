@@ -11,6 +11,8 @@ import { DeviceManagementCard } from '../../components/profile/DeviceManagementC
 import { SetPasswordCard } from '../../components/profile/SetPasswordCard';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { MatchingSettingsCard } from './MatchingSettingsCard';
+import { MatchingTabToggleCard } from './MatchingTabToggleCard';
+import { isMatchingOn } from '../../lib/app-mode';
 
 const LivenessVerification = lazy(() =>
   import('../../components/profile/LivenessVerification').then((module) => ({
@@ -69,6 +71,10 @@ export function SettingsView({
         description="Appearance and app-wide preferences."
       >
         <AppearanceCard />
+        {/* The Matching tab exists only while matching is not ON (lib/app-mode.ts). */}
+        {userState != null && !isMatchingOn(userState) && (
+          <MatchingTabToggleCard hidden={userState.matchingTabHidden} />
+        )}
       </SettingsSection>
 
       {/* ── Matching (optional; chat works without it) ──────────── */}

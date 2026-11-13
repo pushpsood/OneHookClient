@@ -10,6 +10,7 @@ import type { BlockReason, ReportCategory, ReportMemberResponse, SubscriptionTie
 import { DEFAULT_SUBSCRIPTION_TIER } from 'onehook-api-client/membership';
 import { viewPasses } from '../lib/view-pass';
 import { errorCode, errorStatus } from '../lib/api-errors';
+import { MatchingTabApi } from './rest';
 
 /**
  * State service wrapper.
@@ -87,6 +88,8 @@ export function toUserStateSnapshot(res: UserStateResponse): UserStateSnapshot {
     keepLimit: res.keepLimit ?? undefined,
     selectionDeadline: res.selectionDeadline ?? undefined,
     chatViewPass: res.chatViewPass ?? undefined,
+    // Absent = shown. (`onehook-api-client` models the member from the SetMatchingTabHidden release.)
+    matchingTabHidden: Boolean((res as UserStateResponse & { matchingTabHidden?: boolean }).matchingTabHidden),
   };
 }
 
@@ -229,5 +232,13 @@ export const StateApi = {
   /** Turns matching off: 202 ERASING. Hooks, chats, blocks and requests are kept. */
   disableMatching: async () => {
     return sdkClient.disableMatching({ confirm: DISABLE_MATCHING_CONFIRMATION });
+  },
+
+  /**
+   * Hides (or shows again) the Matching tab of the chat-only shell. Lives on the member's state
+   * record, so it syncs across devices; it has no effect while matching is ON. Idempotent.
+   */
+  setMatchingTabHidden: async (hidden: boolean): Promise<boolean> => {
+    return (await MatchingTabApi.setHidden(hidden)).hidden;
   },
 };

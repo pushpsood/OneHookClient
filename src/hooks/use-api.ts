@@ -142,6 +142,29 @@ export async function refreshUserStateInStore(): Promise<void> {
   }
 }
 
+/**
+ * Hides (or shows again) the Matching tab: the shell changes at once (optimistic), then the server's
+ * answer, which is authoritative for the flag, is applied. On failure the flag is put back and the
+ * error rethrown so the caller can say so.
+ *
+ * The flag is not re-read with GET /state afterwards: the installed `onehook-api-client` does not
+ * deserialise `matchingTabHidden` yet, so that read would put the tab back.
+ */
+export async function setMatchingTabHiddenInStore(hidden: boolean): Promise<void> {
+  const patch = (value: boolean) => {
+    const { userState, setUserState } = useAppStore.getState();
+    if (userState) setUserState({ ...userState, matchingTabHidden: value });
+  };
+  const before = Boolean(useAppStore.getState().userState?.matchingTabHidden);
+  patch(hidden);
+  try {
+    patch(await StateApi.setMatchingTabHidden(hidden));
+  } catch (err) {
+    patch(before);
+    throw err;
+  }
+}
+
 function toDiscoveryCandidate(
   candidate: DiscoverResponse['candidates'][number]
 ): DiscoveryCandidate {

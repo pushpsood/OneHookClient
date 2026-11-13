@@ -7,6 +7,7 @@ import {
   freeSlots,
   isMatchingOn,
   resolveTab,
+  showsMatchingTab,
 } from '../lib/app-mode';
 
 const mode = (status: 'OFF' | 'ON' | 'ERASING') => ({ matching: { status, generation: 1 } });
@@ -42,6 +43,31 @@ describe('shell by matching mode (docs/chat-only-profiles.md §12)', () => {
   it('an unknown state fails closed to the chat-only shell', () => {
     expect(appTabsFor(null)).toEqual(['MATCHING_INTRO', 'MATCHES', 'PROFILE', 'SETTINGS']);
     expect(isMatchingOn(undefined)).toBe(false);
+  });
+
+  it('a hidden Matching tab leaves Chat, Profile and Settings (OFF and ERASING)', () => {
+    const hidden = (status: 'OFF' | 'ERASING') => ({ ...mode(status), matchingTabHidden: true });
+    expect(appTabsFor(hidden('OFF'))).toEqual(['MATCHES', 'PROFILE', 'SETTINGS']);
+    expect(appTabsFor(hidden('ERASING'))).toEqual(['MATCHES', 'PROFILE', 'SETTINGS']);
+    expect(defaultTabFor(hidden('OFF'))).toBe('MATCHES');
+    expect(showsMatchingTab(hidden('OFF'))).toBe(false);
+    // Explicitly false or absent: shown.
+    expect(appTabsFor({ ...mode('OFF'), matchingTabHidden: false })).toContain('MATCHING_INTRO');
+    expect(showsMatchingTab(mode('OFF'))).toBe(true);
+  });
+
+  it('hiding the tab while it is selected moves to Chat; showing it again keeps the current tab', () => {
+    expect(resolveTab('MATCHING_INTRO', { ...mode('OFF'), matchingTabHidden: true })).toBe('MATCHES');
+    expect(resolveTab('PROFILE', { ...mode('OFF'), matchingTabHidden: true })).toBe('PROFILE');
+    expect(resolveTab('SETTINGS', { ...mode('OFF'), matchingTabHidden: false })).toBe('SETTINGS');
+  });
+
+  it('the hidden flag has no effect while matching is ON', () => {
+    const on = { ...mode('ON'), matchingTabHidden: true };
+    expect(appTabsFor(on)).toEqual(['DISCOVERY', 'LIKES', 'MATCHES', 'PROFILE', 'SETTINGS']);
+    expect(defaultTabFor(on)).toBe('DISCOVERY');
+    expect(showsMatchingTab(on)).toBe(false);
+    expect(showsMatchingTab({ ...mode('ON'), matchingTabHidden: false })).toBe(false);
   });
 
   it('leaves a tab the shell no longer has when matching turns off', () => {
