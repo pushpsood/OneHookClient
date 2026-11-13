@@ -57,6 +57,15 @@ describe('frameCallSignal / parseCallSignal', () => {
     expect(parseCallSignal(framed)?.callId).toBe('other-call');
   });
 
+  it('accepts an offer with no callId (it is sealed before startCall assigns one) but no other type', () => {
+    const offer = String.fromCharCode(0x02) + JSON.stringify({ v: 1, t: 'offer', sdp: 'S' });
+    expect(parseCallSignal(offer)?.sdp).toBe('S');
+    expect(parseCallSignal(offer, 'c1')?.callId).toBe('');
+    const ice = String.fromCharCode(0x02) + JSON.stringify({ v: 1, t: 'ice', candidates: [] });
+    expect(parseCallSignal(ice)).toBeNull();
+    expect(parseCallSignal(ice, 'c1')).toBeNull();
+  });
+
   it('returns null for a non-0x02 frame, bad JSON, wrong version and unknown type', () => {
     expect(parseCallSignal('plain chat message', 'c1')).toBeNull();
     expect(parseCallSignal(String.fromCharCode(0x02) + '{not json', 'c1')).toBeNull();

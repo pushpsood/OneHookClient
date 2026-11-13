@@ -123,14 +123,18 @@ export function parseCallSignal(plaintext: string, expectedCallId?: string): Cal
   const record = raw as Record<string, unknown>;
   if (record.v !== CALL_SIGNAL_VERSION) return null;
   if (typeof record.t !== 'string' || !SIGNAL_TYPES.includes(record.t as CallSignalType)) return null;
-  if (typeof record.callId !== 'string' || record.callId.length === 0) return null;
-  if (expectedCallId !== undefined && record.callId !== expectedCallId) return null;
+  // A caller seals its offer BEFORE startCall assigns the callId, so an offer may carry no callId
+  // (Android omits it, iOS sends "", web sends "pending"). The callee binds the offer to its call
+  // through getCall instead. Every other signal type must name its call.
+  const callId = typeof record.callId === 'string' ? record.callId : '';
+  if (callId.length === 0 && record.t !== 'offer') return null;
+  if (expectedCallId !== undefined && callId.length > 0 && callId !== expectedCallId) return null;
 
   // Copy ONLY known fields so an unknown future field is never trusted or echoed.
   const signal: CallSignal = {
     v: CALL_SIGNAL_VERSION,
     t: record.t as CallSignalType,
-    callId: record.callId,
+    callId,
   };
   if (typeof record.sdp === 'string') signal.sdp = record.sdp;
   if (typeof record.fingerprint === 'string') signal.fingerprint = record.fingerprint;
@@ -185,6 +189,28 @@ export function extractDtlsFingerprint(sdp: string | null | undefined): string |
   const match = /a=fingerprint:sha-256\s+([0-9a-fA-F:]+)/.exec(sdp);
   if (!match) return null;
   return match[1].toUpperCase();
+}
+
+/**
+ * The `a=mid` of the LAST video m-section of an SDP, or null when it has none.
+ *
+ * Every client builds its offer as audio, [camera video], screen video (§6.1), so the last video
+ * m-section is always the pre-negotiated `screen` transceiver. A callee uses this to tell the peer's
+ * shared screen from its camera: the transceivers a remote offer creates carry no track ids or stream
+ * ids that the three platforms agree on, but their order is fixed.
+ */
+export function lastVideoMid(sdp: string | null | undefined): string | null {
+  if (!sdp) return null;
+  let mid: string | null = null;
+  let inVideo = false;
+  for (const line of sdp.split(/\r?\n/)) {
+    if (line.startsWith('m=')) {
+      inVideo = line.startsWith('m=video');
+    } else if (inVideo && line.startsWith('a=mid:')) {
+      mid = line.slice('a=mid:'.length).trim();
+    }
+  }
+  return mid;
 }
 
 /**

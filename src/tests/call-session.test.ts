@@ -78,11 +78,21 @@ class FakeSender {
   replaceTrack = vi.fn(async (track: FakeTrack | null) => {
     this.track = track;
   });
+  setStreams = vi.fn();
 }
 
 class FakeTransceiver {
   readonly sender = new FakeSender();
-  constructor(public readonly label: string) {}
+  readonly receiver: { track: FakeTrack };
+  direction = 'sendrecv';
+  constructor(
+    public readonly label: string,
+    public readonly mid: string | null = null,
+    receiveTrack: FakeTrack = new FakeTrack(label)
+  ) {
+    this.receiver = { track: receiveTrack };
+    if (mid !== null) this.direction = 'recvonly';
+  }
 }
 
 let dataChannels: FakeDataChannel[] = [];
@@ -100,6 +110,8 @@ class FakePeerConnection {
   onconnectionstatechange: (() => void) | null = null;
 
   readonly transceivers: FakeTransceiver[] = [];
+  /** Transceivers created by applying a remote offer (see setRemoteDescription). */
+  readonly offerTransceivers: FakeTransceiver[] = [];
   readonly added: FakeTrack[] = [];
   readonly iceCandidates: RTCIceCandidateInit[] = [];
 
@@ -117,6 +129,22 @@ class FakePeerConnection {
   }
   async setRemoteDescription(desc: { type: string; sdp: string }) {
     this.remoteDescription = { type: desc.type, sdp: desc.sdp };
+    if (desc.type !== 'offer') return;
+    // Like a browser: every m-section of a remote offer gets a transceiver (recvonly by default), and
+    // ontrack fires for each one the offerer sends on.
+    let index = 0;
+    for (const section of desc.sdp.split(/\r?\n(?=m=)/).filter((s) => s.startsWith('m='))) {
+      const kind = section.slice(2, section.indexOf(' '));
+      if (kind !== 'audio' && kind !== 'video') continue;
+      const mid = /a=mid:(\S+)/.exec(section)?.[1] ?? String(index);
+      const tx = new FakeTransceiver(kind, mid, new FakeTrack(kind));
+      this.offerTransceivers.push(tx);
+      this.ontrack?.({ track: tx.receiver.track, transceiver: tx } as unknown as RTCTrackEvent);
+      index += 1;
+    }
+  }
+  getTransceivers() {
+    return this.offerTransceivers as unknown as RTCRtpTransceiver[];
   }
   addTrack(track: FakeTrack) {
     this.added.push(track);
@@ -522,5 +550,196 @@ describe('CallSession — screen share (§11)', () => {
 
     expect(session.getScreenShareState()).toBe('none');
     expect(errors.some((e) => /declined/i.test(e.message))).toBe(true);
+  });
+});
+
+// ── Cross-platform interop and ICE ordering (the gamma call-test regressions) ─────────────────────
+
+const RELAY = 'candidate:3 1 UDP 41885439 198.51.100.7 49152 typ relay raddr 203.0.113.5 rport 54321';
+const rawOffer = (fields: Record<string, unknown>) =>
+  String.fromCharCode(0x02) + JSON.stringify({ v: 1, t: 'offer', sdp: OFFER_SDP, ...fields });
+
+function calleeWithOffer(offerCiphertext: string, api = makeApi(), media: 'AUDIO' | 'VIDEO' = 'AUDIO', handlers: CallSessionHandlers = {}) {
+  const getCall = vi.fn(async () => makeCall({ status: 'RINGING', callerDeviceId: 'caller-dev', offerCiphertext }));
+  api.getCall = getCall;
+  const session = new CallSession(makeDeps(api), {
+    role: 'callee',
+    selfUserId: 'callee',
+    peerId: 'caller',
+    matchId: 'match1',
+    media,
+    callId: 'call1',
+    callerDeviceId: 'caller-dev',
+    handlers,
+  });
+  return { session, api };
+}
+
+describe('CallSession — offers from every platform', () => {
+  it.each([
+    ['Android (no callId)', {}],
+    ['iOS (empty callId)', { callId: '' }],
+    ['web ("pending")', { callId: 'pending' }],
+  ])('answers an offer from %s', async (_label, fields) => {
+    const { session, api } = calleeWithOffer(rawOffer(fields));
+
+    await session.accept();
+
+    expect(api.acceptCall).toHaveBeenCalledOnce();
+    expect(session.getState()).toBe('connecting');
+  });
+
+  it('puts the callee camera on the offer camera m-section and adopts the last video m-section as the screen', async () => {
+    const offerSdp = [
+      'v=0',
+      FP_LINE('AA:BB:CC:DD:EE:FF'),
+      'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+      'a=mid:0',
+      'm=video 9 UDP/TLS/RTP/SAVPF 96',
+      'a=mid:1',
+      'm=video 9 UDP/TLS/RTP/SAVPF 96',
+      'a=mid:2',
+    ].join('\r\n');
+    const remote: MediaStream[] = [];
+    const screens: (MediaStream | null)[] = [];
+    const { session } = calleeWithOffer(rawOffer({ sdp: offerSdp }), makeApi(), 'VIDEO', {
+      onRemoteStream: (s) => remote.push(s),
+      onScreenStream: (s) => screens.push(s),
+    });
+
+    await session.accept();
+
+    const pc = (session as unknown as { pc: FakePeerConnection }).pc;
+    const [, camera, screen] = pc.offerTransceivers;
+    expect(camera.sender.replaceTrack).toHaveBeenCalledOnce();
+    expect(camera.sender.track?.kind).toBe('video');
+    expect(camera.direction).toBe('sendrecv');
+    expect(screen.direction).toBe('sendrecv');
+    expect(screen.sender.replaceTrack).not.toHaveBeenCalled();
+    // The peer's camera feeds the remote stream; its idle screen m-section never does.
+    const last = remote[remote.length - 1];
+    expect(last.getVideoTracks()).toEqual([camera.receiver.track]);
+    expect(screens).toHaveLength(1);
+  });
+});
+
+describe('CallSession — ICE ordering', () => {
+  it('callee buffers its ICE until acceptCall succeeded, then trickles it to the caller device', async () => {
+    const api = makeApi();
+    let relayedBeforeAccept = -1;
+    const { session } = calleeWithOffer(rawOffer({}), api);
+    api.acceptCall = vi.fn(async () => {
+      const pc = (session as unknown as { pc: FakePeerConnection }).pc;
+      pc.onicecandidate?.({ candidate: { candidate: RELAY, sdpMid: '0', sdpMLineIndex: 0 } as RTCIceCandidate });
+      relayedBeforeAccept = (api.relayCallSignal as ReturnType<typeof vi.fn>).mock.calls.length;
+      return makeCall({ status: 'ACCEPTED' });
+    });
+
+    await session.accept();
+
+    expect(relayedBeforeAccept).toBe(0);
+    expect(api.relayCallSignal).toHaveBeenCalledOnce();
+    const params = (api.relayCallSignal as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(params).toMatchObject({ toDeviceId: 'caller-dev', toUserId: 'caller', fromDeviceId: 'self-dev' });
+    expect(params.ciphertext).toContain(RELAY);
+  });
+
+  async function ringingCaller(api = makeApi()) {
+    const session = new CallSession(makeDeps(api), {
+      role: 'caller',
+      selfUserId: 'caller',
+      peerId: 'callee',
+      matchId: 'match1',
+      media: 'AUDIO',
+    });
+    await session.start();
+    const pc = (session as unknown as { pc: FakePeerConnection }).pc;
+    return { session, api, pc };
+  }
+
+  const accepted = () =>
+    ({
+      kind: 'ACCEPTED',
+      callId: 'call1',
+      matchId: 'match1',
+      userId: 'caller',
+      fromDeviceId: 'callee-dev',
+      ciphertext: frameCallSignal({ t: 'answer', callId: 'call1', sdp: ANSWER_SDP }),
+      at: 2,
+    }) as CallEvent;
+
+  it('caller queues ICE that arrives before the answer and adds it once the answer is applied', async () => {
+    const { session, pc } = await ringingCaller();
+
+    // The callee trickled before our ACCEPTED event arrived.
+    const early = session.handleEvent({
+      kind: 'SIGNAL',
+      callId: 'call1',
+      matchId: 'match1',
+      userId: 'caller',
+      fromDeviceId: 'callee-dev',
+      toDeviceId: 'self-dev',
+      ciphertext: frameCallSignal({ t: 'ice', callId: 'call1', candidates: [{ candidate: RELAY, sdpMid: '0', sdpMLineIndex: 0 }] }),
+      at: 1,
+    } as CallEvent);
+    await early;
+    expect(pc.iceCandidates).toHaveLength(0);
+
+    await session.handleEvent(accepted());
+
+    expect(pc.iceCandidates).toEqual([{ candidate: RELAY, sdpMid: '0', sdpMLineIndex: 0 }]);
+  });
+
+  it('caller keeps a candidate gathered after the offer and trickles it once ACCEPTED', async () => {
+    const { session, api, pc } = await ringingCaller();
+
+    pc.onicecandidate?.({ candidate: { candidate: RELAY, sdpMid: '0', sdpMLineIndex: 0 } as RTCIceCandidate });
+    expect(api.relayCallSignal).not.toHaveBeenCalled();
+
+    await session.handleEvent(accepted());
+
+    expect(api.relayCallSignal).toHaveBeenCalledOnce();
+    const params = (api.relayCallSignal as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(params.toDeviceId).toBe('callee-dev');
+    expect(params.ciphertext).toContain(RELAY);
+  });
+});
+
+describe('CallSession — ending early', () => {
+  it('a hang-up while startCall is in flight cancels the call on the server', async () => {
+    let resolveStart: (call: Call) => void = () => {};
+    const api = makeApi({
+      startCall: vi.fn(() => new Promise<Call>((resolve) => (resolveStart = resolve))),
+    });
+    const session = new CallSession(makeDeps(api), {
+      role: 'caller',
+      selfUserId: 'caller',
+      peerId: 'callee',
+      matchId: 'match1',
+      media: 'AUDIO',
+    });
+
+    const starting = session.start();
+    await flush();
+    await session.hangup();
+    resolveStart(makeCall({ status: 'RINGING' }));
+    await starting;
+
+    expect(api.endCall).toHaveBeenCalledWith('call1', 'CANCELLED');
+    expect(session.getState()).toBe('ended');
+  });
+
+  it('a failure tells the server so the peer stops ringing', async () => {
+    const api = makeApi({
+      acceptCall: vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    });
+    const { session } = calleeWithOffer(rawOffer({}), api);
+
+    await session.accept();
+
+    expect(api.endCall).toHaveBeenCalledWith('call1', 'FAILED');
+    expect(session.getState()).toBe('ended');
   });
 });

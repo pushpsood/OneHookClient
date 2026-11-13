@@ -177,3 +177,65 @@ describe('GlobalCallController — app-wide ringing (§10)', () => {
     expect(snap.activeMatchId).toBe('m-out');
   });
 });
+
+describe('GlobalCallController — the ring stops when the call does', () => {
+  const ended = (overrides: Partial<CallEvent> = {}) =>
+    incomingEvent({ kind: 'ENDED', endReason: 'CANCELLED', ...overrides });
+
+  it('dismisses the ring modal when the caller cancels', async () => {
+    const { controller, emit } = harness();
+    emit(incomingEvent());
+    await flush();
+    expect(controller.getSnapshot().incoming).not.toBeNull();
+
+    emit(ended());
+
+    expect(controller.getSnapshot().incoming).toBeNull();
+  });
+
+  it('dismisses the ring modal when another of our devices answered', async () => {
+    const { controller, emit } = harness();
+    emit(incomingEvent());
+    await flush();
+
+    emit(incomingEvent({ kind: 'ANSWERED_ELSEWHERE', fromDeviceId: 'my-other-device' }));
+
+    expect(controller.getSnapshot().incoming).toBeNull();
+  });
+
+  it('never shows a ring for a call that ended while its peer was being resolved', async () => {
+    let release: () => void = () => {};
+    const { controller, emit } = harness({
+      resolvePeer: () => new Promise((resolve) => (release = () => resolve({ peerId: 'p', peerName: 'Alex' }))),
+    });
+    emit(incomingEvent());
+    emit(ended());
+    release();
+    await flush();
+
+    expect(controller.getSnapshot().incoming).toBeNull();
+  });
+
+  it('keeps the ring for a different call ending', async () => {
+    const { controller, emit } = harness();
+    emit(incomingEvent());
+    await flush();
+
+    emit(ended({ callId: 'some-other-call' }));
+
+    expect(controller.getSnapshot().incoming).toMatchObject({ callId: 'call-1' });
+  });
+
+  it('does not hand a caller that has no callId yet an event for another call', async () => {
+    const handled: CallEvent[] = [];
+    const { controller, sessions, emit } = harness();
+    await controller.startCall({ matchId: 'm1', peerId: 'p1', peerName: 'Sam', media: 'AUDIO' });
+    (sessions[0] as unknown as { handleEvent: (e: CallEvent) => Promise<void> }).handleEvent = async (e) => {
+      handled.push(e);
+    };
+
+    emit(ended({ callId: 'unrelated' }));
+
+    expect(handled).toHaveLength(0);
+  });
+});

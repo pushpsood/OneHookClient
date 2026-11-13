@@ -123,6 +123,8 @@ export class GlobalCallController {
   private captionSession: CaptionSession | null = null;
   /** Guards the async peer resolution for an incoming call against races. */
   private incomingToken = 0;
+  /** The INCOMING call whose peer is still being resolved (not yet in the snapshot). */
+  private pendingIncomingCallId: string | null = null;
 
   private snapshot: GlobalCallSnapshot;
 
@@ -198,13 +200,32 @@ export class GlobalCallController {
       return;
     }
     const session = this.session;
-    if (session && (!session.getCallId() || session.getCallId() === event.callId)) {
+    if (!session) {
+      // Still ringing here (no session yet): the caller cancelled, the ring timed out, or another of
+      // our devices answered. Stop ringing, including a ring whose peer is still being resolved.
+      if (event.kind === 'ENDED' || event.kind === 'ANSWERED_ELSEWHERE') this.dismissIncoming(event.callId);
+      return;
+    }
+    // A session learns its callId from startCall (caller) or the INCOMING event (callee). Until then no
+    // event can be for it, and an ENDED for some other call must not tear it down.
+    if (session.getCallId() === event.callId) {
       void session.handleEvent(event);
+    }
+  }
+
+  private dismissIncoming(callId: string): void {
+    if (this.pendingIncomingCallId === callId) {
+      this.incomingToken++; // drops the in-flight presentIncoming for this call
+      this.pendingIncomingCallId = null;
+    }
+    if (this.snapshot.incoming?.callId === callId) {
+      this.set({ incoming: null, historyNonce: this.snapshot.historyNonce + 1 });
     }
   }
 
   private async presentIncoming(event: CallEvent): Promise<void> {
     const token = ++this.incomingToken;
+    this.pendingIncomingCallId = event.callId;
     let peerId = '';
     let peerName = 'Your Match';
     try {
@@ -216,6 +237,7 @@ export class GlobalCallController {
     }
     // Drop if a newer incoming/active call superseded this one while we resolved the peer.
     if (token !== this.incomingToken || this.session) return;
+    this.pendingIncomingCallId = null;
     this.set({
       incoming: {
         callId: event.callId,

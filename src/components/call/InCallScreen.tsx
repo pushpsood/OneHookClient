@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Captions,
   CaptionsOff,
@@ -46,7 +46,10 @@ function baseSubtag(code: string): string {
   return (code ?? '').toLowerCase().split('-')[0];
 }
 
-/** Attaches a MediaStream to a <video>, muting local playback to avoid echo. */
+/**
+ * Attaches a MediaStream to a <video>. Calls play() explicitly: Safari (and iOS WebKit) often leave an
+ * autoplay element paused when srcObject is set after mount or a track is added later.
+ */
 function VideoTile({
   stream,
   muted,
@@ -60,9 +63,10 @@ function VideoTile({
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    if (ref.current && ref.current.srcObject !== stream) {
-      ref.current.srcObject = stream;
-    }
+    const el = ref.current;
+    if (!el) return;
+    if (el.srcObject !== stream) el.srcObject = stream;
+    if (stream) void el.play?.()?.catch(() => undefined);
   }, [stream]);
   return (
     <video
@@ -74,6 +78,54 @@ function VideoTile({
       className={className}
     />
   );
+}
+
+/**
+ * Plays the remote audio for EVERY call, audio-only or video. The remote <video> tile is muted so
+ * sound never depends on whether the video tile is mounted (it falls back to the avatar until frames
+ * arrive) and is never played twice.
+ */
+function RemoteAudio({ stream }: { stream: MediaStream | null }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (el.srcObject !== stream) el.srcObject = stream;
+    if (stream) void el.play?.()?.catch(() => undefined);
+  }, [stream]);
+  return <audio ref={ref} autoPlay aria-hidden="true" className="hidden" />;
+}
+
+/**
+ * True while the stream carries a remote video track that is actually receiving frames. A remote
+ * track exists (muted) as soon as the answer is applied, long before media flows; showing it then is
+ * what made the call look like "only my own video is visible" over a black screen.
+ */
+function useHasLiveVideo(stream: MediaStream | null): boolean {
+  const [live, setLive] = useState(false);
+  useEffect(() => {
+    if (!stream) {
+      setLive(false);
+      return;
+    }
+    const tracks = stream.getVideoTracks();
+    const update = () =>
+      setLive(tracks.some((t) => t.readyState === 'live' && !t.muted && t.enabled !== false));
+    update();
+    for (const t of tracks) {
+      t.addEventListener?.('mute', update);
+      t.addEventListener?.('unmute', update);
+      t.addEventListener?.('ended', update);
+    }
+    return () => {
+      for (const t of tracks) {
+        t.removeEventListener?.('mute', update);
+        t.removeEventListener?.('unmute', update);
+        t.removeEventListener?.('ended', update);
+      }
+    };
+  }, [stream]);
+  return live;
 }
 
 function stateLabel(state: CallSessionState, media: CallMedia): string {
@@ -151,6 +203,7 @@ export function InCallScreen({
   onHangup: () => void;
 }) {
   const isVideo = media === 'VIDEO';
+  const remoteVideoLive = useHasLiveVideo(remoteStream);
   const sharing = screenShareState === 'sending';
   const viewingShare = screenShareState === 'receiving' && screenStream;
   const captionsOn = Boolean(captions?.localEnabled);
@@ -168,7 +221,7 @@ export function InCallScreen({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex flex-col bg-neutral-950 text-white"
+      className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-neutral-950 text-white pt-[env(safe-area-inset-top)]"
       role="dialog"
       aria-modal="true"
       aria-label={`${isVideo ? 'Video' : 'Audio'} call with ${peerName}`}
@@ -178,41 +231,41 @@ export function InCallScreen({
       </p>
 
       {/* Main stage */}
-      <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+      <div className="relative flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden">
         {viewingShare ? (
           <VideoTile
             stream={screenStream}
+            muted
             className="w-full h-full object-contain bg-black"
             label={`${peerName}'s shared screen`}
           />
-        ) : isVideo && remoteStream ? (
+        ) : isVideo && remoteVideoLive ? (
           <VideoTile
             stream={remoteStream}
+            muted
             className="w-full h-full object-cover"
             label={`${peerName}'s video`}
           />
         ) : (
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-4 px-6 text-center">
             <div className="w-28 h-28 rounded-full bg-white/10 flex items-center justify-center text-4xl font-semibold">
               {peerName.charAt(0).toUpperCase()}
             </div>
-            <p className="text-xl font-medium">{peerName}</p>
+            <p className="text-xl font-medium break-words max-w-full">{peerName}</p>
             <p className="text-sm text-white/60">{stateLabel(state, media)}</p>
           </div>
         )}
 
-        {/* Remote audio is always rendered (hidden) so audio-only calls still play sound. */}
-        {!isVideo && (
-          <VideoTile stream={remoteStream} className="hidden" label={`${peerName}'s audio`} />
-        )}
+        {/* Remote audio is always played by its own element, for audio and video calls alike. */}
+        <RemoteAudio stream={remoteStream} />
 
-        {/* Local picture-in-picture (video calls only, when the camera is on). */}
+        {/* Local picture-in-picture (video calls only, when the camera is on). Mirrored like a mirror. */}
         {isVideo && !cameraOff && localStream && (
-          <div className="absolute bottom-4 right-4 w-28 md:w-40 aspect-video rounded-xl overflow-hidden border border-white/20 shadow-lg">
+          <div className="absolute bottom-3 right-3 w-24 sm:w-28 md:w-40 aspect-[3/4] sm:aspect-video rounded-xl overflow-hidden border border-white/20 shadow-lg">
             <VideoTile
               stream={localStream}
               muted
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover -scale-x-100"
               label="Your video"
             />
           </div>
@@ -220,7 +273,7 @@ export function InCallScreen({
 
         {/* Safety code (SAS) — out-of-band MITM check. */}
         {sas && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/50 rounded-xl px-4 py-2 text-center">
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 max-w-[calc(100%-1.5rem)] bg-black/50 rounded-xl px-4 py-2 text-center">
             <div className="text-2xl tracking-widest" aria-label={`Safety code: ${sas.join(', ')}`}>
               {sas.join(' ')}
             </div>
@@ -231,7 +284,7 @@ export function InCallScreen({
         {/* Incoming screen-share request (§11.5: the receiver must accept each share). */}
         {screenRequest && (
           <div
-            className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-surface-card text-text rounded-xl shadow-2xl p-4 w-80 text-center"
+            className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-surface-card text-text rounded-xl shadow-2xl p-4 w-[calc(100%-2rem)] max-w-xs text-center"
             role="dialog"
             aria-label="Screen share request"
           >
@@ -300,8 +353,9 @@ export function InCallScreen({
         </div>
       )}
 
-      {/* Controls */}
-      <div className="shrink-0 flex items-center justify-center gap-3 p-6 bg-black/40">
+      {/* Controls. Wraps onto a second row on narrow phones instead of spilling off both edges
+          (a centred, non-wrapping row pushed Mute and Hang up off-screen at 360 px). */}
+      <div className="shrink-0 w-full flex flex-wrap items-center justify-center gap-2 sm:gap-3 px-3 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 bg-black/40">
         <ControlButton
           onClick={onToggleMute}
           active={muted}
@@ -379,7 +433,7 @@ export function InCallScreen({
                   onSelectCaptionLanguage(e.target.value);
                 }}
                 aria-label="Caption translation language"
-                className="h-14 pl-9 pr-3 rounded-full bg-white/15 text-white text-sm outline-none cursor-pointer hover:bg-white/25 transition-colors appearance-none"
+                className="h-12 sm:h-14 max-w-[9rem] sm:max-w-none truncate pl-9 pr-3 rounded-full bg-white/15 text-white text-sm outline-none cursor-pointer hover:bg-white/25 transition-colors appearance-none"
               >
                 {CAPTION_LANGUAGES.map((lang) => (
                   <option key={lang.code} value={lang.code} className="text-neutral-900">
@@ -395,7 +449,7 @@ export function InCallScreen({
           type="button"
           {...trackProps(UiElement.CALL_END)}
           onClick={onHangup}
-          className="w-14 h-14 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
+          className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer"
           aria-label="Hang up"
         >
           <PhoneOff className="w-6 h-6" />
@@ -431,7 +485,7 @@ function ControlButton({
       aria-label={label}
       aria-pressed={active}
       title={label}
-      className={`w-14 h-14 flex items-center justify-center rounded-full transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`w-12 h-12 sm:w-14 sm:h-14 shrink-0 flex items-center justify-center rounded-full transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
         active ? 'bg-white text-neutral-900' : 'bg-white/15 text-white hover:bg-white/25'
       }`}
     >

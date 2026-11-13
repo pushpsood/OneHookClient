@@ -209,6 +209,9 @@ const HEARTBEAT_CALL = /* GraphQL */ `
 `;
 
 const RELAY_CALL_SIGNAL = /* GraphQL */ `
+  # AppSync sends subscribers ONLY the fields this mutation selects, so the selection must cover every
+  # CallEvent field the peer's onCallEvent reads. Without ciphertext here the peer received every
+  # SIGNAL with ciphertext null and dropped all of our ICE candidates.
   mutation RelayCallSignal(
     $matchId: ID!
     $callId: ID!
@@ -229,8 +232,11 @@ const RELAY_CALL_SIGNAL = /* GraphQL */ `
       callId
       matchId
       kind
+      media
       toDeviceId
       fromDeviceId
+      ciphertext
+      endReason
       at
     }
   }

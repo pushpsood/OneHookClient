@@ -25,6 +25,7 @@ import {
   filterRelayCandidates,
   frameCallSignal,
   isRelayCandidate,
+  lastVideoMid,
   parseCallSignal,
   type CallIceCandidate,
 } from './call-signal';
@@ -166,8 +167,11 @@ export class CallSession {
 
   private pc: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
-  private readonly remoteStream = new MediaStream();
+  /** Rebuilt (new object) whenever a remote track arrives, so the UI re-binds its media elements. */
+  private remoteStream = new MediaStream();
   private screenTransceiver: RTCRtpTransceiver | null = null;
+  /** The peer's `screen` m-section (the last video m-line of the offer), for the callee side. */
+  private screenMid: string | null = null;
   private cameraTransceiver: RTCRtpTransceiver | null = null;
   private controlChannel: RTCDataChannel | null = null;
 
@@ -181,6 +185,17 @@ export class CallSession {
   private iceRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private iceBatchTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingCandidates: CallIceCandidate[] = [];
+  /**
+   * Local candidates are trickled only once BOTH sides are listening for them: the callee after its
+   * acceptCall succeeded, the caller after it applied the answer. Earlier ones are buffered (or already
+   * ride in the offer/answer SDP), never dropped.
+   */
+  private trickleReady = false;
+  /** Remote candidates that arrived before the remote description was applied; added right after it. */
+  private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
+  private remoteDescriptionApplied = false;
+  /** Serializes subscription events, so an ICE batch is never applied mid-way through the answer. */
+  private eventQueue: Promise<void> = Promise.resolve();
 
   private muted = false;
   private cameraOff = false;
@@ -247,6 +262,8 @@ export class CallSession {
       await this.waitForIceGathering();
 
       const sdp = this.pc!.localDescription?.sdp ?? offer.sdp ?? '';
+      // Candidates gathered so far are inside the offer SDP; only later ones still need trickling.
+      this.pendingCandidates = [];
       this.localFingerprint = extractDtlsFingerprint(sdp);
       const offerCiphertext = await this.deps.crypto.sealCallSignalToPeer(
         this.peerId,
@@ -262,6 +279,12 @@ export class CallSession {
       );
       this.callId = call.callId;
 
+      if (this.state === 'ended') {
+        // The user hung up while startCall was in flight: without this the callee keeps ringing
+        // until the sweeper ends the call a minute later.
+        if (call.status !== 'ENDED') void this.deps.api.endCall(call.callId, 'CANCELLED').catch(() => undefined);
+        return;
+      }
       if (call.status === 'ENDED') {
         // The only ENDED startCall result is BUSY (§6.2).
         this.finish(call.endReason ?? 'BUSY');
@@ -291,13 +314,17 @@ export class CallSession {
       if (!call.offerCiphertext) throw new Error('The incoming call has no offer to answer.');
 
       const iceConfig = await this.deps.api.getIceServers(this.matchId, this.selfDeviceId);
-      await this.buildPeerConnection(iceConfig);
 
+      // The offer is bound to this call by getCall, not by its callId: a caller seals it before
+      // startCall assigns the id (Android omits it, iOS sends "", web "pending").
       const offerPlaintext = await this.deps.crypto.openCallSignal(this.matchId, call.offerCiphertext);
-      const offerSignal = parseCallSignal(offerPlaintext, this.callId);
-      if (!offerSignal?.sdp) throw new Error('The incoming call offer could not be read.');
+      const offerSignal = parseCallSignal(offerPlaintext);
+      if (!offerSignal?.sdp || offerSignal.t !== 'offer') {
+        throw new Error('The incoming call offer could not be read.');
+      }
 
-      await this.pc!.setRemoteDescription({ type: 'offer', sdp: offerSignal.sdp });
+      // Applies the offer, then puts our tracks on the transceivers the offer created.
+      await this.buildPeerConnection(iceConfig, offerSignal.sdp);
       this.remoteFingerprint = extractDtlsFingerprint(offerSignal.sdp) ?? offerSignal.fingerprint ?? null;
 
       const answer = await this.pc!.createAnswer();
@@ -305,6 +332,8 @@ export class CallSession {
       await this.waitForIceGathering();
 
       const answerSdp = this.pc!.localDescription?.sdp ?? answer.sdp ?? '';
+      // Candidates gathered so far are inside the answer SDP.
+      this.pendingCandidates = [];
       this.localFingerprint = extractDtlsFingerprint(answerSdp);
       await this.updateSas();
 
@@ -317,8 +346,11 @@ export class CallSession {
       );
 
       await this.deps.api.acceptCall(this.callId, this.selfDeviceId, answerCiphertext);
+      if (this.state === 'ended') return;
       this.setState('connecting');
-      this.flushCandidates();
+      // Only now is the caller known to be listening for our candidates (it gets ACCEPTED first).
+      this.trickleReady = true;
+      await this.flushCandidates();
     } catch (error) {
       this.fail(error);
     }
@@ -349,8 +381,18 @@ export class CallSession {
     }
   }
 
-  /** Route a subscription CallEvent into the session. Events for other calls are ignored. */
-  async handleEvent(event: CallEvent): Promise<void> {
+  /**
+   * Route a subscription CallEvent into the session. Events for other calls are ignored. Events are
+   * applied one at a time, in arrival order: an ICE batch that arrives while the answer is still being
+   * decrypted must wait for it rather than race it.
+   */
+  handleEvent(event: CallEvent): Promise<void> {
+    const run = this.eventQueue.then(() => this.processEvent(event));
+    this.eventQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async processEvent(event: CallEvent): Promise<void> {
     if (this.state === 'ended') return;
     if (this.callId && event.callId !== this.callId) return;
 
@@ -454,11 +496,13 @@ export class CallSession {
       const answerSignal = parseCallSignal(answerPlaintext, this.callId ?? undefined);
       if (!answerSignal?.sdp) throw new Error('The answer could not be read.');
       await this.pc.setRemoteDescription({ type: 'answer', sdp: answerSignal.sdp });
+      await this.onRemoteDescriptionApplied();
       this.remoteFingerprint =
         extractDtlsFingerprint(answerSignal.sdp) ?? answerSignal.fingerprint ?? null;
       await this.updateSas();
       this.setState('connecting');
-      this.flushCandidates();
+      this.trickleReady = true;
+      await this.flushCandidates();
     } catch (error) {
       this.fail(error);
     }
@@ -475,7 +519,14 @@ export class CallSession {
 
       if (signal.t === 'ice' && signal.candidates) {
         for (const candidate of filterRelayCandidates(signal.candidates)) {
-          await this.pc.addIceCandidate(candidate as RTCIceCandidateInit);
+          // A peer may trickle before we have applied its description (the callee can send ICE before
+          // our ACCEPTED event arrives). Adding a candidate then throws, and losing it means the two
+          // TURN relays never permit each other, so queue it instead.
+          if (!this.remoteDescriptionApplied) {
+            this.pendingRemoteCandidates.push(candidate as RTCIceCandidateInit);
+          } else {
+            await this.addRemoteCandidate(candidate as RTCIceCandidateInit);
+          }
         }
       } else if (signal.t === 'restart-offer' && signal.sdp) {
         await this.pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
@@ -492,34 +543,100 @@ export class CallSession {
 
   // ── Peer connection construction ────────────────────────────────────────────
 
-  private async buildPeerConnection(iceConfig: IceServerConfig | null): Promise<void> {
+  /**
+   * Builds the peer connection. The CALLER creates every m-section itself, in the fixed order audio,
+   * [camera video], screen video, then the `control` data channel (§6.1).
+   *
+   * The CALLEE passes the remote offer: it applies the offer FIRST and then puts its camera on the
+   * offer's camera transceiver. Transceivers made with addTransceiver() before setRemoteDescription are
+   * never matched to the offer's m-sections (JSEP §5.10), so the old order sent the callee's camera on
+   * a transceiver that never made it into the answer: the caller saw a black screen and only its own
+   * picture-in-picture.
+   */
+  private async buildPeerConnection(iceConfig: IceServerConfig | null, remoteOfferSdp?: string): Promise<void> {
     const pc = this.deps.createPeerConnection(this.rtcConfig(iceConfig));
     this.pc = pc;
-
-    this.localStream = await this.deps.getUserMedia({
-      audio: true,
-      video: this.media === 'VIDEO',
-    });
-    for (const track of this.localStream.getAudioTracks()) pc.addTrack(track, this.localStream);
-    if (this.media === 'VIDEO') {
-      const videoTrack = this.localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        this.cameraTransceiver = pc.addTransceiver(videoTrack, { direction: 'sendrecv' });
-      }
-    }
-    // Pre-negotiated screen transceiver: a later share is a replaceTrack(), never a renegotiation.
-    this.screenTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
-    // Negotiated control channel (id 0): screen-share handshake + the future captions hook (§12).
-    this.controlChannel = pc.createDataChannel('control', { negotiated: true, id: 0, ordered: true });
-    this.wireControlChannel(this.controlChannel);
 
     pc.onicecandidate = (e) => this.onLocalCandidate(e.candidate);
     pc.ontrack = (e) => this.onRemoteTrack(e);
     pc.onconnectionstatechange = () => this.onConnectionStateChange();
 
+    this.localStream = await this.deps.getUserMedia({
+      audio: true,
+      video: this.media === 'VIDEO',
+    });
+    // addTrack (not addTransceiver) so the callee's audio binds to the offer's audio m-section.
+    for (const track of this.localStream.getAudioTracks()) pc.addTrack(track, this.localStream);
+    const videoTrack = this.media === 'VIDEO' ? this.localStream.getVideoTracks()[0] : undefined;
+
+    if (remoteOfferSdp === undefined) {
+      if (videoTrack) {
+        this.cameraTransceiver = pc.addTransceiver(videoTrack, {
+          direction: 'sendrecv',
+          streams: [this.localStream],
+        });
+      }
+      // Pre-negotiated screen transceiver: a later share is a replaceTrack(), never a renegotiation.
+      this.screenTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
+      this.createControlChannel(pc);
+    } else {
+      this.createControlChannel(pc);
+      this.screenMid = lastVideoMid(remoteOfferSdp);
+      await pc.setRemoteDescription({ type: 'offer', sdp: remoteOfferSdp });
+      await this.onRemoteDescriptionApplied();
+      await this.bindAnswerTransceivers(videoTrack);
+    }
+
     this.handlers.onLocalStream?.(this.localStream);
     this.handlers.onRemoteStream?.(this.remoteStream);
     this.startIceRefresh();
+  }
+
+  /** Negotiated control channel (id 0): screen-share handshake + the captions hook (§12). */
+  private createControlChannel(pc: RTCPeerConnection): void {
+    this.controlChannel = pc.createDataChannel('control', { negotiated: true, id: 0, ordered: true });
+    this.wireControlChannel(this.controlChannel);
+  }
+
+  /** CALLEE: attach the camera to the offer's camera m-section and adopt its screen m-section. */
+  private async bindAnswerTransceivers(videoTrack: MediaStreamTrack | undefined): Promise<void> {
+    const transceivers = this.pc?.getTransceivers?.() ?? [];
+    const video = transceivers.filter((t) => t.receiver?.track?.kind === 'video');
+    const screen =
+      video.find((t) => this.screenMid !== null && t.mid === this.screenMid) ?? video[video.length - 1] ?? null;
+    const camera = video.find((t) => t !== screen) ?? null;
+
+    if (screen) {
+      screen.direction = 'sendrecv';
+      this.screenTransceiver = screen;
+    }
+    if (camera) {
+      this.cameraTransceiver = camera;
+      if (videoTrack) {
+        await camera.sender.replaceTrack(videoTrack);
+        if (this.localStream) camera.sender.setStreams?.(this.localStream);
+        camera.direction = 'sendrecv';
+      } else {
+        // Answering a video call audio-only: still receive the caller's camera.
+        camera.direction = 'recvonly';
+      }
+    }
+  }
+
+  /** The remote description is in place: apply the candidates that arrived before it. */
+  private async onRemoteDescriptionApplied(): Promise<void> {
+    this.remoteDescriptionApplied = true;
+    const queued = this.pendingRemoteCandidates;
+    this.pendingRemoteCandidates = [];
+    for (const candidate of queued) await this.addRemoteCandidate(candidate);
+  }
+
+  private async addRemoteCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+    try {
+      await this.pc?.addIceCandidate(candidate);
+    } catch {
+      // One unusable candidate must not stop the others (and is not worth an error toast).
+    }
   }
 
   private rtcConfig(iceConfig: IceServerConfig | null): RTCConfiguration {
@@ -538,14 +655,14 @@ export class CallSession {
     if (!candidate || !candidate.candidate) return;
     // Second guard behind iceTransportPolicy: never leak a host/srflx candidate (§9.2).
     if (!isRelayCandidate({ candidate: candidate.candidate })) return;
-    // Only trickle once the single peer device is known; pre-answer candidates ride in the offer SDP.
-    if (!this.peerDeviceId) return;
+    // Buffer every relay candidate. Before trickling is ready they either already ride in the SDP
+    // (cleared once the SDP is read) or are sent the moment the peer is listening.
     this.pendingCandidates.push({
       candidate: candidate.candidate,
       sdpMid: candidate.sdpMid,
       sdpMLineIndex: candidate.sdpMLineIndex,
     });
-    if (!this.iceBatchTimer) {
+    if (this.trickleReady && this.peerDeviceId && !this.iceBatchTimer) {
       this.iceBatchTimer = setTimeout(() => void this.flushCandidates(), ICE_BATCH_MS);
     }
   }
@@ -555,7 +672,7 @@ export class CallSession {
       clearTimeout(this.iceBatchTimer);
       this.iceBatchTimer = null;
     }
-    if (!this.pendingCandidates.length || !this.peerDeviceId) return;
+    if (!this.trickleReady || !this.pendingCandidates.length || !this.peerDeviceId) return;
     const candidates = this.pendingCandidates;
     this.pendingCandidates = [];
     try {
@@ -568,8 +685,9 @@ export class CallSession {
   private onRemoteTrack(event: RTCTrackEvent): void {
     const track = event.track;
     // The pre-negotiated screen transceiver carries the peer's shared screen; everything else is
-    // the camera / mic the UI renders as the remote participant.
-    if (this.screenTransceiver && event.transceiver === this.screenTransceiver) {
+    // the camera / mic the UI renders as the remote participant. On the callee, ontrack fires during
+    // setRemoteDescription, before screenTransceiver is adopted, so the offer's mid decides.
+    if (this.isScreenTransceiver(event.transceiver)) {
       const stream = new MediaStream([track]);
       this.displayStream = stream;
       this.handlers.onScreenStream?.(stream);
@@ -579,8 +697,15 @@ export class CallSession {
       };
       return;
     }
-    this.remoteStream.addTrack(track);
+    // A new MediaStream object each time, so <video>/<audio> re-bind and pick up the new track.
+    this.remoteStream = new MediaStream([...this.remoteStream.getTracks(), track]);
     this.handlers.onRemoteStream?.(this.remoteStream);
+  }
+
+  private isScreenTransceiver(transceiver: RTCRtpTransceiver | null | undefined): boolean {
+    if (!transceiver) return false;
+    if (this.screenTransceiver && transceiver === this.screenTransceiver) return true;
+    return this.screenMid !== null && transceiver.mid === this.screenMid;
   }
 
   private onConnectionStateChange(): void {
@@ -815,7 +940,11 @@ export class CallSession {
   }
 
   private fail(error: unknown): void {
+    if (this.state === 'ended') return; // e.g. the user hung up while a step was still in flight
     this.reportError(error);
+    // Tell the server, so the other side stops ringing / connecting now rather than at the sweeper.
+    // It normalizes the reason (a ringing callee's FAILED becomes DECLINED).
+    if (this.callId) void this.deps.api.endCall(this.callId, 'FAILED').catch(() => undefined);
     this.finish('FAILED');
   }
 

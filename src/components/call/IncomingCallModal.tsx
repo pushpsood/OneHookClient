@@ -53,18 +53,18 @@ export function IncomingCallModal({
             <Phone className="w-8 h-8 text-accent" aria-hidden="true" />
           )}
         </div>
-        <h2 id="incoming-call-title" className="text-lg font-semibold text-text">
+        <h2 id="incoming-call-title" className="text-lg font-semibold text-text break-words">
           {peerName}
         </h2>
         <p className="mt-1 text-sm text-text-muted">{label}</p>
 
-        <div className="mt-6 flex items-center justify-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <button
             ref={declineRef}
             type="button"
             {...trackProps(UiElement.CALL_DECLINE)}
             onClick={onDecline}
-            className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors cursor-pointer"
+            className="flex-1 min-w-[7rem] inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors cursor-pointer"
             aria-label="Decline call"
           >
             <PhoneOff className="w-5 h-5" aria-hidden="true" />
@@ -76,7 +76,7 @@ export function IncomingCallModal({
                 type="button"
                 {...trackProps(UiElement.CALL_ACCEPT, { value: 'audio' })}
                 onClick={onAcceptAudio}
-                className="inline-flex items-center justify-center h-11 w-11 rounded-xl bg-surface-hover text-text hover:bg-surface transition-colors cursor-pointer"
+                className="shrink-0 inline-flex items-center justify-center h-11 w-11 rounded-xl bg-surface-hover text-text hover:bg-surface transition-colors cursor-pointer"
                 aria-label="Accept with audio only"
                 title="Accept with audio only"
               >
@@ -86,7 +86,7 @@ export function IncomingCallModal({
                 type="button"
                 {...trackProps(UiElement.CALL_ACCEPT, { value: 'video' })}
                 onClick={onAcceptVideo}
-                className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-600 transition-colors cursor-pointer"
+                className="flex-1 min-w-[7rem] inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-600 transition-colors cursor-pointer"
                 aria-label="Accept with video"
               >
                 <Video className="w-5 h-5" aria-hidden="true" />
@@ -98,7 +98,7 @@ export function IncomingCallModal({
               type="button"
               {...trackProps(UiElement.CALL_ACCEPT, { value: 'audio' })}
               onClick={onAcceptAudio}
-              className="flex-1 inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-600 transition-colors cursor-pointer"
+              className="flex-1 min-w-[7rem] inline-flex items-center justify-center gap-2 h-11 rounded-xl bg-green-500 text-white font-semibold hover:bg-green-600 transition-colors cursor-pointer"
               aria-label="Accept call"
             >
               <Phone className="w-5 h-5" aria-hidden="true" />
