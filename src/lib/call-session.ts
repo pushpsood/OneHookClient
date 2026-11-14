@@ -565,6 +565,9 @@ export class CallSession {
       audio: true,
       video: this.media === 'VIDEO',
     });
+    // Hand the camera to the UI as soon as it starts, so the self view shows while ringing /
+    // connecting instead of only after the offer or answer has been built.
+    this.handlers.onLocalStream?.(this.localStream);
     // addTrack (not addTransceiver) so the callee's audio binds to the offer's audio m-section.
     for (const track of this.localStream.getAudioTracks()) pc.addTrack(track, this.localStream);
     const videoTrack = this.media === 'VIDEO' ? this.localStream.getVideoTracks()[0] : undefined;
@@ -587,7 +590,6 @@ export class CallSession {
       await this.bindAnswerTransceivers(videoTrack);
     }
 
-    this.handlers.onLocalStream?.(this.localStream);
     this.handlers.onRemoteStream?.(this.remoteStream);
     this.startIceRefresh();
   }

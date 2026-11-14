@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 b752b0edfd7d8457d07ac5e17b48f325c08caa65178d65d10a064185297ad7b4
+// telemetry-integrity: sha256 14ba0f0d7eec11af0fdf9fe29a27254b4aa596d76a4c358e5f968758532d526d
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.17.0, hash 76d9d66743a9261c.
+// Catalog version 1.18.0, hash 2a2e68bfaa9d7477.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.17.0";
-export const TELEMETRY_CATALOG_HASH = "76d9d66743a9261c";
+export const TELEMETRY_CATALOG_VERSION = "1.18.0";
+export const TELEMETRY_CATALOG_HASH = "2a2e68bfaa9d7477";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -398,6 +398,8 @@ export const UiElement = {
   CHAT_CALL_HISTORY_OPEN: "chat.call_history_open",
   CALL_ACCEPT: "call.accept",
   CALL_DECLINE: "call.decline",
+  CALL_VIDEO_SWAP: "call.video_swap",
+  CALL_CONTROLS_TOGGLE: "call.controls_toggle",
   CALL_END: "call.end",
   CALL_MUTE: "call.mute",
   CALL_CAMERA: "call.camera",
@@ -694,6 +696,8 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.call_history_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "call.accept": { screen: "CALL", kind: "button", actions: ["tap"], values: ["audio", "video"], platforms: ["web", "ios", "android"] },
   "call.decline": { screen: "CALL", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "call.video_swap": { screen: "CALL", kind: "gesture", actions: ["tap"], values: ["peer", "self"], platforms: ["web", "ios", "android"] },
+  "call.controls_toggle": { screen: "CALL", kind: "gesture", actions: ["tap"], values: ["shown", "hidden"], platforms: ["web", "ios", "android"] },
   "call.end": { screen: "CALL", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "call.mute": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
   "call.camera": { screen: "CALL", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },

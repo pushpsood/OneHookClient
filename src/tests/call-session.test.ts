@@ -743,3 +743,51 @@ describe('CallSession — ending early', () => {
     expect(session.getState()).toBe('ended');
   });
 });
+
+describe('CallSession — self view starts with the camera', () => {
+  it('caller: hands the local stream to the UI before the offer is built or the call is placed', async () => {
+    const api = makeApi();
+    const seen: { stream: MediaStream; localDescription: unknown; startCalls: number }[] = [];
+    const session: CallSession = new CallSession(makeDeps(api), {
+      role: 'caller',
+      selfUserId: 'caller',
+      peerId: 'callee',
+      matchId: 'match1',
+      media: 'VIDEO',
+      handlers: {
+        onLocalStream: (stream) =>
+          seen.push({
+            stream,
+            localDescription: (session as unknown as { pc: FakePeerConnection }).pc.localDescription,
+            startCalls: (api.startCall as ReturnType<typeof vi.fn>).mock.calls.length,
+          }),
+      },
+    });
+
+    await session.start();
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0].stream.getVideoTracks()).toHaveLength(1);
+    expect(seen[0].localDescription).toBeNull();
+    expect(seen[0].startCalls).toBe(0);
+    expect(session.getState()).toBe('ringing');
+  });
+
+  it('callee: hands the local stream to the UI before the offer is applied or answered', async () => {
+    const api = makeApi();
+    const seen: { remoteDescription: unknown; acceptCalls: number }[] = [];
+    let session: CallSession | null = null;
+    ({ session } = calleeWithOffer(rawOffer({ callId: 'pending' }), api, 'VIDEO', {
+      onLocalStream: () =>
+        seen.push({
+          remoteDescription: (session as unknown as { pc: FakePeerConnection }).pc.remoteDescription,
+          acceptCalls: (api.acceptCall as ReturnType<typeof vi.fn>).mock.calls.length,
+        }),
+    }));
+
+    await session.accept();
+
+    expect(seen).toEqual([{ remoteDescription: null, acceptCalls: 0 }]);
+    expect(session.getState()).toBe('connecting');
+  });
+});
