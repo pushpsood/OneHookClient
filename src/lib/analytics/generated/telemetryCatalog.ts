@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 371cf701a1b02a42b77d697860a7e535257c86155adb31d992f7def8e8feabfd
+// telemetry-integrity: sha256 dd34966dec1403ffa94b2f4fef91e35e52ddc96236f36dd370e07fe06b9a22bc
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.19.0, hash 505c1b47a2ea806a.
+// Catalog version 1.21.0, hash 7be0ba55b3d49e31.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.19.0";
-export const TELEMETRY_CATALOG_HASH = "505c1b47a2ea806a";
+export const TELEMETRY_CATALOG_VERSION = "1.21.0";
+export const TELEMETRY_CATALOG_HASH = "7be0ba55b3d49e31";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -380,6 +380,9 @@ export const UiElement = {
   CHAT_REPLY_CANCEL: "chat.reply_cancel",
   CHAT_REPLY_JUMP: "chat.reply_jump",
   CHAT_MESSAGE_REACT: "chat.message_react",
+  CHAT_REACTION_PICKER_OPEN: "chat.reaction_picker_open",
+  CHAT_MESSAGE_ASK_MR_ONEHOOK: "chat.message_ask_mr_onehook",
+  CHAT_REACTION_PICKER_CATEGORY: "chat.reaction_picker_category",
   CHAT_MESSAGE_COPY: "chat.message_copy",
   CHAT_MESSAGE_INFO: "chat.message_info",
   CHAT_MESSAGE_RETRY: "chat.message_retry",
@@ -690,6 +693,9 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.reply_cancel": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.reply_jump": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.message_react": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: ["add", "clear"], platforms: ["ios"] },
+  "chat.reaction_picker_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "chat.message_ask_mr_onehook": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.reaction_picker_category": { screen: "CHAT", kind: "tab", actions: ["select"], values: ["frequent", "smileys_people", "animals_nature", "food_drink", "activity", "travel_places", "objects", "symbols", "flags"], platforms: ["ios"] },
   "chat.message_copy": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.message_info": { screen: "CHAT", kind: "menu_item", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "chat.message_retry": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
