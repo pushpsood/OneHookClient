@@ -305,6 +305,68 @@ async function importTransferredPrivateKey(
   };
 }
 
+/**
+ * One identity load per user per page, shared by every `ChatEncryptionManager`.
+ *
+ * Many components build their own manager (the chat hook, the history-unlock hook, the recovery
+ * hooks, calls). On a browser with no stored record, each used to generate its own device key and
+ * random deviceId at the same time; only the last IndexedDB write survived, but every instance
+ * registered its deviceId, leaving orphaned devices with no private key anywhere. Sharing the load
+ * makes creation happen once per page; {@link withIdentityLock} makes it happen once across tabs.
+ */
+const sharedIdentityLoads = new Map<string, Promise<StoredIdentity>>();
+
+/**
+ * Serialises identity creation across tabs of the same origin with the Web Locks API, so two tabs
+ * opened at once cannot each mint a device. Browsers without Web Locks fall back to the per-page
+ * sharing above.
+ */
+async function withIdentityLock<T>(userId: string, task: () => Promise<T>): Promise<T> {
+  const locks = (globalThis.navigator as Navigator | undefined)?.locks;
+  if (!locks?.request) return task();
+  return locks.request(`onehook-e2ee-identity:${userId}`, task) as Promise<T>;
+}
+
+/**
+ * Forgets every cached identity. Called on sign-out, so the next session re-reads IndexedDB instead
+ * of reusing in-memory key material from the previous one.
+ */
+export function resetSharedEncryptionState(): void {
+  sharedIdentityLoads.clear();
+}
+
+/**
+ * Prepares this browser for sign-out without stranding the account.
+ *
+ * Signing out removes the account-history PRIVATE key from this browser (both the CryptoKey and its
+ * raw PKCS#8 bytes), so someone else using the same browser profile cannot read it from IndexedDB.
+ * The device key stays: it is non-extractable, so its bytes cannot be read, and it is what lets the
+ * next sign-in re-open history silently through this device's own DEVICE wrap.
+ *
+ * The key is dropped ONLY once a DEVICE wrap for this device is confirmed on the active epoch (one is
+ * published first if missing). If that cannot be confirmed — offline, an expired session, or a legacy
+ * key that cannot be re-wrapped — the key is kept, because it might be the account's only copy.
+ *
+ * Never throws and never takes longer than `timeoutMs`; sign-out must not hang on the network.
+ */
+export async function secureHistoryKeyForSignOut(userId: string, timeoutMs = 4000): Promise<void> {
+  if (!userId) return;
+  try {
+    const manager = new ChatEncryptionManager(userId);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    });
+    const safeToDrop = await Promise.race([manager.ensureRecoverableOnThisDevice(), timeout]);
+    clearTimeout(timer);
+    if (safeToDrop) await manager.dropLocalHistoryKey();
+  } catch {
+    /* keep the key: never destroy what may be the only copy */
+  } finally {
+    resetSharedEncryptionState();
+  }
+}
+
 function isUsableV2Device(device: DeviceRecord): boolean {
   return !device.revoked && device.maxEnvelopeVersion >= 2 && Boolean(device.publicKey);
 }
@@ -1141,32 +1203,98 @@ export class ChatEncryptionManager {
    */
   private async loadIdentity(): Promise<StoredIdentity> {
     if (!this.identity) {
-      this.identity = (async () => {
-        const db = await openDatabase();
-        const existing = await readIdentity(db, this.userId);
-        if (existing && existing.deviceId && existing.devicePrivateKey) {
-          return existing;
-        }
+      // Every manager for this user shares one load (see `sharedIdentityLoads`), so concurrent
+      // components cannot each create a device.
+      let shared = sharedIdentityLoads.get(this.userId);
+      if (!shared) {
+        const userId = this.userId;
+        shared = withIdentityLock(userId, async () => {
+          const db = await openDatabase();
+          // Read INSIDE the lock: another tab may have created the record while this one waited.
+          const existing = await readIdentity(db, userId);
+          if (existing && existing.deviceId && existing.devicePrivateKey) {
+            return existing;
+          }
 
-        // No record yet, or one predating multi-device support. Either way, add a random deviceId and
-        // a fresh non-extractable device key IN PLACE, preserving anything already stored (notably an
-        // account-history key). The history key itself is proposed later, during registration, once
-        // the server can say whether the account already has one.
-        const devicePair = await generateKeyPair();
-        const identity: StoredIdentity = {
-          ...(existing ?? {}),
-          userId: this.userId,
-          deviceId: existing?.deviceId ?? randomId(),
-          devicePrivateKey: devicePair.privateKey,
-          devicePublicKey: devicePair.publicKey,
-        };
-        await writeIdentity(db, identity);
-        return identity;
-      })().catch((error) => {
+          // No record yet, or one predating multi-device support. Either way, add a random deviceId
+          // and a fresh non-extractable device key IN PLACE, preserving anything already stored
+          // (notably an account-history key). The history key itself is proposed later, during
+          // registration, once the server can say whether the account already has one.
+          const devicePair = await generateKeyPair();
+          const identity: StoredIdentity = {
+            ...(existing ?? {}),
+            userId,
+            deviceId: existing?.deviceId ?? randomId(),
+            devicePrivateKey: devicePair.privateKey,
+            devicePublicKey: devicePair.publicKey,
+          };
+          await writeIdentity(db, identity);
+          return identity;
+        }).catch((error) => {
+          sharedIdentityLoads.delete(userId);
+          throw error;
+        });
+        sharedIdentityLoads.set(userId, shared);
+      }
+      this.identity = shared.catch((error) => {
         this.identity = null;
         throw error;
       });
     }
     return this.identity;
+  }
+
+  /**
+   * Makes sure this browser can re-open history after its local copy is dropped: confirms (and if
+   * needed publishes) a DEVICE wrap for this device on the active epoch.
+   *
+   * @returns `true` when dropping the local history key is safe — there is nothing to drop, or a
+   *          DEVICE wrap for this device exists. `false` when that cannot be established.
+   */
+  async ensureRecoverableOnThisDevice(): Promise<boolean> {
+    const identity = await this.loadIdentity();
+    if (!identity.historyPrivateKey && !identity.historyPrivateKeyPkcs8) return true;
+    if (!identity.deviceId || !identity.devicePublicKey) return false;
+
+    const state = await this.historyStateFresh();
+    const activeEpoch = state.activeEpoch;
+    if (!activeEpoch) return false;
+
+    const hasWrap = (state.wraps ?? []).some(
+      (w) => w.method === 'DEVICE' && w.wrapId === identity.deviceId && Boolean(w.wrappedKey)
+    );
+    if (hasWrap) return true;
+
+    // Only a key this device holds for the ACTIVE epoch, with its raw bytes, can be re-wrapped.
+    if (!identity.historyPrivateKeyPkcs8 || identity.historyEpoch !== activeEpoch) return false;
+
+    await ChatApi.putHistoryWrap({
+      epoch: activeEpoch,
+      method: 'DEVICE',
+      wrapId: identity.deviceId,
+      wrappedKey: await wrapToDeviceKey(
+        identity.historyPrivateKeyPkcs8,
+        await exportPublicKey(identity.devicePublicKey),
+        { userId: this.userId, epoch: activeEpoch, method: 'DEVICE', wrapId: identity.deviceId }
+      ),
+    });
+    this.invalidateHistoryState();
+    return true;
+  }
+
+  /**
+   * Removes the account-history PRIVATE key from this browser's store, keeping the device identity and
+   * the history PUBLIC key (still needed to wrap new messages to history). Call only after
+   * {@link ensureRecoverableOnThisDevice} returned `true`.
+   */
+  async dropLocalHistoryKey(): Promise<void> {
+    const db = await openDatabase();
+    const stored = await readIdentity(db, this.userId);
+    if (!stored) return;
+    delete stored.historyPrivateKey;
+    delete stored.historyPrivateKeyPkcs8;
+    await writeIdentity(db, stored);
+    this.identity = null;
+    sharedIdentityLoads.delete(this.userId);
   }
 }

@@ -19,7 +19,9 @@ export function SetPasswordCard() {
   const handleSignOutToSetPassword = async () => {
     try {
       await getCognitoAuth().logout();
-      useAppStore.getState().setAuthenticated(false);
+      // Full store logout (not just isAuthenticated=false): otherwise the next account signed in from
+      // this tab starts with the previous member's profile, state and view passes.
+      useAppStore.getState().logout();
       showToast('Signed out. Please enter your email/phone and choose "Forgot Password" to set a password.', 'info');
       // Redirect to login page immediately after clearing state
       navigate('/');

@@ -15,6 +15,7 @@ import {
 import { IdentityApi } from '../api/identity';
 import { requestGoogleIdToken } from './google-identity';
 import { googleClientId } from '../utils/env.config';
+import { resetSharedEncryptionState, secureHistoryKeyForSignOut } from './chat-encryption';
 
 interface CognitoConfig {
   userPoolId: string;
@@ -250,7 +251,24 @@ class CognitoAuthService {
   }
 
   async logout(): Promise<void> {
+    // While the session is still valid: make sure this browser can re-open history next time, then
+    // drop the history private key from IndexedDB (see secureHistoryKeyForSignOut). Bounded and
+    // non-throwing, so sign-out never hangs or fails because of it.
+    const userId = await this.currentUserSub();
+    if (userId) await secureHistoryKeyForSignOut(userId);
+    resetSharedEncryptionState();
     await signOut();
+  }
+
+  /** The signed-in user's `sub` from the cached session, or null. No network call when tokens are valid. */
+  private async currentUserSub(): Promise<string | null> {
+    try {
+      const session = await fetchAuthSession();
+      const sub = session.tokens?.idToken?.payload?.sub ?? session.tokens?.accessToken?.payload?.sub;
+      return typeof sub === 'string' && sub ? sub : null;
+    } catch {
+      return null;
+    }
   }
 }
 
