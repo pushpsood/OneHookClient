@@ -779,13 +779,9 @@ async function chatRest<T>(method: string, path: string, body?: unknown): Promis
   });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    const error = new Error(
+    throw new Error(
       `chat device request failed (${response.status} ${response.statusText})${text ? `: ${text}` : ''}`
-    ) as Error & { status?: number };
-    // Carry the HTTP status so callers (e.g. session-expiry detection) can branch on 401/403 rather
-    // than string-matching the message.
-    error.status = response.status;
-    throw error;
+    );
   }
   if (response.status === 204) return undefined as T;
   const text = await response.text();

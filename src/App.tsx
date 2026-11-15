@@ -25,8 +25,6 @@ import { config } from './utils/env.config';
 import { AppContent } from './app/AppContent';
 import { FinishSetupInAppNotice } from './components/auth/FinishSetupInAppNotice';
 import { useRegistrationPrerequisites } from './hooks/use-registration-prerequisites';
-import { useSessionExpiry } from './hooks/use-session-expiry';
-import { isSessionExpiredError } from './lib/api-errors';
 
 if (config.cognitoUserPoolId && config.cognitoClientId) {
   initializeCognitoAuth({
@@ -73,16 +71,7 @@ function GuestOnlyRoute({ children }: { children: ReactNode }) {
  */
 function OnboardedRoute({ children }: { children: ReactNode }) {
   const userState = useAppStore((state) => state.userState);
-  const { loading, error } = useUserState();
-
-  // An expired or no-longer-trusted session makes the state read fail with 401/403. That is a
-  // sign-in problem, not an onboarding one: clear the session so ProtectedRoute sends the member to
-  // /login, rather than fail-closing a reachable account into the onboarding flow.
-  const sessionExpired = isSessionExpiredError(error);
-  useSessionExpiry(sessionExpired);
-  if (sessionExpired) {
-    return <LoadingSpinner fullScreen />;
-  }
+  const { loading } = useUserState();
 
   // Don't decide (or flash the app) until the authoritative state has been fetched.
   if (!userState && loading) {
@@ -110,17 +99,8 @@ function OnboardedRoute({ children }: { children: ReactNode }) {
  */
 function OnboardingGuard({ children }: { children: ReactNode }) {
   const userState = useAppStore((state) => state.userState);
-  const { loading, error } = useUserState();
+  const { loading } = useUserState();
   const prerequisites = useRegistrationPrerequisites();
-
-  // A 401/403 on either authoritative read means the session is no longer accepted. Sign the member
-  // out so ProtectedRoute sends them to /login, instead of showing "Finish in the App" for what is
-  // really an expired sign-in.
-  const sessionExpired = isSessionExpiredError(error) || prerequisites.sessionExpired;
-  useSessionExpiry(sessionExpired);
-  if (sessionExpired) {
-    return <LoadingSpinner fullScreen />;
-  }
 
   if (!userState && loading) {
     return <LoadingSpinner fullScreen />;

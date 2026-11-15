@@ -86,18 +86,3 @@ export function errorGaps(err: unknown): string[] {
 export function isNotFound(err: unknown): boolean {
   return errorStatus(err) === 404;
 }
-
-/**
- * Whether a failed call means the caller's session is no longer accepted, as opposed to a genuine
- * application answer (e.g. 404 "no state record yet", a 409, or a transient network error).
- *
- * The API Gateway Cognito authorizer answers 401 when the bearer token is missing, expired, or
- * issued by a user pool the gateway no longer trusts (e.g. after a pool rebuild); a verified-but-
- * refused token answers 403. In both cases the only remedy is to sign in again — which is very
- * different from "you have not finished onboarding". Callers use this to re-authenticate instead of
- * fail-closing a reachable, onboarded member into the onboarding / "finish in the app" flow.
- */
-export function isSessionExpiredError(err: unknown): boolean {
-  const status = errorStatus(err);
-  return status === 401 || status === 403;
-}

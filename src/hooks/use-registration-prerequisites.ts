@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ChatApi } from '../api/chat';
-import { isSessionExpiredError } from '../lib/api-errors';
 import {
   evaluateRegistrationPrerequisites,
   type MissingPrerequisite,
@@ -12,8 +11,6 @@ interface RegistrationPrerequisites {
   missing: MissingPrerequisite[];
   /** True when the check could not be completed, as opposed to completing and finding a gap. */
   checkFailed: boolean;
-  /** True when the check failed specifically because the session is no longer accepted (401/403). */
-  sessionExpired: boolean;
   recheck: () => void;
 }
 
@@ -32,7 +29,6 @@ export function useRegistrationPrerequisites(): RegistrationPrerequisites {
   const [satisfied, setSatisfied] = useState(false);
   const [missing, setMissing] = useState<MissingPrerequisite[]>([]);
   const [checkFailed, setCheckFailed] = useState(false);
-  const [sessionExpired, setSessionExpired] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -47,16 +43,12 @@ export function useRegistrationPrerequisites(): RegistrationPrerequisites {
         setSatisfied(result.satisfied);
         setMissing(result.missing);
         setCheckFailed(false);
-        setSessionExpired(false);
-      } catch (err) {
+      } catch {
         if (cancelled) return;
         // Unknown is treated as unsatisfied, but distinguished so the message is honest about why.
         setSatisfied(false);
         setMissing([]);
         setCheckFailed(true);
-        // A 401/403 here is not a missing guarantee — the session is no longer accepted, so the
-        // caller should re-authenticate rather than be shown "finish in the app".
-        setSessionExpired(isSessionExpiredError(err));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -69,5 +61,5 @@ export function useRegistrationPrerequisites(): RegistrationPrerequisites {
 
   const recheck = useCallback(() => setAttempt((n) => n + 1), []);
 
-  return { loading, satisfied, missing, checkFailed, sessionExpired, recheck };
+  return { loading, satisfied, missing, checkFailed, recheck };
 }
