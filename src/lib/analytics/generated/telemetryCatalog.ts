@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 14ba0f0d7eec11af0fdf9fe29a27254b4aa596d76a4c358e5f968758532d526d
+// telemetry-integrity: sha256 371cf701a1b02a42b77d697860a7e535257c86155adb31d992f7def8e8feabfd
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.18.0, hash 2a2e68bfaa9d7477.
+// Catalog version 1.19.0, hash 505c1b47a2ea806a.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.18.0";
-export const TELEMETRY_CATALOG_HASH = "2a2e68bfaa9d7477";
+export const TELEMETRY_CATALOG_VERSION = "1.19.0";
+export const TELEMETRY_CATALOG_HASH = "505c1b47a2ea806a";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -372,6 +372,18 @@ export const UiElement = {
   CHAT_VOICE_RECORD_STOP: "chat.voice_record_stop",
   CHAT_VOICE_RECORD_CANCEL: "chat.voice_record_cancel",
   CHAT_VOICE_SEND: "chat.voice_send",
+  CHAT_VOICE_RECORD_LOCK: "chat.voice_record_lock",
+  CHAT_VOICE_PREVIEW_PLAY: "chat.voice_preview_play",
+  CHAT_AUDIO_SPEED: "chat.audio_speed",
+  CHAT_AUDIO_SCRUB: "chat.audio_scrub",
+  CHAT_MESSAGE_REPLY: "chat.message_reply",
+  CHAT_REPLY_CANCEL: "chat.reply_cancel",
+  CHAT_REPLY_JUMP: "chat.reply_jump",
+  CHAT_MESSAGE_REACT: "chat.message_react",
+  CHAT_MESSAGE_COPY: "chat.message_copy",
+  CHAT_MESSAGE_INFO: "chat.message_info",
+  CHAT_MESSAGE_RETRY: "chat.message_retry",
+  CHAT_JUMP_TO_LATEST: "chat.jump_to_latest",
   CHAT_CONVERSATION_SWITCH: "chat.conversation_switch",
   CHAT_CONVERSATION_SORT: "chat.conversation_sort",
   CHAT_CONVERSATION_SORT_OPEN: "chat.conversation_sort_open",
@@ -670,6 +682,18 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.voice_record_stop": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "chat.voice_record_cancel": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.voice_send": { screen: "CHAT", kind: "button", actions: ["submit"], values: null, platforms: ["web", "ios"] },
+  "chat.voice_record_lock": { screen: "CHAT", kind: "gesture", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.voice_preview_play": { screen: "CHAT", kind: "toggle", actions: ["toggle"], values: ["play", "pause"], platforms: ["ios"] },
+  "chat.audio_speed": { screen: "CHAT", kind: "button", actions: ["tap"], values: ["speed_1x", "speed_1_5x", "speed_2x"], platforms: ["ios"] },
+  "chat.audio_scrub": { screen: "CHAT", kind: "gesture", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.message_reply": { screen: "CHAT", kind: "gesture", actions: ["tap"], values: ["swipe", "menu"], platforms: ["ios"] },
+  "chat.reply_cancel": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.reply_jump": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.message_react": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: ["add", "clear"], platforms: ["ios"] },
+  "chat.message_copy": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.message_info": { screen: "CHAT", kind: "menu_item", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "chat.message_retry": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.jump_to_latest": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.conversation_switch": { screen: "CHAT", kind: "list_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.conversation_sort": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios"] },
   "chat.conversation_sort_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios"] },
