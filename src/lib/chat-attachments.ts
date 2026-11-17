@@ -28,6 +28,7 @@
  */
 
 import { fromBase64, toBase64 } from './chat-wire-v2';
+import { decodeStructuredFrame, type StructuredContent } from './chat-structured';
 
 /** Discriminator byte: a decoded message whose first byte is this is an attachment envelope. */
 export const ATTACHMENT_FRAME_BYTE = 0x01;
@@ -92,10 +93,11 @@ export interface AttachmentEnvelope {
   caption?: string;
 }
 
-/** A decoded message body: either legacy plain text or a parsed attachment envelope. */
+/** A decoded message body: plain text, an attachment envelope, or structured content (0x03). */
 export type DecodedMessage =
   | { type: 'text'; text: string }
-  | { type: 'attachment'; envelope: AttachmentEnvelope };
+  | { type: 'attachment'; envelope: AttachmentEnvelope }
+  | { type: 'structured'; content: StructuredContent };
 
 /**
  * Raised when a frame IS an attachment (0x01) but the envelope cannot be understood — malformed JSON,
@@ -145,14 +147,21 @@ export function frameAttachment(envelope: AttachmentEnvelope): string {
 }
 
 /**
- * Decodes a message plaintext into either text or an attachment envelope.
+ * Decodes a message plaintext into text, an attachment envelope, or structured content.
  *
- * A non-attachment frame is returned verbatim as text — this is what keeps every pre-attachment
- * message (and any message a user typed that happens to start with other bytes) rendering unchanged.
+ * A 0x03 frame (location, live location, contact; see `chat-structured.ts`) never throws: anything this
+ * build cannot read decodes to `{ type: 'unsupported' }` content, which renders the "Update OneHook to
+ * view this" placeholder. Any other non-attachment frame is returned verbatim as text — this is what
+ * keeps every pre-attachment message (and any message a user typed that happens to start with other
+ * bytes) rendering unchanged.
  *
  * @throws {AttachmentDecodeError} when the frame is an attachment but the envelope is unreadable.
  */
 export function decodeMessagePlaintext(plaintext: string): DecodedMessage {
+  const structured = decodeStructuredFrame(plaintext);
+  if (structured) {
+    return { type: 'structured', content: structured };
+  }
   if (!isAttachmentFrame(plaintext)) {
     return { type: 'text', text: plaintext };
   }

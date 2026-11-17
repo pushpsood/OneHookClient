@@ -77,6 +77,11 @@ import { DEFAULT_SUBSCRIPTION_TIER, isPaidSubscriptionTier } from 'onehook-api-c
 import type { SubscriptionTier } from '../../types';
 import { ChatSettingsSheet } from '../../components/chat/ChatSettingsSheet';
 import { AttachmentBubble } from '../../components/chat/AttachmentBubble';
+import {
+  StructuredMessageBubble,
+  type LiveLocationContext,
+} from '../../components/chat/StructuredMessageBubble';
+import { useLiveLocations } from '../../hooks/use-live-locations';
 import { AttachmentComposer } from '../../components/chat/AttachmentComposer';
 import {
   decodeMessagePlaintext,
@@ -980,6 +985,7 @@ function MatchMessageBody({
   onRestore,
   onReportPeerMedia,
   onRetryText,
+  live,
 }: {
   message: ChatMessageDTO & { undecryptable?: boolean };
   mine: boolean;
@@ -990,10 +996,13 @@ function MatchMessageBody({
   onRestore: () => void;
   onReportPeerMedia?: () => void;
   onRetryText: (text: string) => void;
+  /** Live-location shares of this conversation, for live-location bubbles. */
+  live: LiveLocationContext;
 }) {
   const decoded = useMemo(() => {
     try {
       const result = decodeMessagePlaintext(message.ciphertext);
+      if (result.type === 'structured') return result;
       return result.type === 'attachment'
         ? ({ type: 'attachment', envelope: result.envelope } as const)
         : ({ type: 'text', text: result.text } as const);
@@ -1010,6 +1019,17 @@ function MatchMessageBody({
     // once the object key exists). Show the transfer overlay in that window, not an empty text bubble.
     if (transfer && decoded.type !== 'attachment') {
       return <p className="text-[10px] uppercase tracking-[0.2em] opacity-70">Preparing…</p>;
+    }
+    if (decoded.type === 'structured') {
+      // Location, live location or contact (0x03). Web receives and opens these; it never re-sends one.
+      return (
+        <StructuredMessageBubble
+          content={decoded.content}
+          mine={mine}
+          sentAt={message.timestamp}
+          live={live}
+        />
+      );
     }
     if (decoded.type === 'attachment') {
       return (
@@ -1104,7 +1124,20 @@ function MatchConversation({
     loadEvidenceWindow,
     hasUndecryptable,
     historyHorizon,
+    decryptPayload,
   } = useChatMessages(matchId, peerId);
+  // Live-location shares: running shares on open, then onLiveLocation. Positions open on device.
+  const liveLocations = useLiveLocations(matchId, decryptPayload);
+  const liveContext: LiveLocationContext = useMemo(
+    () => ({
+      sessions: liveLocations.sessions,
+      loadedAt: liveLocations.loadedAt,
+      currentUserId,
+      peerId,
+      peerName,
+    }),
+    [liveLocations.sessions, liveLocations.loadedAt, currentUserId, peerId, peerName]
+  );
   const [input, setInput] = useState('');
 
   // Snapshot of decrypted messages for the optional evidence share. Text comes from the SAME local
@@ -1118,7 +1151,7 @@ function MatchConversation({
         if (!m.undecryptable) {
           try {
             const decoded = decodeMessagePlaintext(m.ciphertext);
-            text = decoded.type === 'attachment' ? null : decoded.text;
+            text = decoded.type === 'text' ? decoded.text : null;
           } catch {
             text = null;
           }
@@ -1432,6 +1465,7 @@ function MatchConversation({
                         onRestore={() => setRecoveryOpen(true)}
                         onReportPeerMedia={onReportPeer}
                         onRetryText={(text) => void sendMessage(text)}
+                        live={liveContext}
                       />
                     </div>
                   </div>

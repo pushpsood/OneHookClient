@@ -18,6 +18,7 @@
  */
 
 import { isAttachmentFrame } from './chat-attachments';
+import { isStructuredFrame } from './chat-structured';
 
 /**
  * One already-decrypted candidate turn, normalized to the two facts the selector needs: who spoke
@@ -87,6 +88,8 @@ function isReadableTextTurn(message: SelectableMessage): boolean {
   if (!text) return false;
   // An attachment envelope is framed plaintext, not conversation — it must never be shared as text.
   if (isAttachmentFrame(message.text)) return false;
+  // Nor is structured content: a location or contact card must never leave the device as an excerpt.
+  if (isStructuredFrame(message.text)) return false;
   return true;
 }
 

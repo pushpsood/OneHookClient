@@ -664,7 +664,9 @@ export function useChatMessages(matchId: string, recipientId?: string) {
       if (!decrypted.undecryptable) {
         try {
           const decoded = decodeMessagePlaintext(decrypted.text);
-          text = decoded.type === 'attachment' ? null : decoded.text;
+          // Only typed text is evidence text; attachments and structured content (location, contact)
+          // never become a text excerpt.
+          text = decoded.type === 'text' ? decoded.text : null;
         } catch {
           text = null;
         }
@@ -974,6 +976,11 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     hasUndecryptable: messages.some((m) => m.undecryptable),
     /** Epoch start after a reset; messages older than this are permanently unreadable here. */
     historyHorizon,
+    /**
+     * Opens a sealed payload of this conversation that is not a message (a live-location update), with
+     * the same envelope, AAD and error mapping as message bodies.
+     */
+    decryptPayload: decryptInbound,
   };
 }
 
