@@ -2,9 +2,10 @@
  * Mr.OneHook — the in-app, authenticated AI conversation.
  *
  * Mr.OneHook is NOT a person and has no match record: this transcript is local-only (React state +
- * per-user/per-scope localStorage) and must never be surfaced as a match. The only network call is
- * the authenticated member endpoint `POST ${chatbotUrl}/api/member/product-connection-chat`, sent
- * with the Amplify Cognito ID token as a Bearer credential.
+ * per-user/per-scope localStorage) and must never be surfaced as a match. Every network call goes
+ * through the published `onehook-mr-onehook-client` (`mrOneHookClient`): the member chat
+ * turn (ProductConnectionChat) and the saved-chat routes, each with the Amplify Cognito ID token as a
+ * Bearer credential.
  *
  * A conversation has one scope: product-only (no matchId) or exactly one authorized match. Match
  * scope can ground answers in locally-decrypted history, but ONLY after the model asks for more
@@ -17,14 +18,14 @@
  * session so the user still gets an answer.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { chatbotUrl } from '../utils/env.config';
+import type { ProductConnectionChatCommandInput } from 'onehook-mr-onehook-client';
+import { fetchIdToken, mrOneHookClient, sdkFailure, withoutMetadata } from '../api/external-sdk-clients';
 import { isPaidSubscriptionTier } from 'onehook-api-client/membership';
 import type { SubscriptionTier } from '../types';
 import {
   buildMemberChatRequestBody,
   classifyMemberChatAvailability,
   isSessionErrorCode,
-  MEMBER_CHAT_PATH,
   type MemberChatAvailability,
   parseMemberChatResponse,
   matchSuggestionNote,
@@ -38,6 +39,20 @@ import {
   type SessionListItem,
 } from './mr-onehook-contract';
 import type { ExcerptSelectionRequest, ExcerptSelectionResult } from './mr-onehook-excerpts';
+
+
+/** A saved-chat call's result: the output, or the HTTP status of a failure (a network error throws). */
+type SessionCallResult = { ok: true; data: unknown } | { ok: false; status: number };
+
+async function sessionCall(call: () => Promise<object>): Promise<SessionCallResult> {
+  try {
+    return { ok: true, data: withoutMetadata(await call()) };
+  } catch (err) {
+    const failure = sdkFailure(err);
+    if (!failure) throw err;
+    return { ok: false, status: failure.status };
+  }
+}
 
 export type { MrOneHookMessage, MrOneHookMood, SessionListItem } from './mr-onehook-contract';
 
@@ -281,16 +296,6 @@ function persistSessionId(userId: string, scope: MrOneHookScope, sessionId: stri
  * token (it checks `aud` and reads the member's roles/tier from claims the ACCESS token does not
  * carry), so the ID token — not the access token — is the correct bearer here.
  */
-async function fetchIdToken(): Promise<string | null> {
-  try {
-    const { fetchAuthSession } = await import('aws-amplify/auth');
-    const session = await fetchAuthSession();
-    return session.tokens?.idToken?.toString() || null;
-  } catch {
-    return null;
-  }
-}
-
 function toEpochMs(iso?: string): number | undefined {
   if (!iso) return undefined;
   const value = Date.parse(iso);
@@ -397,7 +402,12 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       const token = await fetchIdToken();
       if (!token) throw new Error('NOT_AUTHENTICATED');
 
-      const attempt = async (useSession: boolean): Promise<Response> => {
+      // One generated-SDK call (ProductConnectionChat). An HTTP failure comes back as {status, body} so
+      // the session and availability rules below can read the error code; a network error throws.
+      type Attempt =
+        | { ok: true; data: unknown }
+        | { ok: false; status: number; body: { error?: unknown } & Record<string, unknown> };
+      const attempt = async (useSession: boolean): Promise<Attempt> => {
         const body = buildMemberChatRequestBody({
           message: init.message,
           ...(matchId ? { matchId } : {}),
@@ -415,16 +425,19 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
               }
             : {}),
         });
-        return fetch(`${chatbotUrl}${MEMBER_CHAT_PATH}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(body),
-        });
+        try {
+          const out = await mrOneHookClient.productConnectionChat(body as ProductConnectionChatCommandInput);
+          return { ok: true, data: withoutMetadata(out) };
+        } catch (err) {
+          const failure = sdkFailure(err);
+          if (!failure) throw err;
+          return { ok: false, status: failure.status, body: failure.body };
+        }
       };
 
       let response = await attempt(persistAllowed);
-      if (!response.ok && persistAllowed) {
-        const errorBody = (await response.clone().json().catch(() => ({}))) as { error?: unknown };
+      if (response.ok === false && persistAllowed) {
+        const errorBody = response.body;
         // A NEW saved chat at the limit: let the member choose (replace the least recent, or delete one).
         const limit = sessionLimitFromError(errorBody, Boolean(sessionIdRef.current));
         if (limit) throw new SessionLimitReachedError(limit.maxSessions, limit.sessions);
@@ -437,16 +450,16 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         }
       }
 
-      if (!response.ok) {
+      if (response.ok === false) {
         // Distinguish a terminal auth/permission/config outcome (not retryable, gates the entry)
         // from a transient server error (retryable bubble). The structured `error` code is the
         // tie-breaker over the HTTP status.
-        const errorBody = (await response.clone().json().catch(() => ({}))) as { error?: unknown };
+        const errorBody = response.body;
         const outcome = classifyMemberChatAvailability(response.status, errorBody.error);
         if (outcome) throw new MemberChatTerminalError(outcome);
         throw new Error('SERVER_ERROR');
       }
-      return parseMemberChatResponse(await response.json());
+      return parseMemberChatResponse((response as { data: unknown }).data);
     },
     // scope captured via key + matchId; persistAllowed derived from tier.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -578,14 +591,16 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, key]);
 
-  const authorizedFetch = useCallback(async (path: string, init?: RequestInit): Promise<Response> => {
-    const token = await fetchIdToken();
-    if (!token) throw new Error('NOT_AUTHENTICATED');
-    return fetch(`${chatbotUrl}${MEMBER_CHAT_PATH}${path}`, {
-      ...init,
-      headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
-    });
-  }, []);
+  // Saved-chat routes (ListChatSessions, GetChatSession, DeleteChatSession) through the generated SDK.
+  const listSessions = useCallback(() => sessionCall(() => mrOneHookClient.listChatSessions({})), []);
+  const getSession = useCallback(
+    (sessionId: string) => sessionCall(() => mrOneHookClient.getChatSession({ sessionId })),
+    [],
+  );
+  const removeSession = useCallback(
+    (sessionId: string) => sessionCall(() => mrOneHookClient.deleteChatSession({ sessionId })),
+    [],
+  );
 
   const refreshSessions = useCallback(async () => {
     if (!persistAllowed) {
@@ -593,19 +608,19 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       return;
     }
     try {
-      const response = await authorizedFetch('/sessions');
-      if (response.ok) setSessions(parseSessionList(await response.json()));
+      const response = await listSessions();
+      if (response.ok === true) setSessions(parseSessionList(response.data));
     } catch {
       /* the list is a convenience; chatting still works */
     }
-  }, [authorizedFetch, persistAllowed]);
+  }, [listSessions, persistAllowed]);
 
   const resumeSession = useCallback(
     async (sessionId: string) => {
       if (!persistAllowed || loading) return;
       try {
-        const response = await authorizedFetch(`/sessions/${encodeURIComponent(sessionId)}`);
-        const detail = response.ok ? parseSessionDetail(await response.json()) : undefined;
+        const response = await getSession(sessionId);
+        const detail = response.ok === true ? parseSessionDetail(response.data) : undefined;
         if (!detail) throw new Error('SERVER_ERROR');
         if ((detail.matchId ?? undefined) !== matchId) {
           // A chat from another scope: remember it there and let the host switch.
@@ -630,14 +645,14 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [authorizedFetch, persistAllowed, loading, userId, key, pushError],
+    [getSession, persistAllowed, loading, userId, key, pushError],
   );
 
   const deleteSession = useCallback(
     async (sessionId: string) => {
       if (!persistAllowed) return;
-      const response = await authorizedFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
-      if (!response.ok && response.status !== 404) throw new Error('SERVER_ERROR');
+      const response = await removeSession(sessionId);
+      if (response.ok === false && response.status !== 404) throw new Error('SERVER_ERROR');
       setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
       setSessionLimit((prev) => (prev
         ? { ...prev, sessions: prev.sessions.filter((s) => s.sessionId !== sessionId) }
@@ -651,7 +666,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [authorizedFetch, persistAllowed, userId, key],
+    [removeSession, persistAllowed, userId, key],
   );
 
   const replaceLeastRecentAndSend = useCallback(async () => {
@@ -691,9 +706,9 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     let cancelled = false;
     void (async () => {
       try {
-        const response = await authorizedFetch('/sessions');
-        if (!response.ok || cancelled) return;
-        const list = parseSessionList(await response.json());
+        const response = await listSessions();
+        if (response.ok === false || cancelled) return;
+        const list = parseSessionList(response.data);
         if (cancelled) return;
         setSessions(list);
         const remembered = sessionIdRef.current;
@@ -713,8 +728,8 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
                 ?.sessionId
             : undefined);
         if (!wanted) return;
-        const detailResponse = await authorizedFetch(`/sessions/${encodeURIComponent(wanted)}`);
-        const detail = detailResponse.ok ? parseSessionDetail(await detailResponse.json()) : undefined;
+        const detailResponse = await getSession(wanted);
+        const detail = detailResponse.ok === true ? parseSessionDetail(detailResponse.data) : undefined;
         if (cancelled || !detail) return;
         sessionIdRef.current = detail.sessionId;
         persistSessionId(userId, scope, detail.sessionId);
@@ -729,7 +744,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     };
     // scope is reconstructed each render; key is its stable identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, key, persistAllowed, authorizedFetch, sessionsVersion]);
+  }, [userId, key, persistAllowed, listSessions, getSession, sessionsVersion]);
 
   return {
     messages,

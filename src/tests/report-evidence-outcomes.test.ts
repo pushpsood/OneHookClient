@@ -9,6 +9,8 @@
  * Fix (3): submit_with_evidence / submit_without_evidence are emitted ONLY after the report is
  * created (201); on a create failure only submit_failed is emitted (never a submit_* success).
  */
+import { createModerationEvidenceClient } from '../api/external-sdk-clients';
+import { fetchHandler } from './support/sdk-fetch-handler';
 import { describe, it, expect } from 'vitest';
 import {
   submitReport,
@@ -63,7 +65,7 @@ function presignFailingTransport(status: number, code: string): EvidenceTranspor
     if ((init?.method ?? 'GET') === 'PUT') return new Response(null, { status: 200 });
     throw new Error(`unexpected ${url}`);
   }) as unknown as typeof fetch;
-  return { baseUrl: 'https://x/moderation', fetchImpl, getToken: async () => 't', sleep: async () => {} };
+  return { baseUrl: 'https://x/api/p/onehook/gamma/moderation', client: createModerationEvidenceClient('https://x/api/p/onehook/gamma/moderation', async () => 't', fetchHandler(fetchImpl)), fetchImpl, getToken: async () => 't', sleep: async () => {} };
 }
 
 /** A transport that presigns + PUTs fine but whose complete returns a given status+code. */
@@ -80,7 +82,7 @@ function completeResultTransport(status: number, body: unknown): EvidenceTranspo
     if ((init?.method ?? 'GET') === 'PUT') return new Response(null, { status: 200 });
     throw new Error(`unexpected ${url}`);
   }) as unknown as typeof fetch;
-  return { baseUrl: 'https://x/moderation', fetchImpl, getToken: async () => 't', sleep: async () => {} };
+  return { baseUrl: 'https://x/api/p/onehook/gamma/moderation', client: createModerationEvidenceClient('https://x/api/p/onehook/gamma/moderation', async () => 't', fetchHandler(fetchImpl)), fetchImpl, getToken: async () => 't', sleep: async () => {} };
 }
 
 describe('classifyEvidenceError', () => {

@@ -12,7 +12,7 @@ import { Seo } from '../common/Seo';
 import { ROUTE_SEO } from '../../config/seo-routes';
 import { SOCIALS } from '../common/socials';
 import { useAppStore } from '../../store/app-store';
-import { normalizeUsername } from '../../lib/account-setup';
+import { normalizeUsername, passwordError, PASSWORD_RULES_COPY } from '../../lib/account-setup';
 import { UiElement, trackProps, trackScreenView, Screen } from '../../lib/analytics/analytics';
 
 /**
@@ -231,8 +231,10 @@ export function Login() {
     setError(null);
     try {
       if (!code.trim()) throw new Error('Please enter the verification code');
-      if (password.length < 8) throw new Error('Password must be at least 8 characters');
-      if (password !== confirmPassword) throw new Error('Passwords do not match');
+      // Same rule as the user pool (12+ characters with a symbol), so a password the form accepts
+      // is never rejected by Cognito afterwards.
+      const invalid = passwordError(password, confirmPassword);
+      if (invalid) throw new Error(invalid);
       setLoading(true);
       await getCognitoAuth().confirmPasswordSet(submittedIdentifier, code.trim(), password);
       showToast('Password set. Sign in with your new password.', 'success');
@@ -653,7 +655,7 @@ export function Login() {
                     id="new-password"
                     type="password"
                     autoComplete="new-password"
-                    placeholder="At least 8 characters"
+                    placeholder={PASSWORD_RULES_COPY}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={loading}

@@ -1,121 +1,27 @@
 /**
- * Thin authenticated REST helper for the Matching endpoints whose request bodies the generated
- * Smithy SDK does not serialise the way the service expects (comment-to-like swipes, received likes,
- * roses, suggestions, traditions) and for the partner distance, which is not modelled:
+ * Matching and State endpoints with app-level types: partner distance, suggestions, traditions, chat
+ * settings, swipes, roses, received likes and the matching-tab flag.
  *
- *   • GET  /matching/distance/{userId}
- *   • POST /matching/swipe, GET /matching/likes, GET /matching/roses
- *   • /matching/suggestions, /matching/traditions
+ * Every call goes through the generated `onehook-api-client` SDK (`sdkClient`); nothing here builds a
+ * URL or a request. `callSdk` turns SDK failures into the shared {@link ApiError}, so UI error handling
+ * can keep matching on it. `src/tests/api-route-contract.test.ts` fails the build on a hand-built
+ * request to a OneHook API.
  *
  * Every /matching/* route answers 403 MATCHING_OFF unless the caller's matching is ON, so nothing here
  * may be called for a chat-only member (docs/chat-only-profiles.md §12). Blocks, reports and hook
- * requests are State routes and live in api/state.ts. The one State route here is
- * `PUT /state/matching/tab-hidden` (SetMatchingTabHidden), which the SDK does not model yet.
- *
- * It authenticates exactly like `sdk-client.ts` does — the Cognito **ID token** (falling back to the
- * access token) is read from the Amplify auth session and attached as a `Bearer` token — and it
- * throws the shared {@link ApiError} shape so existing UI error handling can pattern-match on it.
+ * requests are State routes and live in api/state.ts.
  */
-import { apiBaseUrl } from '../utils/env.config';
 import { ApiError } from '../lib/api-client';
-import { bodyCode } from '../lib/api-errors';
-import { sdkClient } from './sdk-client';
+import { callSdk, sdkClient } from './sdk-client';
 
 /**
- * Reads the caller's Cognito JWT the same way `sdk-client.ts` does: the ID token first (the API
- * Gateway Cognito authorizer validates it), falling back to the access token. Returns null when
- * unauthenticated so the request can still be attempted (and rejected by the server) rather than
- * throwing here.
+ * The SDK output without its `$metadata`, typed as the app's shape. The app types mirror the Smithy
+ * shapes (matching.smithy, state.smithy); the SDK marks required members `| undefined`, which the
+ * server never omits.
  */
-async function getAuthToken(): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
-  try {
-    const { fetchAuthSession } = await import('aws-amplify/auth');
-    const session = await fetchAuthSession();
-    return session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Resolve a relative API path against the configured base URL. Mirrors `sdk-client.ts`'s endpoint
- * resolution: on localhost the dev origin is used (the Vite proxy forwards `/matching`, `/chat`,
- * … to the backend), otherwise the absolute `apiBaseUrl` is used.
- */
-function resolveUrl(path: string): string {
-  const suffix = path.startsWith('/') ? path : `/${path}`;
-  if (
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ) {
-    return window.location.origin + suffix;
-  }
-  if (apiBaseUrl) {
-    if (apiBaseUrl.startsWith('http')) return apiBaseUrl + suffix;
-    if (typeof window !== 'undefined' && window.location?.origin) {
-      return window.location.origin + suffix;
-    }
-    return apiBaseUrl + suffix;
-  }
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin + suffix;
-  }
-  return `http://localhost:3000${suffix}`;
-}
-
-async function request<T>(
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-  path: string,
-  body?: unknown
-): Promise<T> {
-  const token = await getAuthToken();
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  let res: Response;
-  try {
-    res = await fetch(resolveUrl(path), {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  } catch (err) {
-    // Network/transport failure — surface as a 0-status ApiError so callers can distinguish it from
-    // a server rejection.
-    throw new ApiError(
-      err instanceof Error ? err.message : 'Network request failed',
-      0,
-      'NETWORK_ERROR'
-    );
-  }
-
-  // Parse the body once; tolerate empty (204) and non-JSON responses.
-  const text = await res.text().catch(() => '');
-  let parsed: unknown = undefined;
-  if (text) {
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = text;
-    }
-  }
-
-  if (!res.ok) {
-    // Every OneHook API answers `{error: <human message>, code: <CODE>}` (common.smithy ErrorBody).
-    const error =
-      parsed && typeof parsed === 'object' ? (parsed as { error?: unknown }).error : undefined;
-    const message =
-      (typeof error === 'string' && error) ||
-      (typeof parsed === 'string' && parsed) ||
-      `Request failed with status ${res.status}`;
-    throw new ApiError(message, res.status, bodyCode(parsed), parsed);
-  }
-
-  return parsed as T;
+function body<T>(out: object): T {
+  const { $metadata: _metadata, ...rest } = out as { $metadata?: unknown };
+  return rest as T;
 }
 
 // ── Distance ────────────────────────────────────────────────────────────────
@@ -132,7 +38,7 @@ export interface DistanceResponse {
 
 export const DistanceApi = {
   get: (userId: string): Promise<DistanceResponse> =>
-    request<DistanceResponse>('GET', `/matching/distance/${encodeURIComponent(userId)}`),
+    callSdk(async () => body<DistanceResponse>(await sdkClient.getPartnerDistance({ userId }))),
 };
 
 // ── Mr. OneHook suggestion ────────────────────────────────────────────────────
@@ -157,11 +63,18 @@ export interface MemberSuggestions {
 
 /** The member's two asked-for suggestions (Super and above); each removable on its own. */
 export const SuggestionApi = {
-  get: (): Promise<MemberSuggestions> => request('GET', '/matching/suggestions'),
+  get: (): Promise<MemberSuggestions> =>
+    callSdk(async () => body<MemberSuggestions>(await sdkClient.getSuggestions({}))),
   saveOwn: (prompt: string, reasoning: string): Promise<{ suggestionId: string }> =>
-    request('POST', '/matching/suggestions', { prompt, reasoning }),
-  removeOwn: (): Promise<void> => request('DELETE', '/matching/suggestions'),
-  removeOneHook: (): Promise<void> => request('DELETE', '/matching/suggestions/onehook'),
+    callSdk(async () => body<{ suggestionId: string }>(await sdkClient.recordSuggestion({ prompt, reasoning }))),
+  removeOwn: (): Promise<void> =>
+    callSdk(async () => {
+      await sdkClient.removeSuggestion({});
+    }),
+  removeOneHook: (): Promise<void> =>
+    callSdk(async () => {
+      await sdkClient.removeOneHookSuggestion({});
+    }),
 };
 
 // ── Traditional matching systems (opt out per tradition) ──────────────────────
@@ -176,10 +89,17 @@ export interface TraditionSetting {
 }
 
 export const TraditionApi = {
-  get: (): Promise<{ traditions: TraditionSetting[] }> => request('GET', '/matching/traditions'),
+  get: (): Promise<{ traditions: TraditionSetting[] }> =>
+    callSdk(async () =>
+      body<{ traditions: TraditionSetting[] }>(await sdkClient.getTraditionPreferences({}))
+    ),
   /** Replaces the opt-outs; an empty list re-enrols in every tradition. */
   setDisabled: (disabled: string[]): Promise<{ traditions: TraditionSetting[] }> =>
-    request('PUT', '/matching/traditions', { disabled }),
+    callSdk(async () =>
+      body<{ traditions: TraditionSetting[] }>(
+        await sdkClient.updateTraditionPreferences({ disabled })
+      )
+    ),
 };
 
 // ── Chat settings ─────────────────────────────────────────────────────────────
@@ -231,26 +151,17 @@ export const ChatSettingsApi = {
   // Backed by the generated SDK (GetChatSettings / UpdateChatSettings). The SDK serialiser only sends
   // modelled members, so the SDK must model every field sent here (connectionNotifications and
   // likeNotifications need the client generated from the current chat.smithy).
-  get: async (): Promise<ChatSettings> => unwrapSettings(await sdkClient.getChatSettings({})),
+  get: (): Promise<ChatSettings> =>
+    callSdk(async () => unwrapSettings(await sdkClient.getChatSettings({}))),
 
   /** Partial update: send only the fields that changed. */
-  update: async (patch: Partial<ChatSettings>): Promise<ChatSettings> =>
-    unwrapSettings(await sdkClient.updateChatSettings(patch)),
+  update: (patch: Partial<ChatSettings>): Promise<ChatSettings> =>
+    callSdk(async () => unwrapSettings(await sdkClient.updateChatSettings(patch))),
 };
 
 // ── Swipe (Hinge-style comment-to-like) & received likes ──────────────────────
 
-/**
- * The service now requires a comment + a liked profile element for every LIKE (RIGHT) and exposes a
- * "likes you" read side (GET /matching/likes). BUT the installed generated SDK
- * (`onehook-api-client@1.0.14`) still models `SwipeRequest` with only
- * `{ targetId, direction, viewedSection }` — it has NO `comment`, `likeTargetType` or
- * `likeTargetRef`, and no `GetReceivedLikes` operation at all. Rather than force the new fields
- * through the stale SDK (they would be silently dropped by the generated serializer), both calls go
- * through this thin REST helper — like the distance endpoint above — until a newer
- * SDK models them. The caller's identity is the verified Cognito sub that API Gateway injects as
- * `X-User-Id`; the Bearer token attached by {@link getAuthToken} is all this helper needs to send.
- */
+/** Every LIKE (RIGHT) carries a comment and the liked profile element. */
 export type LikeTargetType = 'PHOTO' | 'VIDEO' | 'VOICE' | 'PROMPT' | 'INTEREST' | 'BIO';
 
 /** Backend cap on a like comment (MatchingConstants.LIKE_COMMENT_MAX_CHARS). Enforced client-side. */
@@ -291,11 +202,9 @@ export const SwipeApi = {
    * PASS (LEFT). Carries no comment or target — the server ignores both for LEFT anyway.
    */
   pass: (targetId: string, viewedSection?: string): Promise<SwipeResult> =>
-    request<SwipeResult>('POST', '/matching/swipe', {
-      targetId,
-      direction: 'LEFT',
-      viewedSection,
-    }),
+    callSdk(async () =>
+      body<SwipeResult>(await sdkClient.swipe({ targetId, direction: 'LEFT', viewedSection }))
+    ),
 
   /**
    * LIKE (RIGHT) — Hinge-style: always carries a comment plus the specific element being liked.
@@ -312,15 +221,19 @@ export const SwipeApi = {
     /** ROSE = a daily-limited super-like (mirrors iOS `likeKind:"ROSE"`); defaults to a normal LIKE. */
     likeKind?: 'LIKE' | 'ROSE';
   }): Promise<SwipeResult> =>
-    request<SwipeResult>('POST', '/matching/swipe', {
-      targetId: input.targetId,
-      direction: 'RIGHT',
-      comment: input.comment,
-      likeTargetType: input.likeTargetType,
-      likeTargetRef: input.likeTargetRef,
-      viewedSection: input.viewedSection,
-      likeKind: input.likeKind,
-    }),
+    callSdk(async () =>
+      body<SwipeResult>(
+        await sdkClient.swipe({
+          targetId: input.targetId,
+          direction: 'RIGHT',
+          comment: input.comment,
+          likeTargetType: input.likeTargetType,
+          likeTargetRef: input.likeTargetRef,
+          viewedSection: input.viewedSection,
+          likeKind: input.likeKind,
+        })
+      )
+    ),
 };
 
 /** Remaining daily rose (super-like) quota. Mirrors iOS `GET /matching/roses`. */
@@ -331,7 +244,8 @@ export interface RoseQuota {
 }
 
 export const RosesApi = {
-  remaining: (): Promise<RoseQuota> => request<RoseQuota>('GET', '/matching/roses'),
+  remaining: (): Promise<RoseQuota> =>
+    callSdk(async () => body<RoseQuota>(await sdkClient.getRoses({}))),
 };
 
 export const ReceivedLikesApi = {
@@ -340,7 +254,7 @@ export const ReceivedLikesApi = {
    * newest first. No input — identity is the injected `X-User-Id`.
    */
   list: (): Promise<ReceivedLikesResponse> =>
-    request<ReceivedLikesResponse>('GET', '/matching/likes'),
+    callSdk(async () => body<ReceivedLikesResponse>(await sdkClient.getReceivedLikes({}))),
 };
 
 // ── Member reports (POST /state/reports) ───────────────────────────────────────
@@ -390,8 +304,7 @@ export interface CreateReportResponse {
 
 /**
  * State operation SetMatchingTabHidden (state.smithy): `PUT /state/matching/tab-hidden`
- * `{hidden}` -> 200 `{hidden}`; 400 on a missing or non-boolean `hidden`, 500 otherwise. It goes
- * through this helper because the installed `onehook-api-client` does not model the operation yet.
+ * `{hidden}` -> 200 `{hidden}`; 400 on a missing or non-boolean `hidden`, 500 otherwise.
  * Callers use `StateApi.setMatchingTabHidden` (api/state.ts).
  */
 export interface MatchingTabHiddenResponse {
@@ -399,13 +312,10 @@ export interface MatchingTabHiddenResponse {
 }
 
 export const MatchingTabApi = {
-  setHidden: async (hidden: boolean): Promise<MatchingTabHiddenResponse> => {
-    const res = await request<Partial<MatchingTabHiddenResponse> | undefined>(
-      'PUT',
-      '/state/matching/tab-hidden',
-      { hidden }
-    );
-    // The answer is authoritative; a body without it means the server stored what was sent.
-    return { hidden: typeof res?.hidden === 'boolean' ? res.hidden : hidden };
-  },
+  setHidden: (hidden: boolean): Promise<MatchingTabHiddenResponse> =>
+    callSdk(async () => {
+      const res = await sdkClient.setMatchingTabHidden({ hidden });
+      // The answer is authoritative; a body without it means the server stored what was sent.
+      return { hidden: typeof res?.hidden === 'boolean' ? res.hidden : hidden };
+    }),
 };

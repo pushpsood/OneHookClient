@@ -16,7 +16,9 @@ import {
   TRACK_TARGET_ATTR,
 } from '../lib/analytics/uiTracking';
 import { UiElement } from '../lib/analytics/generated/telemetryCatalog';
-import { AnalyticsClient, createFetchTransport, type Signal } from '../lib/analytics/analyticsClient';
+import { AnalyticsClient, type Signal } from '../lib/analytics/analyticsClient';
+import { sdkClient } from '../api/sdk-client';
+import { signalsTransport } from '../api/analytics';
 
 describe('resolveUiInteraction: representative newly-instrumented elements', () => {
   it('nav + photo-viewer buttons default to tap', () => {
@@ -153,28 +155,28 @@ describe('newly instrumented elements resolve to the right id + default action',
   });
 });
 
-describe('fetch transport sends the platform header', () => {
-  it('POSTs /signals with X-OneHook-Platform: web', async () => {
-    const calls: Array<{ url: string; init: RequestInit }> = [];
-    const fakeFetch = vi.fn(async (url: string, init: RequestInit) => {
-      calls.push({ url, init });
-      return { ok: true, status: 200 } as Response;
-    }) as unknown as typeof fetch;
-
-    const transport = createFetchTransport({
-      endpoint: 'https://api.example/signals',
-      getToken: async () => 'jwt-token',
-      platform: 'web',
-      fetchImpl: fakeFetch,
-    });
-
+describe('signals transport (IngestSignals through the SDK)', () => {
+  it('sends the batch with platform web through sdkClient.ingestSignals', async () => {
+    const spy = vi
+      .spyOn(sdkClient, 'ingestSignals')
+      .mockResolvedValue({ accepted: 1, rejected: 0, reasons: {}, $metadata: {} } as never);
     const batch: Signal[] = [{ clientEventId: 'e1', type: 'ui_interaction', timestamp: 1, attributes: { elementId: 'nav.back' } }];
-    await transport.send(batch);
+    await signalsTransport.send(batch);
 
-    expect(calls).toHaveLength(1);
-    const headers = calls[0].init.headers as Record<string, string>;
-    expect(headers['X-OneHook-Platform']).toBe('web');
-    expect(headers['Authorization']).toBe('Bearer jwt-token');
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toEqual({
+      platform: 'web',
+      signals: [{ clientEventId: 'e1', type: 'ui_interaction', timestamp: 1, attributes: { elementId: 'nav.back' } }],
+    });
+    spy.mockRestore();
+  });
+
+  it('rejects with an ApiError carrying the HTTP status, so the batch is re-queued', async () => {
+    const spy = vi
+      .spyOn(sdkClient, 'ingestSignals')
+      .mockRejectedValue(Object.assign(new Error('UnknownError'), { $metadata: { httpStatusCode: 503 } }));
+    await expect(signalsTransport.send([])).rejects.toMatchObject({ name: 'ApiError', status: 503 });
+    spy.mockRestore();
   });
 
   it('an isolated AnalyticsClient flushes ui_interaction batches through the transport', async () => {

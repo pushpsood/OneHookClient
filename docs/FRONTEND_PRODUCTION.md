@@ -1,467 +1,190 @@
-# 🎨 Frontend Production-Grade Conversion
-
-## What Was Done
-
-Your OneHook frontend has been transformed from a **dummy data prototype** into a **production-ready application** with real API integration, state management, error handling, and professional architecture.
-
----
-
-## ✅ Key Improvements
-
-### 1. **Real API Integration**
-
-- ✅ Production-grade API client (`lib/api-client.ts`)
-- ✅ Automatic token refresh
-- ✅ Retry logic for failed requests
-- ✅ Rate limiting handling
-- ✅ Network error handling
-- ✅ Mock data fallback for development
-
-### 2. **State Management**
-
-- ✅ Zustand store for global state
-- ✅ Centralized user management
-- ✅ Match and candidate state
-- ✅ Error state management
-- ✅ Authentication state
-
-### 3. **Custom React Hooks**
-
-- ✅ `useProfile()` - Fetch user profiles
-- ✅ `useMatches()` - Manage matches
-- ✅ `useCandidates()` - Discovery queue
-- ✅ `useSwipe()` - Swipe actions
-- ✅ `useChatMessages()` - Real-time chat
-
-### 4. **Error Handling**
-
-- ✅ Error Boundary component
-- ✅ Graceful error recovery
-- ✅ User-friendly error messages
-- ✅ Development error details
-- ✅ Production error tracking ready
-
-### 5. **Loading States**
-
-- ✅ Loading spinner component
-- ✅ Full-screen loading
-- ✅ Inline loading states
-- ✅ Skeleton screens ready
-
-### 6. **Toast Notifications**
-
-- ✅ Success/error/info toasts
-- ✅ Auto-dismiss after 5 seconds
-- ✅ Manual dismiss option
-- ✅ Animated transitions
-- ✅ Multiple toast support
-
-### 7. **Production Features**
-
-- ✅ Logout functionality
-- ✅ Authentication flow
-- ✅ Real-time data updates
-- ✅ Optimistic UI updates
-- ✅ Network resilience
-
----
-
-## 📦 New Files Created
-
-```
-client/src/
-├── lib/
-│   └── api-client.ts          # Production API client
-├── store/
-│   └── app-store.ts            # Zustand global state
-├── hooks/
-│   └── use-api.ts              # Custom React hooks
-├── components/
-│   └── common/
-│       ├── ErrorBoundary.tsx   # Error handling
-│       ├── LoadingSpinner.tsx  # Loading states
-│       └── Toast.tsx           # Notifications
-└── App.tsx                     # Updated with real integration
-```
-
----
-
-## 🔄 How It Works Now
-
-### **Before (Dummy Data)**
-
-```typescript
-// Hardcoded state
-const [currentUser, setCurrentUser] = useState({
-  id: 'me',
-  name: 'Alexander',
-  // ... hardcoded data
-});
-
-// Simulated actions
-const simulateMatch = () => {
-  setCurrentUser((prev) => ({ ...prev, matched: true }));
-};
-```
-
-### **After (Production)**
-
-```typescript
-// Real API integration
-const { profile, loading } = useProfile();
-const { candidates, refresh } = useCandidates();
-const { swipe } = useSwipe();
-
-// Real actions
-const handleSwipe = async (targetId, direction) => {
-  const result = await swipe(targetId, direction);
-  if (result.matched) {
-    showToast("It's a match! 🎉", 'success');
-  }
-  refresh();
-};
-```
-
----
-
-## 🚀 Features Now Working
-
-### **Discovery View**
-
-- ✅ Fetches real candidates from `/matching/discover`
-- ✅ Swipes send to `/matching/swipe`
-- ✅ Automatic match detection
-- ✅ Queue refresh after swipe
-- ✅ Loading states
-- ✅ Empty state handling
-
-### **Chat View**
-
-- ✅ Fetches messages from `/chat/history/{matchId}`
-- ✅ Sends messages to `/chat/message`
-- ✅ Real-time message updates
-- ✅ Optimistic UI updates
-- ✅ Error handling
-
-### **Profile View**
-
-- ✅ Fetches user profile from `/profile/{userId}`
-- ✅ Displays real user data
-- ✅ Logout functionality
-- ✅ Authentication state
-
----
-
-## 🔧 API Client Features
-
-### **Automatic Retry**
-
-```typescript
-// Retries up to 3 times on 5xx errors
-const data = await api.get('/profile/me');
-```
-
-### **Token Refresh**
-
-```typescript
-// Automatically refreshes expired tokens
-// Redirects to login if refresh fails
-```
-
-### **Rate Limiting**
-
-```typescript
-// Respects Retry-After headers
-// Exponential backoff on 429 errors
-```
-
-### **Error Handling**
-
-```typescript
-try {
-  await api.post('/matching/swipe', data);
-} catch (error) {
-  if (error instanceof ApiError) {
-    showToast(error.message, 'error');
-  }
-}
-```
-
----
-
-## 🎯 Development vs Production
-
-### **Development Mode** (No API URL)
-
-- Uses mock data automatically
-- 500ms simulated network delay
-- Realistic mock responses
-- No backend needed
-
-### **Production Mode** (API URL configured)
-
-- Real API calls
-- Token authentication
-- Error handling
-- Retry logic
-
----
-
-## 📊 State Management Flow
-
-```
-User Action
-    ↓
-React Hook (useSwipe, useChatMessages, etc.)
-    ↓
-API Client (api.post, api.get)
-    ↓
-Backend API
-    ↓
-Response
-    ↓
-Zustand Store Update
-    ↓
-UI Re-render
-```
-
----
-
-## 🛡️ Error Handling Flow
-
-```
-Error Occurs
-    ↓
-API Client catches error
-    ↓
-Retry logic (if applicable)
-    ↓
-ApiError thrown
-    ↓
-Component catches error
-    ↓
-Toast notification shown
-    ↓
-Error Boundary (if uncaught)
-    ↓
-Graceful error UI
-```
-
----
-
-## 🔐 Authentication Flow
-
-```
-1. User logs in
-2. Token stored in localStorage
-3. API client adds token to requests
-4. Token expires
-5. API client refreshes token
-6. If refresh fails → redirect to login
-```
-
----
-
-## 📱 User Experience Improvements
-
-### **Before**
-
-- ❌ Fake data only
-- ❌ No loading states
-- ❌ No error handling
-- ❌ No real interactions
-- ❌ No state persistence
-
-### **After**
-
-- ✅ Real API data
-- ✅ Loading spinners
-- ✅ Error messages
-- ✅ Real swipes/matches
-- ✅ State management
-- ✅ Toast notifications
-- ✅ Logout functionality
-
----
-
-## 🧪 Testing
-
-### **Local frontend against a deployed backend**
-
-Local development uses the real Gamma backend by default; mock and LocalStack runtime paths are
-intentionally not shipped. The public REST, GraphQL and Cognito values are checked into
-`src/config/deployment.config.ts`, so normal development requires no `.env`:
-
-```bash
-npm run dev
-```
-
-Copy `.env.example` to ignored `.env` only when you need a local override. After the production
-backend is deployed and validated, add its configuration as a source-controlled `prod` entry rather
-than maintaining independent URL values in deployment settings.
-
-### **Stage builds and deployment**
-
-AWS CodeConnections sends the exact protected-`main` revision to a queued CodePipeline V2
-execution. AWS builds and proves the immutable production cloud assembly before requesting release
-approval:
+# Frontend Architecture
+
+How the OneHook web client talks to the backend, holds state, handles errors, and is built and
+deployed. Configuration, routes, sign-in, end-to-end encryption, Mr OneHook, telemetry and the AWS
+pipeline are documented in the repository [README](../README.md); this page links to those sections
+rather than repeating them. Sign-in details are in [LOGIN_SETUP.md](./LOGIN_SETUP.md).
+
+There is no mock-data mode. Every runtime path calls a deployed backend (by default Gamma), and the
+[engineering policy](../README.md#engineering-policy-no-test-code-in-production-strict) forbids mock
+servers, fixtures and `useMockApi`-style branches in `src/`.
+
+## Source layout
+
+| Path | Contents |
+|---|---|
+| `src/App.tsx` | Amplify/Cognito initialisation, the route table and route guards ([Routes](../README.md#routes)) |
+| `src/app/` | The signed-in member shell: `AppContent.tsx`, tab bar, sidebar, top bar, call provider, logout dialog |
+| `src/features/` | Member screens: `discovery/`, `chat/`, `matching/`, `profile/`, `settings/`, `moderation/report/` |
+| `src/components/` | Auth screens (`auth/`), marketing and legal pages, onboarding, profile cards, calls, chatbot, shared UI (`common/`) |
+| `src/api/` | Backend service wrappers (see below) |
+| `src/hooks/` | Data and behaviour hooks (`use-api.ts` and others) |
+| `src/store/app-store.ts` | The Zustand store |
+| `src/lib/` | Auth (`cognito-auth.ts`, `google-identity.ts`), E2EE, calls, analytics, error helpers, view passes |
+| `src/config/`, `src/utils/env.config.ts` | Public deployment config and env overrides ([Runtime Configuration](../README.md#runtime-configuration)) |
+| `src/tests/` | Vitest suites (not bundled) |
+| `infra/` | CDK site stacks (`stacks/`) and the delivery pipeline (`pipeline/`) |
+
+## Backend integration
+
+The backend is OneHookBackend (sibling repository). Discovery ranking and scoring run there on AWS;
+the web client only reads the ranked results from `GET /matching/discover`. The interfaces the client
+uses are listed under [Backend interfaces](../README.md#backend-interfaces).
+
+### REST: generated SDK
+
+Most REST calls go through the Smithy-generated `onehook-api-client` SDK, instantiated once in
+`src/api/sdk-client.ts`:
+
+- **Endpoint.** On `localhost`/`127.0.0.1` the client targets the page origin so the Vite dev proxy
+  forwards the request; otherwise it uses `apiBaseUrl` (Gamma: `https://api.gamma.onehook.club`).
+- **Auth.** An `authMiddleware` reads the Amplify session (`fetchAuthSession`) and sets
+  `Authorization: Bearer <ID token>` (falling back to the access token) and `X-User-Id: <sub>`.
+  With no session it sends the request without these headers and the API rejects it.
+- **No SigV4.** The model declares `@sigv4`, so the client is given a placeholder region and
+  credentials, and `httpSigningMiddleware` is removed so the Bearer header is not overwritten.
+- `amz-sdk-request` and `amz-sdk-invocation-id` headers are stripped before sending.
+- Retries are whatever the generated client's default retry middleware does; `sdk-client.ts` does not
+  configure them.
+
+Service wrappers built on the SDK: `IdentityApi` (`identity.ts`), `ProfileApi` (`profile.ts`),
+`StateApi` (`state.ts`), `MatchingApi` (`matching.ts`), `PreferencesApi` (`preferences.ts`), `ChatApi`
+(device registry, history key, attachment URLs; `chat.ts`), the analytics ingest and photo stats
+(`analytics.ts`), and `DistanceApi`, `SuggestionApi`, `TraditionApi`, `ChatSettingsApi`, `SwipeApi`,
+`RosesApi`, `ReceivedLikesApi` and `MatchingTabApi` (`rest.ts`).
+
+### Other generated clients
+
+`src/api/external-sdk-clients.ts` builds the clients of the two APIs that other repos own:
+`mrOneHookClient` (`onehook-mr-onehook-client`, OneHookUXEnhancement, at `chatbotUrl`) and
+`createModerationEvidenceClient()` (`createPortalClient` from `saha-equation-admin-portal-client`,
+OneHookAdminPortal, bound to OneHook's tenant from `portalModerationBaseUrl`). Both send the Cognito ID
+token as a Bearer token, use `maxAttempts: 1` and drop the `amz-sdk-*` headers.
+
+There are no hand-written REST helpers. `src/tests/api-route-contract.test.ts` fails the build on any
+raw request to a OneHook API; the only raw requests left go to presigned S3 URLs.
+`src/lib/api-client.ts` contains only the shared `ApiError` class (`message`, `status`, `code`,
+`details`); `callSdk()` in `sdk-client.ts` converts SDK failures into it (status `0` and code
+`NETWORK_ERROR` for transport failures).
+
+
+### GraphQL (AppSync)
+
+Chat messages, reactions, typing and presence, call signalling and in-app notifications use the
+Amplify GraphQL client with `userPool` auth (`src/api/chat.ts`, `calls.ts`, `notifications.ts`,
+`key-recovery.ts`). `src/api/appsync-connection.ts` listens to Amplify Hub connection-state events
+and lets callers refetch once when a disrupted subscription reconnects, because Amplify reconnects
+but does not replay missed events. Message encryption is described in
+[End-to-End Encrypted Chat](../README.md#end-to-end-encrypted-chat-web).
+
+### View passes
+
+Another member's profile or media can be read only with a short-lived view pass sent as
+`X-View-Pass` (`src/lib/view-pass.ts`). Chat passes come from `GET /state/{userId}` and incoming hook
+requests; matching passes come from discover pages, `GET /matching/likes` or
+`POST /matching/view-passes`. On a 404 the caller refreshes the pass once and retries.
+
+## State management
+
+`src/store/app-store.ts` is a single Zustand store:
+
+| Field | Meaning |
+|---|---|
+| `currentUser` | The member's own profile (`GET /profile`) mapped to `UserProfile` |
+| `userState` | The State service snapshot (`GET /state/{userId}`): connection state, hooks, tier, matching mode |
+| `isAuthenticated` | Set from the Amplify session at startup and by the sign-in screens |
+| `isLoading`, `error` | Generic flags with setters and `clearError()` |
+| `candidates`, `currentCandidate` | The discovery deck |
+| `requestsVersion` | Bumped by `bumpRequests()` so hook-request views refetch |
+
+`logout()` clears the view-pass cache and resets the user, state, candidates and error fields. It does
+not end the Cognito session; callers run `getCognitoAuth().logout()` first. It also removes the
+`localStorage` keys `id_token`, `refresh_token` and `accessToken`, which nothing in `src/` writes any
+more. `isPaidTier(state)` derives paid status from `userState.subscriptionTier` and returns `false`
+until the snapshot loads (see
+[How the subscription tier is resolved](../README.md#how-the-subscription-tier-is-resolved-implemented)).
+
+## Hooks
+
+`src/hooks/use-api.ts`:
+
+| Hook | Purpose |
+|---|---|
+| `useAsync(fn, deps)` | Generic `{ data, loading, error, refetch }` wrapper |
+| `useProfile()` | Loads `GET /profile` and publishes it as `currentUser` |
+| `useUserState()` | Loads `GET /state/{userId}` and publishes it as `userState` |
+| `useCandidates(coords, { enabled, hooks, onRefused })` | Discover deck with category selection; hydrates each card with `GET /profile/{id}/matching`; runs only while `enabled` |
+| `useSwipe()` | `{ pass, like, loading, error }`; a like always carries a comment and a liked profile element |
+| `useReceivedLikes(enabled)` | "Likes you" from `GET /matching/likes` |
+| `useChatMessages(matchId, recipientId?)` | Encrypted chat thread over AppSync, including attachments |
+| `usePreferences(userId, enabled)` | Matching preferences (`/matching/{userId}/preferences`); loads only while `enabled` |
+| `usePartnerProfiles(peerIds)` | Chat profiles of hook partners or request senders, read with the State chat pass |
+| `useHookRequests(enabled)` | Incoming and outgoing hook requests |
+| `useCompleteOnboarding()` | Finishes onboarding with the State service |
+
+`refreshUserStateInStore()` and `setMatchingTabHiddenInStore()` update the store outside React. A
+403 `MATCHING_OFF` or `DISCOVERY_PAUSED` from discover or swipe triggers a state re-read. Nothing
+that calls `/matching/*` runs for a chat-only member (`src/lib/app-mode.ts`).
+
+Other hooks: `useAppNotifications`, `useCallEligibility`, `useHistoryUnlock`, `useHistoryRecovery`,
+`useRecoveryResponder`, `useRegistrationPrerequisites`, `useUserLocation`, `useViewPassRefreshers`.
+
+## Error handling and feedback
+
+- **Reading errors.** `src/lib/api-errors.ts` reads `ApiError` and SDK service exceptions the same
+  way: `errorStatus`, `errorCode` (the body's `code`), `errorMessage` (the body's `error`, skipping
+  the SDK's `UnknownError` placeholder), `errorGaps` and `isNotFound`. Mr OneHook errors are
+  classified separately in `src/lib/mr-onehook-contract.ts`.
+- **Error boundary.** `src/components/common/ErrorBoundary.tsx` wraps the whole app in `App.tsx`. It
+  logs to the console, shows "Something Went Wrong" with reset and go-home actions, and shows the
+  error and component stack when `process.env.NODE_ENV` is not `production`. No error-tracking
+  service is connected; the hook for one is a commented-out placeholder.
+- **Toasts.** `ToastProvider` / `useToast()` in `src/components/common/Toast.tsx` show `success`,
+  `error` or `info` toasts. Each closes after 5 seconds or on its close button; several can be shown
+  at once.
+- **Loading.** `LoadingSpinner` (`src/components/common/LoadingSpinner.tsx`) takes `size`
+  (`sm`, `md`, `lg`) and `fullScreen`. Route guards show the full-screen spinner while auth or the
+  State snapshot is loading.
+
+## Authentication
+
+Sign-in, session storage and sign-out are covered in [LOGIN_SETUP.md](./LOGIN_SETUP.md) and
+[Authentication and Sessions](../README.md#authentication-and-sessions). In short: Amplify holds the
+Cognito session and refreshes tokens inside `fetchAuthSession`; each API helper reads the token from
+there per request.
+
+## Local development and configuration
+
+`npm run dev` serves on port 3000 against the checked-in Gamma configuration; no `.env` is needed.
+See [Local Development Setup](../README.md#local-development-setup) for the dev proxy and
+[Runtime Configuration](../README.md#runtime-configuration) for the `VITE_*` overrides.
+
+## Testing
+
+`npm test` runs Vitest over `src/tests`; `npm run lint` is `tsc --noEmit`; `npm run validate` runs
+both. Tests must be hermetic and must not depend on a local `.env`. `npm run test:e2e` exists but
+Playwright is not installed or configured.
+
+## Build and deployment
+
+`npm run build` (or `build:prod`) runs the telemetry contract gate, then `vite build --mode
+production`. After the client build, the `prerender-pages` plugin in `vite.config.ts` writes a
+static HTML file per SEO route, `404.html` and `sitemap.xml`.
+
+The normal release path is AWS CodePipeline; GitHub Actions does not deploy the site:
 
 ```text
-source → verify → production lint/test/build/synth
-       → AWS manual approval → deploy exact cloud assembly → smoke-test production
+Source (main) → Verify → BuildProduction (lint, test, build, synth cdk.out.prod)
+             → ApproveProduction → DeployProduction (cdk deploy --app cdk.out.prod) → SmokeProduction
 ```
 
-The production artifact deliberately selects the checked-in Gamma REST, GraphQL and Cognito config
-while the backend production rollout is pending. `BuildProduction` has only pipeline-required
-artifact-bucket and build-log access; it has no infrastructure API or role-assumption permission.
-The stable public production hosted-zone ID is checked in, making synthesis lookup-free. It stores
-`cdk.out.prod` as the pipeline artifact. After approval,
-`DeployProduction` receives only that assembly and invokes `cdk deploy --app cdk.out.prod`; it does
-not run Vite, tests or CDK synthesis again.
+The production artifact uses the Gamma backend entry until a `prod` entry is added to
+`src/config/deployment.config.ts`. Pipeline bootstrap, approval policy, CodeConnections
+authorisation and the break-glass `npm run deploy:prod` are documented under
+[Deployment](../README.md#deployment) and [Infrastructure](../README.md#infrastructure).
 
-The pipeline stack must be deployed once with `AWS_PROFILE=pushp-sde-aws npm run deploy:pipeline`,
-and its `OneHookClient-GitHub` connection must then be authorized in the AWS console. Attach the
-output production-approval managed policy only to the designated AWS approver. See the root README
-for exact bootstrap and cutover ordering.
+## Known limitations
 
----
-
-## 🎨 Component Architecture
-
-### **Smart Components** (Connected to API)
-
-- `App.tsx` - Main app logic
-- `DiscoveryView` - Candidate swiping
-- `ChatView` - Messaging
-- `ProfileView` - User profile
-
-### **Dumb Components** (Presentational)
-
-- `LoadingSpinner` - Loading states
-- `ErrorBoundary` - Error handling
-- `Toast` - Notifications
-
-### **Hooks** (Business Logic)
-
-- `useProfile` - User data
-- `useCandidates` - Discovery
-- `useSwipe` - Swipe actions
-- `useChatMessages` - Chat
-
----
-
-## 🚀 Next Steps
-
-### **Immediate**
-
-1. Complete and validate the Gamma backend rollout
-2. Run the frontend against the checked-in Gamma configuration
-3. Deploy Gamma, then approve the tested production artifact
-
-### **Future Enhancements**
-
-- WebSocket for real-time chat
-- Image upload with preview
-- Infinite scroll for messages
-- Push notifications
-- Offline support
-- Analytics tracking
-
----
-
-## 📖 Usage Examples
-
-### **Fetch User Profile**
-
-```typescript
-const { profile, loading, error } = useProfile('user_123');
-
-if (loading) return <LoadingSpinner />;
-if (error) return <div>Error: {error.message}</div>;
-return <div>{profile.name}</div>;
-```
-
-### **Swipe on Candidate**
-
-```typescript
-const { swipe, loading } = useSwipe();
-
-const handleSwipe = async () => {
-  try {
-    const result = await swipe('user_456', 'RIGHT');
-    if (result.matched) {
-      showToast('Match!', 'success');
-    }
-  } catch (error) {
-    showToast('Swipe failed', 'error');
-  }
-};
-```
-
-### **Send Chat Message**
-
-```typescript
-const { messages, sendMessage } = useChatMessages('match_789');
-
-const handleSend = async (text: string) => {
-  await sendMessage(text);
-  // Message automatically added to UI
-};
-```
-
----
-
-## ✅ Production Checklist
-
-- [x] API client with error handling
-- [x] State management (Zustand)
-- [x] Custom React hooks
-- [x] Loading states
-- [x] Error boundaries
-- [x] Toast notifications
-- [x] Authentication flow
-- [x] Token refresh
-- [x] Retry logic
-- [x] Mock data fallback
-- [x] TypeScript types
-- [x] Responsive design
-- [x] Accessibility (keyboard nav)
-
----
-
-## 🎉 Summary
-
-Your frontend is now:
-
-- ✅ **Production-ready** - Real API integration
-- ✅ **Resilient** - Error handling and retries
-- ✅ **User-friendly** - Loading states and notifications
-- ✅ **Maintainable** - Clean architecture and hooks
-- ✅ **Testable** - Mock mode for development
-- ✅ **Scalable** - State management ready
-
-**No more dummy data!** Your app now connects to real backend services and handles all production scenarios gracefully.
-
----
-
-## 📞 Quick Reference
-
-```bash
-# Install new dependencies
-npm install
-
-# Development (mock mode)
-npm run dev
-
-# Development (with LocalStack)
-npm run local:start
-npm run dev
-
-# Build for production
-npm run build:client
-
-# Deploy
-./scripts/deploy.sh prod all
-```
-
-**Your frontend is now enterprise-grade!** 🚀
+- `VITE_API_TIMEOUT_MS`, `VITE_ENABLE_DEBUG` and `VITE_LOG_LEVEL` are parsed and validated in
+  `src/utils/env.config.ts`, but no request or logging code reads `requestTimeoutMs`, `enableDebug` or
+  `logLevel`.

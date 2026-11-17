@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react';
-import { Film, ImageIcon, Mic, Paperclip, Square, Trash2 } from 'lucide-react';
+import { Film, ImageIcon, MapPin, Mic, Paperclip, Square, Trash2, UserRound } from 'lucide-react';
 import type { AttachmentKind } from '../../lib/chat-attachments';
 import { downsampleWaveform } from '../../lib/attachment-media';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 
 /**
- * Composer controls for attachments: a picker (image / video / file) and a voice-note recorder.
+ * Composer controls for attachments: a picker (image / video / file, plus location and contact cards
+ * when the conversation offers them) and a voice-note recorder.
  *
  * The voice-note affordance is feature-detected and HIDDEN where MediaRecorder or getUserMedia is
  * unavailable (older Safari, insecure contexts), rather than shown and then failing at click time — a
@@ -16,6 +17,10 @@ interface AttachmentComposerProps {
   disabled?: boolean;
   onPickFile: (file: File, kind: AttachmentKind) => void;
   onVoiceNote: (blob: Blob, mime: string, durationMs: number, waveform: number[]) => void;
+  /** Opens the location sheet (current location or a live share). Hidden when absent. */
+  onPickLocation?: () => void;
+  /** Opens the contact flow. Hidden when absent. */
+  onPickContact?: () => void;
 }
 
 /** MediaRecorder + microphone access are required to record; both must exist for the mic to appear. */
@@ -28,7 +33,7 @@ function voiceNotesSupported(): boolean {
   );
 }
 
-export function AttachmentComposer({ disabled, onPickFile, onVoiceNote }: AttachmentComposerProps) {
+export function AttachmentComposer({ disabled, onPickFile, onVoiceNote, onPickLocation, onPickContact }: AttachmentComposerProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -67,11 +72,34 @@ export function AttachmentComposer({ disabled, onPickFile, onVoiceNote }: Attach
             <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} aria-hidden="true" data-track-exempt="backdrop: click-away that closes the attachment menu." />
             <div
               role="menu"
-              className="absolute bottom-full left-0 mb-2 w-40 bg-surface-card border border-border shadow-xl z-40 py-1 rounded-xl text-text overflow-hidden"
+              className="absolute bottom-full left-0 mb-2 w-44 bg-surface-card border border-border shadow-xl z-40 py-1 rounded-xl text-text overflow-hidden"
             >
               <MenuItem icon={<ImageIcon className="w-4 h-4" />} label="Photo" onClick={() => pick(imageInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'photo_video' })} />
               <MenuItem icon={<Film className="w-4 h-4" />} label="Video" onClick={() => pick(videoInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'photo_video' })} />
               <MenuItem icon={<Paperclip className="w-4 h-4" />} label="File" onClick={() => pick(fileInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'file' })} />
+              {onPickLocation && (
+                <MenuItem
+                  icon={<MapPin className="w-4 h-4" />}
+                  label="Location"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onPickLocation();
+                  }}
+                  trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'location' })}
+                />
+              )}
+              {onPickContact && (
+                <MenuItem
+                  icon={<UserRound className="w-4 h-4" />}
+                  label="Contact"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    // Called inside the click: the browser only opens its contact picker on a gesture.
+                    onPickContact();
+                  }}
+                  trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'contact' })}
+                />
+              )}
             </div>
           </>
         )}

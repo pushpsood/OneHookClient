@@ -18,6 +18,7 @@ import {
   smartAppBannerContent,
   type RouteSeo,
 } from './src/config/seo-routes';
+import { devApiProxy } from './src/config/dev-proxy';
 
 const distDir = resolve(__dirname, 'dist');
 
@@ -251,31 +252,9 @@ export default defineConfig(({ mode }) => {
         allow: [resolve(__dirname), resolve(__dirname, '..', 'OneHookBackend')],
       },
       proxy: {
-        '/profile': {
-          target: 'https://api.gamma.onehook.club',
-          changeOrigin: true,
-          secure: true,
-        },
-        '/state': {
-          target: 'https://api.gamma.onehook.club',
-          changeOrigin: true,
-          secure: true,
-        },
-        '/matching': {
-          target: 'https://api.gamma.onehook.club',
-          changeOrigin: true,
-          secure: true,
-        },
-        '/identity': {
-          target: 'https://api.gamma.onehook.club',
-          changeOrigin: true,
-          secure: true,
-        },
-        '/chat': {
-          target: 'https://api.gamma.onehook.club',
-          changeOrigin: true,
-          secure: true,
-        },
+        // Every REST prefix the app calls, to the Gamma ingress (src/config/dev-proxy.ts; the list is
+        // checked against the generated route manifest by src/tests/dev-proxy.test.ts).
+        ...devApiProxy(),
         '/api/localstack/chat': {
           target: 'https://hmlzbhd52r.execute-api.localhost.localstack.cloud:4566',
           changeOrigin: true,

@@ -1,6 +1,6 @@
 import { generateClient } from 'aws-amplify/api';
-import { sdkClient } from './sdk-client';
-import { apiBaseUrl } from '../utils/env.config';
+import type { MediaKind, Platform } from 'onehook-api-client';
+import { callSdk, sdkClient } from './sdk-client';
 import { hasGraphQLErrors, toGraphQLError } from './graphql-error';
 import type {
   Message as ChatMessage,
@@ -608,11 +608,9 @@ export const ChatMessagingApi = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Multi-device registry (wire v2)
 //
-// The generated Smithy SDK does not (yet) model the `/chat/devices` routes, so these are issued as
-// raw authenticated REST calls against the same API domain and Cognito authorizer the SDK uses. The
-// request shape mirrors the SDK's `sdk-client.ts` middleware exactly: a Cognito JWT Bearer token and
-// an `X-User-Id` header derived from its `sub`. Kept deliberately thin — no plaintext ever crosses
-// this boundary; only public device/history keys and ciphertext envelopes do.
+// Device registry, history-key lifecycle and attachment URLs, all through the generated SDK (Chat
+// operations in chat.smithy). No plaintext ever crosses this boundary; only public device/history keys
+// and ciphertext envelopes do.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface DeviceRecord {
@@ -720,10 +718,9 @@ export interface PutWrapRequest {
 }
 
 /**
- * The two attachment media endpoints (see OneHookBackend/docs/chat-attachments.md). Like the device
- * registry above, they are not yet modelled by the generated SDK, so they ride the same authenticated
- * `chatRest` helper. Only the presigned URL and object key cross this boundary — the content key lives
- * exclusively inside the E2EE message envelope and never touches these calls.
+ * The two attachment media endpoints (see OneHookBackend/docs/chat-attachments.md). Only the
+ * presigned URL and object key cross this boundary — the content key lives exclusively inside the
+ * E2EE message envelope and never touches these calls.
  */
 export interface MediaUploadUrlResponse {
   /** S3 key the server assigned, always "<matchId>/<uuid>". Goes into the attachment envelope. */
@@ -738,54 +735,13 @@ export interface MediaDownloadUrlResponse {
   expiresInSeconds: number;
 }
 
-async function chatRestBaseUrl(): Promise<string> {  if (apiBaseUrl && apiBaseUrl.startsWith('http')) return apiBaseUrl.replace(/\/+$/, '');
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    const origin = window.location.origin;
-    return apiBaseUrl ? `${origin}/${apiBaseUrl.replace(/^\/+|\/+$/g, '')}` : origin;
-  }
-  return apiBaseUrl || '';
-}
-
-async function chatAuthHeaders(): Promise<Record<string, string>> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (typeof window === 'undefined') return headers;
-  try {
-    const { fetchAuthSession } = await import('aws-amplify/auth');
-    const session = await fetchAuthSession();
-    const token =
-      session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-      const sub =
-        (session.tokens?.idToken?.payload?.sub as string) ||
-        (session.tokens?.accessToken?.payload?.sub as string) ||
-        '';
-      if (sub) headers['X-User-Id'] = sub;
-    }
-  } catch {
-    // Unauthenticated callers get no Authorization header; the API rejects them, which surfaces as
-    // a thrown error below rather than a silent success.
-  }
-  return headers;
-}
-
-async function chatRest<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const base = await chatRestBaseUrl();
-  const headers = await chatAuthHeaders();
-  const response = await fetch(`${base}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(
-      `chat device request failed (${response.status} ${response.statusText})${text ? `: ${text}` : ''}`
-    );
-  }
-  if (response.status === 204) return undefined as T;
-  const text = await response.text();
-  return (text ? JSON.parse(text) : undefined) as T;
+/**
+ * The SDK output without its `$metadata`, typed as the app's shape. The app types mirror the Smithy
+ * shapes (chat.smithy); the SDK marks required members `| undefined`, which the server never omits.
+ */
+function body<T>(out: object): T {
+  const { $metadata: _metadata, ...rest } = out as { $metadata?: unknown };
+  return rest as T;
 }
 
 /**
@@ -812,18 +768,20 @@ export const ChatApi = {
     contentLength: number,
     kind: string
   ): Promise<MediaUploadUrlResponse> =>
-    chatRest<MediaUploadUrlResponse>('POST', '/chat/media/upload-url', {
-      matchId,
-      contentLength,
-      kind,
-    }),
+    callSdk(async () =>
+      body<MediaUploadUrlResponse>(
+        await sdkClient.createMediaUploadUrl({ matchId, contentLength, kind: kind as MediaKind })
+      )
+    ),
 
   /**
    * Request a presigned GET URL for an attachment. The server only issues one for a key under the
    * caller's own match, so a guessed key from another conversation is rejected here, not just hidden.
    */
   getMediaDownloadUrl: (matchId: string, objectKey: string): Promise<MediaDownloadUrlResponse> =>
-    chatRest<MediaDownloadUrlResponse>('POST', '/chat/media/download-url', { matchId, objectKey }),
+    callSdk(async () =>
+      body<MediaDownloadUrlResponse>(await sdkClient.createMediaDownloadUrl({ matchId, objectKey }))
+    ),
 
   // --- Multi-device registry (wire v2) ---
 
@@ -838,24 +796,28 @@ export const ChatApi = {
    * messages to history right away.
    */
   registerDevice: (request: RegisterDeviceRequest): Promise<RegisterDeviceResponse> =>
-    chatRest<RegisterDeviceResponse>('POST', '/chat/devices', request),
+    callSdk(async () =>
+      body<RegisterDeviceResponse>(
+        await sdkClient.registerDevice({ ...request, platform: request.platform as Platform })
+      )
+    ),
 
   /** Fetch the caller's own device registry. */
-  getSelfDevices: (): Promise<DeviceRegistry> => chatRest<DeviceRegistry>('GET', '/chat/devices'),
+  getSelfDevices: (): Promise<DeviceRegistry> =>
+    callSdk(async () => body<DeviceRegistry>(await sdkClient.listMyDevices({}))),
 
   /**
    * Fetch a peer's device registry for a shared match. The server authorizes the read against a
    * State-verified mutual match, so `matchId` is required.
    */
   getPeerDevices: (userId: string, matchId: string): Promise<DeviceRegistry> =>
-    chatRest<DeviceRegistry>(
-      'GET',
-      `/chat/registry/${encodeURIComponent(userId)}?matchId=${encodeURIComponent(matchId)}`
-    ),
+    callSdk(async () => body<DeviceRegistry>(await sdkClient.getParticipantRegistry({ userId, matchId }))),
 
   /** Revoke (remove) a device from the caller's registry. */
   revokeDevice: (deviceId: string): Promise<void> =>
-    chatRest<void>('DELETE', `/chat/devices/${encodeURIComponent(deviceId)}`),
+    callSdk(async () => {
+      await sdkClient.revokeDevice({ deviceId });
+    }),
 
   // --- Account history-key lifecycle (epochs + wraps) ---
 
@@ -866,7 +828,8 @@ export const ChatApi = {
    * PRF, then a device wrap, then QR, then reset. Wrap ciphertext is returned because only this
    * account can open it; the server holds no key that would let it do so.
    */
-  getHistoryState: (): Promise<HistoryState> => chatRest<HistoryState>('GET', '/chat/history'),
+  getHistoryState: (): Promise<HistoryState> =>
+    callSdk(async () => body<HistoryState>(await sdkClient.getHistoryState({}))),
 
   /**
    * Establish a history epoch and make it active.
@@ -879,19 +842,18 @@ export const ChatApi = {
    * `getHistoryState` and unlock against the epoch that won rather than retrying.
    */
   establishHistoryEpoch: (request: EstablishEpochRequest): Promise<EstablishEpochResponse> =>
-    chatRest<EstablishEpochResponse>('POST', '/chat/history/epochs', request),
+    callSdk(async () => body<EstablishEpochResponse>(await sdkClient.establishHistoryEpoch(request))),
 
   /**
    * Add or replace one wrap. Idempotent on (epoch, method, wrapId), so re-approving a device or
    * re-deriving a PRF wrap refreshes rather than accumulating rows.
    */
   putHistoryWrap: (request: PutWrapRequest): Promise<{ wraps: AhkWrapRecord }> =>
-    chatRest<{ wraps: AhkWrapRecord }>('POST', '/chat/history/wraps', request),
+    callSdk(async () => body<{ wraps: AhkWrapRecord }>(await sdkClient.putHistoryWrap(request))),
 
   /** Revoke one unlock method — a retired device, or a passkey the user deleted. */
   revokeHistoryWrap: (epoch: number, method: WrapMethod, wrapId: string): Promise<void> =>
-    chatRest<void>(
-      'DELETE',
-      `/chat/history/wraps/${epoch}/${encodeURIComponent(method)}/${encodeURIComponent(wrapId)}`
-    ),
+    callSdk(async () => {
+      await sdkClient.revokeHistoryWrap({ epoch, method, wrapId });
+    }),
 };

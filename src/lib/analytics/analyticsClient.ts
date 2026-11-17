@@ -192,34 +192,3 @@ export class AnalyticsClient {
     return this.queue.length;
   }
 }
-
-/**
- * Build a fetch-based transport for `POST /signals`. `getToken` returns the current Cognito JWT; the
- * SDK never stores it. `platform` is sent as a header so the server can attribute the platform
- * without trusting body content.
- */
-export function createFetchTransport(config: {
-  endpoint: string;
-  getToken: () => Promise<string>;
-  platform: 'web' | 'ios' | 'android';
-  fetchImpl?: typeof fetch;
-}): AnalyticsTransport {
-  const doFetch = config.fetchImpl ?? fetch;
-  return {
-    async send(batch: Signal[]): Promise<void> {
-      const token = await config.getToken();
-      const res = await doFetch(config.endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          'X-OneHook-Platform': config.platform,
-        },
-        body: JSON.stringify({ signals: batch }),
-      });
-      if (!res.ok) {
-        throw new Error(`analytics ingest failed: ${res.status}`);
-      }
-    },
-  };
-}

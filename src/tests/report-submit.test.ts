@@ -5,6 +5,8 @@
  * evidence failure leaves the report filed; the 503 EVIDENCE_FINALIZE_RETRY backoff; MINOR_SAFETY
  * (evidenceAllowed:false) never uploads; and telemetry carries no text / user ids.
  */
+import { createModerationEvidenceClient } from '../api/external-sdk-clients';
+import { fetchHandler } from './support/sdk-fetch-handler';
 import { describe, it, expect, vi } from 'vitest';
 import {
   submitReport,
@@ -75,6 +77,11 @@ function makeTransport(
 
   return {
     baseUrl: 'https://admin.onehook.club/api/p/onehook/gamma/moderation',
+    client: createModerationEvidenceClient(
+      'https://admin.onehook.club/api/p/onehook/gamma/moderation',
+      async () => 'member-id-token',
+      fetchHandler(fetchImpl)
+    ),
     fetchImpl,
     getToken: async () => 'member-id-token',
     sleep: async () => {},

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mascot } from './Mascot';
-import { chatbotUrl } from '../../utils/env.config';
-import { PUBLIC_PRODUCT_CHAT_PATH } from '../../lib/mr-onehook-contract';
+import { mrOneHookClient } from '../../api/external-sdk-clients';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import './ChatbotWidget.css'; // Add a little standard CSS or use tailwind
@@ -208,18 +207,17 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
     setMood('Thinking');
 
     try {
-      const response = await fetch(`${chatbotUrl}${PUBLIC_PRODUCT_CHAT_PATH}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: newMessages,
-          userDemographics: { gender, sexualPreference },
-        }),
-      });
+      // PublicProductChat through the generated SDK (no auth). An HTTP failure is the "overwhelmed"
+      // reply below; a network error is the "can't connect" one.
+      const data = await mrOneHookClient
+        .publicProductChat({ messages: newMessages, userDemographics: { gender, sexualPreference } })
+        .catch((err: unknown) => {
+          if ((err as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode) return null;
+          throw err;
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        setMessages([...newMessages, { role: 'assistant', content: data.reply }]);
+      if (data) {
+        setMessages([...newMessages, { role: 'assistant', content: data.reply ?? '' }]);
         setMood(data.mood as Mood);
         setHasError(false);
       } else {
