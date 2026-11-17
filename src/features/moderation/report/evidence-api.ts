@@ -1,18 +1,27 @@
 /**
  * Evidence upload transport (OneHook moderation Phase 2 client contract).
  *
- * Implements the three HTTP steps against the admin portal's PUBLIC member gateway
+ * Implements the three steps against the admin portal's PUBLIC member gateway
  * (features/moderation README "Evidence (decrypted-chat share) - client contract"):
  *
- *   1. POST {base}/evidence/presign   (Bearer member ID token)  -> { evidenceId, upload, expiresAt }
- *   2. PUT  upload.url                 (EXACTLY upload.headers, no auth) with the canonical bytes
- *   3. POST {base}/evidence/complete   (Bearer member ID token)  -> { status }
+ *   1. PresignEvidence  (SDK, Bearer member ID token) -> { evidenceId, upload, expiresAt }
+ *   2. PUT upload.url   (EXACTLY upload.headers, no auth) with the canonical bytes: a presigned S3
+ *                       URL, the one raw request here
+ *   3. CompleteEvidence (SDK, Bearer member ID token) -> { status }
  *
- * `complete` is retried on `503 EVIDENCE_FINALIZE_RETRY` with bounded backoff. Everything is
- * dependency-injected (fetch, token provider, sleep) so the orchestration is unit-testable without a
+ * Steps 1 and 3 use the admin portal's published client (`saha-equation-admin-portal-client`), bound to the OneHook
+ * tenant. `complete` is
+ * retried on `503 EVIDENCE_FINALIZE_RETRY` with bounded backoff. Everything is dependency-injected
+ * (SDK client, S3 fetch, token provider, sleep) so the orchestration is unit-testable without a
  * browser or the network. No message text or user ids are ever logged here.
  */
 import { portalModerationBaseUrl } from '../../../utils/env.config';
+import {
+  createModerationEvidenceClient,
+  sdkFailure,
+  withoutMetadata,
+  type EvidenceClient,
+} from '../../../api/external-sdk-clients';
 
 export class EvidenceError extends Error {
   constructor(
@@ -30,6 +39,9 @@ export class EvidenceError extends Error {
 export interface EvidenceTransport {
   /** Portal moderation base URL (…/moderation). Defaults to the app's env config. */
   baseUrl?: string;
+  /** The tenant-bound portal evidence client. Defaults to one built from `baseUrl` + `getToken`. */
+  client?: Pick<EvidenceClient, 'presignEvidence' | 'completeEvidence'>;
+  /** Used only for the PUT to the presigned S3 URL. */
   fetchImpl?: typeof fetch;
   /** Returns the member's Cognito ID token, or null when unauthenticated. */
   getToken: () => Promise<string | null>;
@@ -125,65 +137,37 @@ function resolveBaseUrl(t: EvidenceTransport): string {
   return (t.baseUrl ?? portalModerationBaseUrl).replace(/\/+$/, '');
 }
 
-/**
- * Read the portal error envelope `{"error": {"code", "message", "retryable"}}` (Smithy
- * `ModerationEvidenceErrorBody`). Anything else (a proxy HTML page, an empty body) yields no code.
- */
-async function parseBody(res: Response): Promise<{ code?: string; message?: string; retryable?: boolean }> {
-  const text = await res.text().catch(() => '');
-  let parsed: unknown = undefined;
-  if (text) {
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = undefined;
-    }
-  }
-  const envelope = typeof parsed === 'object' && parsed !== null ? (parsed as { error?: unknown }) : undefined;
-  const detail =
-    typeof envelope?.error === 'object' && envelope.error !== null
-      ? (envelope.error as Record<string, unknown>)
-      : undefined;
-  return {
-    code: typeof detail?.code === 'string' ? detail.code : undefined,
-    message: typeof detail?.message === 'string' ? detail.message : undefined,
-    retryable: typeof detail?.retryable === 'boolean' ? detail.retryable : undefined,
-  };
+function clientOf(t: EvidenceTransport): NonNullable<EvidenceTransport['client']> {
+  return t.client ?? createModerationEvidenceClient(resolveBaseUrl(t), t.getToken);
 }
 
-async function postJson<T>(t: EvidenceTransport, path: string, body: unknown): Promise<T> {
-  const doFetch = t.fetchImpl ?? fetch;
-  const token = await t.getToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  let res: Response;
+/**
+ * Run one SDK call; a failure becomes an {@link EvidenceError} read from the portal envelope
+ * `{"error": {"code", "message", "retryable"}}` (Smithy `ModerationEvidenceErrorBody`, which the SDK
+ * copies onto the exception). A body without that envelope (a proxy HTML page) yields no code.
+ */
+async function evidenceCall<T extends object>(call: () => Promise<T>): Promise<Omit<T, '$metadata'>> {
   try {
-    res = await doFetch(`${resolveBaseUrl(t)}${path}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    return withoutMetadata(await call());
   } catch (err) {
-    throw new EvidenceError(
-      err instanceof Error ? err.message : 'Network request failed',
-      0,
-      'NETWORK_ERROR'
-    );
+    if (err instanceof EvidenceError) throw err;
+    const failure = sdkFailure(err);
+    if (!failure) {
+      throw new EvidenceError(err instanceof Error ? err.message : 'Network request failed', 0, 'NETWORK_ERROR');
+    }
+    const envelope = failure.body.error;
+    const detail = typeof envelope === 'object' && envelope !== null ? (envelope as Record<string, unknown>) : undefined;
+    const code = typeof detail?.code === 'string' ? detail.code : undefined;
+    const message = typeof detail?.message === 'string' ? detail.message : undefined;
+    const retryable = typeof detail?.retryable === 'boolean' ? detail.retryable : undefined;
+    throw new EvidenceError(message || `Evidence request failed (${failure.status})`, failure.status, code, retryable);
   }
-  if (!res.ok) {
-    const { code, message, retryable } = await parseBody(res);
-    throw new EvidenceError(message || `Evidence request failed (${res.status})`, res.status, code, retryable);
-  }
-  return (await res.json()) as T;
 }
 
 /** Step 1: get a presigned PUT for the evidence object. */
 export function presignEvidence(t: EvidenceTransport, req: PresignRequest): Promise<PresignResponse> {
-  return postJson<PresignResponse>(t, '/evidence/presign', req);
+  const evidenceClient = clientOf(t);
+  return evidenceCall(() => evidenceClient.presignEvidence(req)) as Promise<PresignResponse>;
 }
 
 /**
@@ -235,7 +219,8 @@ export async function completeEvidence(
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
-      return await postJson<CompleteResponse>(t, '/evidence/complete', req);
+      const evidenceClient = clientOf(t);
+      return (await evidenceCall(() => evidenceClient.completeEvidence(req))) as CompleteResponse;
     } catch (err) {
       const retryable =
         err instanceof EvidenceError && err.status === 503 && err.code === FINALIZE_RETRY_CODE;

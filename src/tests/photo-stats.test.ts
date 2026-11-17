@@ -4,32 +4,42 @@ vi.mock('aws-amplify/auth', () => ({
   fetchAuthSession: async () => ({ tokens: { idToken: { toString: () => 'jwt-abc' } } }),
 }));
 
-describe('Owner photo stats API', () => {
-  afterEach(() => vi.unstubAllGlobals());
+describe('Owner photo stats API (GetMediaStats through the SDK)', () => {
+  afterEach(() => vi.restoreAllMocks());
 
-  it('asks for the caller’s own stats without sending any user id, authenticated by the JWT', async () => {
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ photos: [{ mediaId: 'media/u1/a.jpg', uniqueViewers: 3, fullscreenViewers: 1 }] }),
-    }));
-    vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('window', { location: { hostname: 'app.gamma.onehook.club', origin: 'https://app.gamma.onehook.club' } });
+  it('asks for the caller’s own stats with no input (the owner is the JWT subject)', async () => {
+    const { sdkClient } = await import('../api/sdk-client');
+    const spy = vi.spyOn(sdkClient, 'getMediaStats').mockResolvedValue({
+      $metadata: {},
+      photos: [
+        {
+          mediaId: 'media/u1/a.jpg',
+          uniqueViewers: 3,
+          viewersMoreThanOnce: 2,
+          viewersMoreThan10: 1,
+          viewersMoreThan100: 0,
+          fullscreenViewers: 1,
+          totalViews: 9,
+          totalFullscreenOpens: 1,
+        },
+      ],
+    } as never);
     const { getMyPhotoStats } = await import('../api/analytics');
 
     const stats = await getMyPhotoStats();
 
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url.endsWith('/signals/media-stats')).toBe(true);
-    expect(url).not.toMatch(/userId|u1/);
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer jwt-abc');
-    expect(stats['media/u1/a.jpg'].uniqueViewers).toBe(3);
+    expect(spy).toHaveBeenCalledWith({});
+    // The generated PhotoStats model, keyed by mediaId.
+    expect(stats['media/u1/a.jpg']).toMatchObject({ uniqueViewers: 3, viewersMoreThan10: 1, totalViews: 9 });
   });
 
-  it('surfaces a server error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 401 })));
-    vi.stubGlobal('window', { location: { hostname: 'x', origin: 'https://x' } });
+  it('surfaces a server error as an ApiError with the status', async () => {
+    const { sdkClient } = await import('../api/sdk-client');
+    vi.spyOn(sdkClient, 'getMediaStats').mockRejectedValue(
+      Object.assign(new Error('UnknownError'), { $metadata: { httpStatusCode: 401 } })
+    );
     const { getMyPhotoStats } = await import('../api/analytics');
-    await expect(getMyPhotoStats()).rejects.toThrow(/401/);
+    await expect(getMyPhotoStats()).rejects.toMatchObject({ name: 'ApiError', status: 401 });
   });
 });
 

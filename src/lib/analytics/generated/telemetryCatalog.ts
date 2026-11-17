@@ -1,15 +1,15 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 340e30d11ba7361ca84e451fa11ea6b7b2cf2b2ba9682d26e8e3a8e7e96a220f
+// telemetry-integrity: sha256 963a0e6c686534101845009a720ed931f8816e765ead51d78fce4706e8ac9258
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
-// Catalog version 1.23.0, hash 58e41d4e7844382f.
+// Catalog version 1.24.0, hash 139c2761335ed6ce.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.23.0";
-export const TELEMETRY_CATALOG_HASH = "58e41d4e7844382f";
+export const TELEMETRY_CATALOG_VERSION = "1.24.0";
+export const TELEMETRY_CATALOG_HASH = "139c2761335ed6ce";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -712,9 +712,9 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.select_cancel": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.select_ask_mr_onehook": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.select_copy": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
-  "chat.location_share": { screen: "CHAT", kind: "button", actions: ["tap"], values: ["current", "live"], platforms: ["ios"] },
-  "chat.live_location_duration": { screen: "CHAT", kind: "menu_item", actions: ["tap", "dismiss"], values: ["min_15", "hour_1", "hour_8"], platforms: ["ios"] },
-  "chat.live_location_stop": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.location_share": { screen: "CHAT", kind: "button", actions: ["tap"], values: ["current", "live"], platforms: ["web", "ios", "android"] },
+  "chat.live_location_duration": { screen: "CHAT", kind: "menu_item", actions: ["tap", "dismiss"], values: ["min_15", "hour_1", "hour_8"], platforms: ["web", "ios", "android"] },
+  "chat.live_location_stop": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.location_open": { screen: "CHAT", kind: "button", actions: ["tap"], values: ["in_app", "apple_maps", "google_maps"], platforms: ["web", "ios", "android"] },
   "chat.location_directions": { screen: "CHAT", kind: "button", actions: ["tap"], values: ["apple_maps", "google_maps"], platforms: ["web", "ios", "android"] },
   "chat.contact_open": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },

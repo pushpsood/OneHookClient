@@ -758,6 +758,16 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     [createMessageId, myId, matchId, encryptionManager, recipientId]
   );
 
+  const sealPayload = useCallback(
+    async (plaintext: string): Promise<string> => {
+      if (!encryptionManager || !recipientId || !matchId) {
+        throw new Error('This conversation is not ready to send yet.');
+      }
+      return encryptionManager.encryptMessage(recipientId, matchId, plaintext);
+    },
+    [encryptionManager, recipientId, matchId]
+  );
+
   /**
    * Runs one outgoing-attachment attempt for an already-registered pending upload. Shared by the first
    * send and by retry so the two can never drift apart.
@@ -981,6 +991,11 @@ export function useChatMessages(matchId: string, recipientId?: string) {
      * the same envelope, AAD and error mapping as message bodies.
      */
     decryptPayload: decryptInbound,
+    /**
+     * Seals a plaintext for this conversation exactly like a message body (same wire-v2 envelope,
+     * targets and `matchId` AAD) without sending it: the `ciphertext` of a live-location update.
+     */
+    sealPayload,
   };
 }
 

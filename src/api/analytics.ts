@@ -1,95 +1,40 @@
 /**
- * Analytics client-signal ingest transport (`POST /signals`).
+ * Analytics client-signal ingest (`IngestSignals`, `POST /signals`) and photo stats (`GetMediaStats`).
  *
- * This is the analytics counterpart to {@link file://./rest.ts}: the generated Smithy SDK
- * (`onehook-api-client`) does not model the ingest endpoint, so — exactly like the block/distance/
- * swipe endpoints — the call goes through a thin authenticated REST helper that authenticates
- * IDENTICALLY to `sdk-client.ts` (the Cognito **ID token**, falling back to the access token, is
- * read from the Amplify auth session and attached as a `Bearer` token). Because the ingest is now
- * routed under the unified `api.<stage>.onehook.club` domain (see api-stack's `signals*` behavior),
- * the request rides the same base URL + Cognito authorizer as every other onehook-api-client call.
- *
- * The server re-stamps identity and time and marks every signal `unverified`, so the client only
- * has to be well-behaved: send the caller's JWT, name the platform via `X-OneHook-Platform`, and
- * POST `{ signals: [...] }`. On any failure this throws {@link ApiError} so the batching client
+ * Both go through the generated `onehook-api-client` SDK (`sdkClient`, analytics.smithy), so they use
+ * the same base URL and Cognito authorizer as every other call. The server re-stamps identity and time
+ * and marks every signal `unverified`; the client sends the caller's JWT (SDK middleware), names the
+ * platform (the `X-OneHook-Platform` header, `platform` in the model) and the batch. On any failure
+ * this throws {@link ApiError} so the batching client
  * ({@link file://../lib/analytics/analyticsClient.ts}) re-queues and retries.
  */
-import { apiBaseUrl } from '../utils/env.config';
+import type { RawSignal } from 'onehook-api-client';
 import { ApiError } from '../lib/api-client';
 import type { AnalyticsTransport, Signal } from '../lib/analytics/analyticsClient';
-
-/**
- * Reads the caller's Cognito JWT the same way `sdk-client.ts`/`rest.ts` do: the ID token first (the
- * API Gateway Cognito authorizer validates it), falling back to the access token. Returns null when
- * unauthenticated so the request is still attempted (and rejected by the server) rather than
- * throwing here.
- */
-async function getAuthToken(): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
-  try {
-    const { fetchAuthSession } = await import('aws-amplify/auth');
-    const session = await fetchAuthSession();
-    return session.tokens?.idToken?.toString() || session.tokens?.accessToken?.toString() || null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Resolve `/signals` against the configured base URL, mirroring `rest.ts`: on localhost the dev
- * origin is used (the Vite proxy forwards to the backend), otherwise the absolute `apiBaseUrl`.
- */
-function resolveUrl(path: string): string {
-  const suffix = path.startsWith('/') ? path : `/${path}`;
-  if (
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ) {
-    return window.location.origin + suffix;
-  }
-  if (apiBaseUrl) {
-    if (apiBaseUrl.startsWith('http')) return apiBaseUrl + suffix;
-    if (typeof window !== 'undefined' && window.location?.origin) {
-      return window.location.origin + suffix;
-    }
-    return apiBaseUrl + suffix;
-  }
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin + suffix;
-  }
-  return `http://localhost:3000${suffix}`;
-}
+import { callSdk, sdkClient } from './sdk-client';
 
 /**
  * POST a batch of behavioural signals to the ingest. Throws {@link ApiError} on transport failure
  * or a non-2xx response so the caller re-queues.
  */
 export async function sendSignals(batch: Signal[]): Promise<void> {
-  const token = await getAuthToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-    // Lets the server attribute the platform without trusting the body.
-    'X-OneHook-Platform': 'web',
-  };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  let res: Response;
   try {
-    res = await fetch(resolveUrl('/signals'), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ signals: batch }),
+    await sdkClient.ingestSignals({
+      // Lets the server attribute the platform without trusting the body.
+      platform: 'web',
+      signals: batch.map((s) => ({
+        clientEventId: s.clientEventId,
+        type: s.type,
+        timestamp: s.timestamp,
+        attributes: s.attributes as RawSignal['attributes'],
+      })),
     });
   } catch (err) {
-    throw new ApiError(
-      err instanceof Error ? err.message : 'Network request failed',
-      0,
-      'NETWORK_ERROR'
-    );
-  }
-  if (!res.ok) {
-    throw new ApiError('analytics ingest failed', res.status, 'ANALYTICS_INGEST_FAILED');
+    const status = (err as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+    if (status === undefined) {
+      throw new ApiError(err instanceof Error ? err.message : 'Network request failed', 0, 'NETWORK_ERROR', err);
+    }
+    throw new ApiError('analytics ingest failed', status, 'ANALYTICS_INGEST_FAILED', err);
   }
 }
 
@@ -118,12 +63,7 @@ export interface PhotoStats {
  * Cognito JWT, so a client can never read someone else's stats. Returns mediaId → stats.
  */
 export async function getMyPhotoStats(): Promise<Record<string, PhotoStats>> {
-  const token = await getAuthToken();
-  const res = await fetch(resolveUrl('/signals/media-stats'), {
-    method: 'GET',
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  });
-  if (!res.ok) throw new ApiError(`media stats failed: ${res.status}`, res.status);
-  const body = (await res.json()) as { photos?: PhotoStats[] };
-  return Object.fromEntries((body.photos ?? []).map((p) => [p.mediaId, p]));
+  const out = await callSdk(() => sdkClient.getMediaStats({}));
+  const photos = (out.photos ?? []) as unknown as PhotoStats[];
+  return Object.fromEntries(photos.map((p) => [p.mediaId, p]));
 }

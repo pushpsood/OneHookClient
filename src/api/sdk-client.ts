@@ -1,6 +1,8 @@
 import { OneHook } from 'onehook-api-client';
 import { apiBaseUrl, cognitoRegion } from '../utils/env.config';
 import { FetchHttpHandler } from '@smithy/fetch-http-handler';
+import { ApiError } from '../lib/api-client';
+import { errorCode, errorMessage, errorStatus } from '../lib/api-errors';
 
 async function getAuthToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
@@ -111,3 +113,31 @@ sdkClient.middlewareStack.add(
   },
   { step: 'finalizeRequest', name: 'stripAmzSdkHeaders', priority: 'low' }
 );
+
+/**
+ * Runs one SDK call and rethrows any failure as the shared {@link ApiError}, so UI code that matches
+ * on `ApiError` (status, `code`, message) behaves the same whichever API it called. The SDK exception
+ * is kept as `details`, so `errorGaps` and other body fields stay readable.
+ */
+export async function callSdk<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (err) {
+    throw toApiError(err);
+  }
+}
+
+export function toApiError(err: unknown): ApiError {
+  if (err instanceof ApiError) return err;
+  const status = errorStatus(err);
+  if (status === undefined) {
+    // No HTTP response: a network or transport failure.
+    return new ApiError(errorMessage(err, 'Network request failed'), 0, 'NETWORK_ERROR', err);
+  }
+  return new ApiError(
+    errorMessage(err, `Request failed with status ${status}`),
+    status,
+    errorCode(err),
+    err
+  );
+}

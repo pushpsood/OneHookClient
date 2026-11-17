@@ -111,7 +111,7 @@ export function isStructuredFrame(plaintext: string): boolean {
   return plaintext.charCodeAt(0) === STRUCTURED_FRAME_BYTE;
 }
 
-/** Produces a framed plaintext. Web does not send yet; this exists for tests and future senders. */
+/** Produces a framed plaintext: `0x03 || JSON(payload)`. Sealed afterwards like any message body. */
 export function frameStructuredContent(payload: Record<string, unknown>): string {
   return String.fromCharCode(STRUCTURED_FRAME_BYTE) + JSON.stringify(payload);
 }
@@ -119,6 +119,130 @@ export function frameStructuredContent(payload: Record<string, unknown>): string
 /** Rounds to the contract's 6 decimals. */
 export function roundCoordinate(value: number): number {
   return Number(value.toFixed(COORDINATE_DECIMALS));
+}
+
+// ── Senders ──────────────────────────────────────────────────────────────────
+//
+// The builders below produce exactly the contract's JSON (chat-location-contact.md, "Payloads"):
+// coordinates rounded to 6 decimals, optional fields omitted rather than null, `v: 1`. They throw on
+// a coordinate out of range: sending a pin nobody can open is a bug, not something to round away.
+
+/** One position fix from the device, in the units the payloads carry. `at` is epoch ms. */
+export interface LocationFix {
+  lat: number;
+  lon: number;
+  accuracyM?: number;
+  headingDeg?: number;
+  speedMps?: number;
+  at: number;
+}
+
+function requireCoordinates(lat: number, lon: number): { lat: number; lon: number } {
+  const la = latitude(lat);
+  const lo = longitude(lon);
+  if (la === null || lo === null) throw new Error('A location needs a valid latitude and longitude.');
+  return { lat: la, lon: lo };
+}
+
+/** Accuracy is whole-ish metres on the wire; a negative or NaN value means "unknown" and is omitted. */
+function wireAccuracy(value: number | undefined): number | undefined {
+  const v = nonNegative(value);
+  return v === undefined ? undefined : Math.round(v * 10) / 10;
+}
+
+/** The `location` message for the device's current position (web never sends a named place). */
+export function buildLocationPayload(fix: LocationFix): Record<string, unknown> {
+  const { lat, lon } = requireCoordinates(fix.lat, fix.lon);
+  const out: Record<string, unknown> = { v: STRUCTURED_CONTENT_VERSION, type: 'location', lat, lon };
+  const accuracyM = wireAccuracy(fix.accuracyM);
+  if (accuracyM !== undefined) out.accuracyM = accuracyM;
+  out.capturedAt = Math.round(fix.at);
+  return out;
+}
+
+/** The `live_location` message that starts a share (its bubble; later positions move its pin). */
+export function buildLiveLocationStartPayload(start: {
+  sessionId: string;
+  startedAt: number;
+  expiresAt: number;
+  fix: LocationFix;
+}): Record<string, unknown> {
+  if (!sessionId(start.sessionId)) throw new Error('A live share needs a valid sessionId.');
+  if (!(start.expiresAt > start.startedAt)) throw new Error('A live share must end after it starts.');
+  const { lat, lon } = requireCoordinates(start.fix.lat, start.fix.lon);
+  const out: Record<string, unknown> = {
+    v: STRUCTURED_CONTENT_VERSION,
+    type: 'live_location',
+    sessionId: start.sessionId,
+    startedAt: Math.round(start.startedAt),
+    expiresAt: Math.round(start.expiresAt),
+    lat,
+    lon,
+  };
+  const accuracyM = wireAccuracy(start.fix.accuracyM);
+  if (accuracyM !== undefined) out.accuracyM = accuracyM;
+  return out;
+}
+
+/** The `live_location_update` sealed into `publishLiveLocation`'s ciphertext. Never a chat message. */
+export function buildLiveLocationUpdatePayload(sessionIdValue: string, fix: LocationFix): Record<string, unknown> {
+  if (!sessionId(sessionIdValue)) throw new Error('A live update needs a valid sessionId.');
+  const { lat, lon } = requireCoordinates(fix.lat, fix.lon);
+  const out: Record<string, unknown> = {
+    v: STRUCTURED_CONTENT_VERSION,
+    type: 'live_location_update',
+    sessionId: sessionIdValue,
+    lat,
+    lon,
+  };
+  const accuracyM = wireAccuracy(fix.accuracyM);
+  if (accuracyM !== undefined) out.accuracyM = accuracyM;
+  if (finite(fix.headingDeg) && fix.headingDeg >= 0 && fix.headingDeg < 360) {
+    // 359.6 rounds to 360, which the decoder rejects: wrap it to 0 (north) instead.
+    out.headingDeg = Math.round(fix.headingDeg) % 360;
+  }
+  const speedMps = nonNegative(fix.speedMps);
+  if (speedMps !== undefined) out.speedMps = Math.round(speedMps * 10) / 10;
+  out.at = Math.round(fix.at);
+  return out;
+}
+
+/**
+ * The `contact` message. Only the phones and emails passed in are sent (the caller applies the
+ * member's selection first). Blank entries are dropped, strings are cleaned the same way the decoder
+ * cleans them, and a thumbnail over 24 KB of base64 (or not base64) is dropped rather than sent.
+ * Throws when nothing identifies the contact (no name, phone or email).
+ */
+export function buildContactPayload(contact: {
+  displayName?: string;
+  givenName?: string;
+  familyName?: string;
+  organization?: string;
+  phones: ContactEntry[];
+  emails: ContactEntry[];
+  thumbnailBase64?: string;
+}): Record<string, unknown> {
+  const givenName = text(contact.givenName);
+  const familyName = text(contact.familyName);
+  const organization = text(contact.organization);
+  const phones = contactEntries(contact.phones);
+  const emails = contactEntries(contact.emails);
+  const displayName =
+    text(contact.displayName) ||
+    text([givenName, familyName].filter(Boolean).join(' ')) ||
+    organization ||
+    phones[0]?.value ||
+    emails[0]?.value;
+  if (!displayName) throw new Error('A contact needs a name, a phone number or an email address.');
+  const out: Record<string, unknown> = { v: STRUCTURED_CONTENT_VERSION, type: 'contact', displayName };
+  if (givenName) out.givenName = givenName;
+  if (familyName) out.familyName = familyName;
+  if (organization) out.organization = organization;
+  out.phones = phones;
+  out.emails = emails;
+  const thumb = thumbnail(contact.thumbnailBase64);
+  if (thumb) out.thumbnailBase64 = thumb;
+  return out;
 }
 
 function finite(value: unknown): value is number {

@@ -10,7 +10,11 @@ import { isValidElement, type ReactElement, type ReactNode } from 'react';
  * screen" action and the Settings > General switch that brings it back (SetMatchingTabHidden).
  * Server rendering runs no effects, so nothing here reaches the network unless a test calls an API.
  */
-vi.mock('../api/sdk-client', () => ({ sdkClient: {} }));
+const sdk = vi.hoisted(() => ({ setMatchingTabHidden: vi.fn() }));
+vi.mock('../api/sdk-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/sdk-client')>()),
+  sdkClient: sdk,
+}));
 
 import { ToastProvider } from '../components/common/Toast';
 import { LockedDiscoverChips, MatchingIntroView, MATCHING_INTRO_COPY } from '../features/matching/MatchingIntroView';
@@ -218,32 +222,31 @@ describe('Settings > General: Show Matching tab', () => {
 describe('StateApi.setMatchingTabHidden (PUT /state/matching/tab-hidden)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('sends {hidden} and returns the server’s answer', async () => {
-    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ hidden: true }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+  it('sends {hidden} through the SDK (SetMatchingTabHidden) and returns the server’s answer', async () => {
+    sdk.setMatchingTabHidden.mockReset().mockResolvedValue({ $metadata: {}, hidden: true });
     await expect(StateApi.setMatchingTabHidden(true)).resolves.toBe(true);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toMatch(/\/state\/matching\/tab-hidden$/);
-    expect(init.method).toBe('PUT');
-    expect(JSON.parse(String(init.body))).toEqual({ hidden: true });
+    expect(sdk.setMatchingTabHidden).toHaveBeenCalledWith({ hidden: true });
   });
 
   it('showing it again sends hidden:false', async () => {
-    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ hidden: false }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
+    sdk.setMatchingTabHidden.mockReset().mockResolvedValue({ $metadata: {}, hidden: false });
     await expect(StateApi.setMatchingTabHidden(false)).resolves.toBe(false);
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toEqual({ hidden: false });
+    expect(sdk.setMatchingTabHidden).toHaveBeenCalledWith({ hidden: false });
   });
 
   it('a 400 or 500 rejects with the shared ApiError', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(JSON.stringify({ error: 'hidden is required', code: 'BAD_REQUEST' }), { status: 400 }))
+    sdk.setMatchingTabHidden.mockReset().mockRejectedValue(
+      Object.assign(new Error('UnknownError'), {
+        $metadata: { httpStatusCode: 400 },
+        error: 'hidden is required',
+        code: 'BAD_REQUEST',
+      })
     );
     const err = await StateApi.setMatchingTabHidden(true).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(400);
     expect((err as ApiError).code).toBe('BAD_REQUEST');
+    expect((err as ApiError).message).toBe('hidden is required');
   });
 
   it('the state snapshot reads matchingTabHidden; absent means shown', () => {

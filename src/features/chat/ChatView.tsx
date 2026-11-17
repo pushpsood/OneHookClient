@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Inbox,
   PauseCircle,
+  Radio,
 } from 'lucide-react';
 import type { BlockReason } from 'onehook-api-client';
 import type { ChatMessageDTO, Hook, UserProfile, UserStateSnapshot } from '../../types';
@@ -82,6 +83,23 @@ import {
   type LiveLocationContext,
 } from '../../components/chat/StructuredMessageBubble';
 import { useLiveLocations } from '../../hooks/use-live-locations';
+import { liveSharing, useLiveSharing } from '../../hooks/use-live-sharing';
+import {
+  TAB_BOUND_COPY,
+  endNotice,
+  makeLiveWindow,
+  newLiveSessionId,
+  withLocalEnds,
+} from '../../lib/live-location-sharing';
+import { formatClockTime, mergeLiveSession } from '../../lib/live-location';
+import {
+  buildLiveLocationStartPayload,
+  buildLocationPayload,
+  frameStructuredContent,
+  type LocationFix,
+} from '../../lib/chat-structured';
+import { LocationShareSheet } from '../../components/chat/LocationShareSheet';
+import { ContactShareSheet, useContactShare } from '../../components/chat/ContactShareSheet';
 import { AttachmentComposer } from '../../components/chat/AttachmentComposer';
 import {
   decodeMessagePlaintext,
@@ -143,6 +161,17 @@ export function ChatView({
   const [wallpaper, setWallpaper] = useChatWallpaper();
   const bumpRequests = useAppStore((s) => s.bumpRequests);
   const matchingOn = isMatchingOn(userState);
+
+  // A live share that ends by itself (expiry, stopped on another device, hook ended or paused, server
+  // refusal, location access revoked) says so once. Stop here needs no explanation.
+  useEffect(
+    () =>
+      liveSharing().onEnd((end) => {
+        const notice = endNotice(end.reason);
+        if (notice) showToast(notice, end.reason === 'expired' || end.reason === 'ended_elsewhere' ? 'info' : 'error');
+      }),
+    [showToast]
+  );
 
   const [distances, setDistances] = useState<Record<string, number | null>>({});
   const [selection, setSelection] = useState<Selection>(activeMatchId || MR_ONEHOOK);
@@ -1021,14 +1050,31 @@ function MatchMessageBody({
       return <p className="text-[10px] uppercase tracking-[0.2em] opacity-70">Preparing…</p>;
     }
     if (decoded.type === 'structured') {
-      // Location, live location or contact (0x03). Web receives and opens these; it never re-sends one.
+      // Location, live location or contact (0x03), from either member.
       return (
-        <StructuredMessageBubble
-          content={decoded.content}
-          mine={mine}
-          sentAt={message.timestamp}
-          live={live}
-        />
+        <>
+          <StructuredMessageBubble
+            content={decoded.content}
+            mine={mine}
+            sentAt={message.timestamp}
+            live={live}
+          />
+          {message.status === 'FAILED' && (
+            <div className="mt-2 text-[10px] text-red-300 flex items-center gap-1">
+              <span>Didn&rsquo;t send</span>
+              {/* A live share that failed to start is not re-sent later: its window has moved on. */}
+              {decoded.content.type !== 'live_location' && (
+                <button
+                  onClick={() => onRetryText(message.ciphertext)}
+                  {...trackProps(UiElement.CHAT_RETRY)}
+                  className="underline hover:opacity-70"
+                >
+                  Try again
+                </button>
+              )}
+            </div>
+          )}
+        </>
       );
     }
     if (decoded.type === 'attachment') {
@@ -1125,19 +1171,36 @@ function MatchConversation({
     hasUndecryptable,
     historyHorizon,
     decryptPayload,
+    sealPayload,
   } = useChatMessages(matchId, peerId);
   // Live-location shares: running shares on open, then onLiveLocation. Positions open on device.
   const liveLocations = useLiveLocations(matchId, decryptPayload);
+  // This tab's own sharing (the tab-bound engine): the running share here, and shares it just ended so
+  // their bubbles read "Ended" at once instead of after the server's echo.
+  const sharing = useLiveSharing();
+  const myShare = sharing.shares[matchId];
+  const sessions = useMemo(
+    () => withLocalEnds(liveLocations.sessions, sharing.ended, matchId, currentUserId, Date.now(), mergeLiveSession),
+    [liveLocations.sessions, sharing.ended, matchId, currentUserId]
+  );
+  const stopShare = useCallback(
+    (sessionId: string) => void liveSharing().stopRemote(matchId, sessionId),
+    [matchId]
+  );
   const liveContext: LiveLocationContext = useMemo(
     () => ({
-      sessions: liveLocations.sessions,
+      sessions,
       loadedAt: liveLocations.loadedAt,
       currentUserId,
       peerId,
       peerName,
+      onStopShare: stopShare,
+      sharingHereSessionId: myShare?.sessionId,
     }),
-    [liveLocations.sessions, liveLocations.loadedAt, currentUserId, peerId, peerName]
+    [sessions, liveLocations.loadedAt, currentUserId, peerId, peerName, stopShare, myShare?.sessionId]
   );
+  const [locationOpen, setLocationOpen] = useState(false);
+  const contactShare = useContactShare();
   const [input, setInput] = useState('');
 
   // Snapshot of decrypted messages for the optional evidence share. Text comes from the SAME local
@@ -1312,6 +1375,54 @@ function MatchConversation({
     [dispatchAttachment]
   );
 
+  /**
+   * Sends a location or contact card: framed as structured content (0x03) and sealed by sendMessage
+   * like any text, with no contentType, so the backend cannot tell it from a typed message. Throws a
+   * message for the sheet to show.
+   */
+  const sendStructured = useCallback(
+    async (payload: Record<string, unknown>) => {
+      let sent: Awaited<ReturnType<typeof sendMessage>>;
+      try {
+        sent = await sendMessage(frameStructuredContent(payload));
+      } catch (err) {
+        if (isConversationSuspended(err)) {
+          onSuspended?.();
+          throw new Error(`${HOOK_COPY.suspendedTitle}.`);
+        }
+        throw err;
+      }
+      if (!sent) throw new Error("This chat isn't ready yet. Try again in a moment.");
+      eligibility.recheck();
+    },
+    [sendMessage, onSuspended, eligibility.recheck]
+  );
+
+  const sendCurrentLocation = useCallback(
+    (fix: LocationFix) => sendStructured(buildLocationPayload(fix)),
+    [sendStructured]
+  );
+
+  /**
+   * Starts a live share from this tab: stop the one running here first (one share per member per
+   * conversation), send the `live_location` message, then hand the share to the tab's engine, which
+   * publishes the first position at once and keeps publishing until it ends.
+   */
+  const startLiveShare = useCallback(
+    async (fix: LocationFix, durationMs: number) => {
+      const engine = liveSharing();
+      if (engine.share(matchId)) await engine.stop(matchId);
+      const sessionId = newLiveSessionId();
+      const { startedAt, expiresAt } = makeLiveWindow(durationMs, Date.now());
+      await sendStructured(buildLiveLocationStartPayload({ sessionId, startedAt, expiresAt, fix }));
+      await engine.begin(
+        { matchId, sessionId, startedAt, expiresAt, userId: currentUserId, peerName, seal: sealPayload },
+        fix
+      );
+    },
+    [matchId, currentUserId, peerName, sealPayload, sendStructured]
+  );
+
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -1359,6 +1470,29 @@ function MatchConversation({
           <p className="text-xs leading-relaxed">
             <span className="font-semibold">{HOOK_COPY.suspendedTitle}.</span> {HOOK_COPY.suspendedBody}
           </p>
+        </div>
+      )}
+      {myShare && (
+        <div
+          role="status"
+          className="shrink-0 px-4 py-2.5 flex items-center gap-3 border-b border-green-600/30 bg-green-500/10 text-green-900 dark:text-green-100"
+        >
+          <Radio className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <p className="text-xs leading-relaxed flex-1 min-w-0">
+            <span className="font-semibold">
+              Sharing your live location with {peerName} until {formatClockTime(myShare.expiresAt, Date.now())}.
+            </span>{' '}
+            {TAB_BOUND_COPY}
+          </p>
+          <button
+            type="button"
+            onClick={() => void liveSharing().stop(matchId)}
+            aria-label="Stop sharing your live location"
+            {...trackProps(UiElement.CHAT_LIVE_LOCATION_STOP)}
+            className="shrink-0 px-3 py-1 rounded-lg border border-current/40 text-xs font-semibold hover:bg-current/10 cursor-pointer"
+          >
+            Stop
+          </button>
         </div>
       )}
       <div className="shrink-0 h-10 px-4 flex items-center justify-end border-b border-border/60 bg-surface-card/60">
@@ -1487,8 +1621,27 @@ function MatchConversation({
             disabled={loading || Boolean(suspended)}
             onPickFile={(file, kind) => void handlePickFile(file, kind)}
             onVoiceNote={handleVoiceNote}
+            onPickLocation={() => setLocationOpen(true)}
+            onPickContact={contactShare.openContact}
           />
         }
+      />
+
+      <LocationShareSheet
+        open={locationOpen && !suspended}
+        peerName={peerName}
+        runningShare={myShare}
+        onClose={() => setLocationOpen(false)}
+        onSendCurrent={sendCurrentLocation}
+        onStartLive={startLiveShare}
+      />
+
+      <ContactShareSheet
+        state={suspended ? { ...contactShare.state, open: false } : contactShare.state}
+        peerName={peerName}
+        onPickAgain={contactShare.pickAgain}
+        onClose={contactShare.close}
+        onSend={sendStructured}
       />
 
       {/*

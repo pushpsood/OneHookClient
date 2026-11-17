@@ -2,16 +2,27 @@
 
 OneHook is an intentional dating platform designed for meaningful connections, one at a time.
 
+The current, maintained reference for this web client is the repository [README](../README.md)
+(configuration, routes, auth, E2EE, Mr OneHook, telemetry, deployment and infrastructure).
+
 ## 📚 Documents
 
-- [FRONTEND_PRODUCTION.md](./FRONTEND_PRODUCTION.md) — Technical guide on API integration, state management (Zustand), and production-ready architecture.
-- [LANDING_PAGE.md](./LANDING_PAGE.md) — Overview of the landing page design, philosophy, and customization.
-- [LEGAL_PAGES.md](./LEGAL_PAGES.md) — Comprehensive guide on Privacy Policy, Terms of Service, and Compliance (GDPR/CCPA).
-- [LOGIN_SETUP.md](./LOGIN_SETUP.md) — Documentation for the authentication flow and login setup.
+These notes cover single topics in more depth than the README and were checked against `src/`.
+The README stays the reference for configuration, auth, E2EE, Mr OneHook, telemetry and deployment.
 
-## 🛠️ Related Resources
+- [FRONTEND_PRODUCTION.md](./FRONTEND_PRODUCTION.md): Frontend architecture: source layout, backend integration (SDK, `fetch` helpers, GraphQL, view passes), state, hooks, error handling, build and deployment.
+- [LOGIN_SETUP.md](./LOGIN_SETUP.md): Sign-in methods (one-time code, password, Google, Apple), sessions and tokens, sign-out, and why invite redemption on the web shows an "install the app" notice.
+- [ONBOARDING_SKIP_LOGOUT.md](./ONBOARDING_SKIP_LOGOUT.md): The onboarding "Skip for now" action, which signs the user out (including E2EE key hygiene) and reopens onboarding on the next sign-in.
+- [LANDING_PAGE.md](./LANDING_PAGE.md): The landing page sections, copy sources, assets, animations, the mascot and the public Mr OneHook widget.
+- [LEGAL_PAGES.md](./LEGAL_PAGES.md): What the Privacy Policy, Terms and Contact pages contain, and where their text disagrees with the implementation.
+- [CRUX.md](../CRUX.md): Product and technical overview across all OneHook repositories; also the product context uploaded for Mr OneHook.
 
-- **App Code**: `../src/App.tsx`
+## 🛠 Related Resources
+
+- **App routes**: `../src/App.tsx` (member app shell: `../src/app/AppContent.tsx`)
 - **Global Store**: `../src/store/app-store.ts`
-- **API Client**: `../src/lib/api-client.ts`
+- **API Client**: `../src/api/sdk-client.ts` (generated `onehook-api-client` SDK; service wrappers in `../src/api/`). `../src/lib/api-client.ts` now holds only the shared `ApiError` type.
+- **Runtime Config**: `../src/config/deployment.config.ts` and `../src/utils/env.config.ts`
+- **Auth**: `../src/lib/cognito-auth.ts`
+- **E2EE**: `../src/lib/chat-encryption.ts`
 - **Build Config**: `../vite.config.ts`

@@ -9,8 +9,12 @@
  *    alias (`const doFetch = t.fetchImpl ?? fetch`). Any other use of `fetch` as a value is reported
  *    as unresolved, so an untracked alias can't hide a request.
  *  - `xhr.open(method, url)` on a `const xhr = new XMLHttpRequest()`.
- *  - `sdkClient.<op>(...)` / `(sdkClient as any).<op>(...)` / `sdkClient.send(new <Op>Command(...))`
- *    on the generated `onehook-api-client` (api/sdk-client.ts), and any `<Op>Command` imported from it.
+ *  - a call on one of the generated clients ({@link SDK_CLIENTS}), each from the package its API's owner
+ *    publishes: `<client>.<op>(...)` / `(<client> as any).<op>(...)` / `<client>.send(new <Op>Command(...))`,
+ *    and any `<Op>Command` imported from that package. Each client is tied to the service it may call:
+ *    `sdkClient` (`onehook-api-client`, OneHookBackend) the backend services, `mrOneHookClient`
+ *    (`onehook-mr-onehook-client`, OneHookUXEnhancement) MrOneHookService, `evidenceClient`
+ *    (`saha-equation-admin-portal-client`, OneHookAdminPortal) the portal's ModerationEvidenceService.
  *  - `navigator.sendBeacon`, `new EventSource`, `new WebSocket`: always unresolved (none exist today).
  *
  * How a URL resolves. The expression is evaluated into parts:
@@ -56,9 +60,13 @@ export interface ResolvedRoute {
   via?: string;
 }
 
+/** Which generated client a call went through: the Smithy service family it may reach. */
+export type SdkService = 'aws' | 'mr-onehook' | 'moderation-evidence';
+
 export interface SdkCall {
   file: string;
   line: number;
+  service: SdkService;
   operationId: string;
   /** Source text of the call, for messages. */
   call: string;
@@ -105,9 +113,44 @@ const BASE_FUNCTIONS: Readonly<Record<string, { base: Base; takesPath: boolean }
 };
 
 const ENV_CONFIG_MODULE = /(^|\/)utils\/env\.config$/;
-const SDK_CLIENT_MODULE = /(^|\/)sdk-client$/;
 const SDK_PACKAGE = 'onehook-api-client';
-const SDK_CLIENT_FILE = 'src/api/sdk-client.ts';
+
+/**
+ * The generated clients the app may call. Each identifier must be imported from `module` (outside
+ * the file that declares it), and only that file may construct its client class.
+ */
+export const SDK_CLIENTS: Readonly<
+  Record<string, { service: SdkService; module: RegExp; file: string; ctors: readonly string[]; subpath: string }>
+> = {
+  // `ctors` are constructors (`new X(...)`) or factories (`X(...)`) that build the client: only `file`
+  // may call them.
+  sdkClient: {
+    service: 'aws',
+    module: /(^|\/)sdk-client$/,
+    file: 'src/api/sdk-client.ts',
+    ctors: ['OneHook', 'OneHookClient'],
+    subpath: SDK_PACKAGE,
+  },
+  mrOneHookClient: {
+    service: 'mr-onehook',
+    module: /(^|\/)external-sdk-clients$/,
+    file: 'src/api/external-sdk-clients.ts',
+    ctors: ['MrOneHookService', 'MrOneHookServiceClient'],
+    subpath: 'onehook-mr-onehook-client',
+  },
+  /** A local `const evidenceClient = ...` built by `createModerationEvidenceClient` (evidence-api.ts). */
+  evidenceClient: {
+    service: 'moderation-evidence',
+    module: /(^|\/)external-sdk-clients$/,
+    file: 'src/api/external-sdk-clients.ts',
+    ctors: ['createPortalClient', 'ModerationEvidenceService', 'ModerationEvidenceServiceClient', 'AdmissionsService', 'AdmissionsServiceClient'],
+    subpath: 'saha-equation-admin-portal-client',
+  },
+};
+const SDK_SUBPATH_SERVICE: Readonly<Record<string, SdkService>> = {
+  ...Object.fromEntries(Object.values(SDK_CLIENTS).map((c) => [c.subpath, c.service])),
+  'saha-equation-admin-portal-client/moderation-evidence': 'moderation-evidence',
+};
 const REACT_DEPS_HOOKS = new Set(['useCallback', 'useEffect', 'useMemo', 'useLayoutEffect']);
 
 // ── Reading the sources ─────────────────────────────────────────────────────────────────────────
@@ -484,15 +527,27 @@ export function scanSources(inputs: SourceInput[]): ScanResult {
     };
     findAliases(file.sf);
 
-    const sdkImported = file.sf.statements.some(
-      (s) =>
-        ts.isImportDeclaration(s) &&
-        ts.isStringLiteral(s.moduleSpecifier) &&
-        SDK_CLIENT_MODULE.test(s.moduleSpecifier.text) &&
-        importedName(s, 'sdkClient')
-    );
+    /** Whether `name` may be used in this file: imported from its module, or a local `const` built there. */
+    const clientAvailable = (name: string): boolean => {
+      const spec = SDK_CLIENTS[name];
+      if (file.path === spec.file) return true;
+      return file.sf.statements.some((s) => {
+        if (!ts.isImportDeclaration(s) || !ts.isStringLiteral(s.moduleSpecifier) || !spec.module.test(s.moduleSpecifier.text)) return false;
+        // `evidenceClient` is a local const initialised from an import of the module (clientOf/createModerationEvidenceClient).
+        return name === 'evidenceClient' ? true : Boolean(importedName(s, name));
+      });
+    };
 
     const visit = (n: ts.Node) => {
+      // A client factory (e.g. createPortalClient) called outside the module that owns the client.
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+        for (const spec of Object.values(SDK_CLIENTS)) {
+          if (spec.ctors.includes(n.expression.text) && /^[a-z]/.test(n.expression.text) && file.path !== spec.file) {
+            unresolved(n, n, `a second ${n.expression.text}() SDK client outside ${spec.file}`);
+          }
+        }
+      }
+
       // fetch(...) and its aliases
       if (ts.isCallExpression(n)) {
         const callee = unwrap(n.expression);
@@ -559,24 +614,29 @@ export function scanSources(inputs: SourceInput[]): ScanResult {
           }
         } else if (ctor === 'EventSource' || ctor === 'WebSocket') {
           unresolved(n, n, `new ${ctor}() is not resolved by this scanner`);
-        } else if ((ctor === 'OneHook' || ctor === 'OneHookClient') && file.path !== SDK_CLIENT_FILE) {
-          unresolved(n, n, `a second ${ctor} SDK client outside ${SDK_CLIENT_FILE}`);
+        } else {
+          for (const spec of Object.values(SDK_CLIENTS)) {
+            if (spec.ctors.includes(ctor) && file.path !== spec.file) {
+              unresolved(n, n, `a second ${ctor} SDK client outside ${spec.file}`);
+            }
+          }
         }
       }
 
-      // The generated SDK client
-      if (ts.isIdentifier(n) && n.text === 'sdkClient' && isValueReference(n)) {
+      // The generated SDK clients
+      if (ts.isIdentifier(n) && Object.hasOwn(SDK_CLIENTS, n.text) && isValueReference(n)) {
         sdkReference(n);
       }
 
-      // `<Op>Command` imported from the SDK package
-      if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier) && n.moduleSpecifier.text === SDK_PACKAGE) {
+      // `<Op>Command` imported from the SDK package or one of its client subpaths
+      if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier) && SDK_SUBPATH_SERVICE[n.moduleSpecifier.text]) {
+        const service = SDK_SUBPATH_SERVICE[n.moduleSpecifier.text];
         const named = n.importClause?.namedBindings;
         if (named && ts.isNamedImports(named)) {
           for (const el of named.elements) {
             const imported = (el.propertyName ?? el.name).text;
             if (/^[A-Z]\w*Command$/.test(imported) && !el.isTypeOnly && !n.importClause?.isTypeOnly) {
-              result.sdkCalls.push({ file: file.path, line: lineOf(el), operationId: imported.slice(0, -'Command'.length), call: `import ${imported}` });
+              result.sdkCalls.push({ file: file.path, line: lineOf(el), service, operationId: imported.slice(0, -'Command'.length), call: `import ${imported}` });
             }
           }
         }
@@ -585,6 +645,8 @@ export function scanSources(inputs: SourceInput[]): ScanResult {
     };
 
     const sdkReference = (n: ts.Identifier) => {
+      const name = n.text;
+      const spec = SDK_CLIENTS[name];
       let expr: ts.Node = n;
       while (
         (ts.isParenthesizedExpression(expr.parent) || ts.isAsExpression(expr.parent) || ts.isNonNullExpression(expr.parent) || ts.isTypeAssertionExpression(expr.parent)) &&
@@ -593,35 +655,38 @@ export function scanSources(inputs: SourceInput[]): ScanResult {
         expr = expr.parent;
       }
       const access = expr.parent;
-      if (file.path === SDK_CLIENT_FILE) {
-        // The declaration and the middleware setup in sdk-client.ts itself.
+      if (file.path === spec.file) {
+        // The declaration and the middleware setup in the declaring file itself.
         if (ts.isPropertyAccessExpression(access) && access.expression === expr && access.name.text === 'middlewareStack') return;
-      } else if (!sdkImported) {
-        unresolved(n, n, 'sdkClient is not imported from api/sdk-client');
+        // stripSdkHeaders(mrOneHookClient as ...) in external-sdk-clients.ts.
+        if (ts.isCallExpression(access) && ts.isIdentifier(access.expression) && access.expression.text === 'stripSdkHeaders') return;
+      } else if (!clientAvailable(name)) {
+        unresolved(n, n, `${name} is not imported from its module`);
         return;
       }
       if (!ts.isPropertyAccessExpression(access) || access.expression !== expr) {
-        unresolved(n, n, 'sdkClient is used as a value; its calls cannot be traced');
+        unresolved(n, n, `${name} is used as a value; its calls cannot be traced`);
         return;
       }
       const call = access.parent;
       if (!ts.isCallExpression(call) || call.expression !== access) {
-        unresolved(n, access, `sdkClient.${access.name.text} is not called directly`);
+        unresolved(n, access, `${name}.${access.name.text} is not called directly`);
         return;
       }
       const op = access.name.text;
       if (op === 'send') {
         const arg = call.arguments[0] && unwrap(call.arguments[0]);
         if (arg && ts.isNewExpression(arg) && ts.isIdentifier(arg.expression) && /Command$/.test(arg.expression.text)) {
-          result.sdkCalls.push({ file: file.path, line: lineOf(call), operationId: arg.expression.text.slice(0, -'Command'.length), call: call.getText(file.sf) });
+          result.sdkCalls.push({ file: file.path, line: lineOf(call), service: spec.service, operationId: arg.expression.text.slice(0, -'Command'.length), call: call.getText(file.sf) });
         } else {
-          unresolved(n, call, 'sdkClient.send() without a `new <Op>Command(...)` argument');
+          unresolved(n, call, `${name}.send() without a \`new <Op>Command(...)\` argument`);
         }
         return;
       }
       result.sdkCalls.push({
         file: file.path,
         line: lineOf(call),
+        service: spec.service,
         operationId: op.charAt(0).toUpperCase() + op.slice(1),
         call: access.getText(file.sf),
       });

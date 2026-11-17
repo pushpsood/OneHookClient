@@ -11,7 +11,7 @@ const sdk = vi.hoisted(() => ({
   getChatSettings: vi.fn(),
   updateChatSettings: vi.fn(),
 }));
-vi.mock('../api/sdk-client', () => ({ sdkClient: sdk }));
+vi.mock('../api/sdk-client', () => ({ sdkClient: sdk, callSdk: <T,>(call: () => Promise<T>) => call() }));
 
 import { ChatSettingsApi, type ChatSettings } from '../api/rest';
 import {

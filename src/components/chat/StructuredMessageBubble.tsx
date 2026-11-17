@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Download, Mail, MapPin, Navigation, Phone } from 'lucide-react';
+import { AlertTriangle, CircleStop, Download, Mail, MapPin, Navigation, Phone } from 'lucide-react';
 import { UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
 import type {
   ContactContent,
@@ -27,11 +27,13 @@ import {
   type MapsApp,
 } from '../../lib/map-links';
 import { buildVCard, vCardFileName } from '../../lib/vcard';
+import { TAB_BOUND_COPY } from '../../lib/live-location-sharing';
 import { useNow } from '../../hooks/use-live-locations';
 
 /**
  * Renders a structured-content message (OneHookBackend/docs/chat-location-contact.md): a current
- * location, a live-location share or a contact card. Web receives and opens only.
+ * location, a live-location share or a contact card, from either member. The member's own running
+ * live share has a Stop button.
  *
  * PRIVACY: nothing here talks to a network. Maps are drawn on device as a tile-free card; the only way
  * coordinates leave the device is a link the user taps, to the maps app they picked. The vCard is built
@@ -46,6 +48,13 @@ export interface LiveLocationContext {
   currentUserId: string;
   peerId?: string;
   peerName: string;
+  /**
+   * Stops one of the member's own shares (this tab's, or one started on another device: the backend
+   * lets the owner stop any of theirs). Own live bubbles show a Stop button when present.
+   */
+  onStopShare?: (sessionId: string) => void;
+  /** The sessionId of the share this tab is running in the conversation, if any. */
+  sharingHereSessionId?: string;
 }
 
 interface StructuredMessageBubbleProps {
@@ -370,6 +379,23 @@ function LiveLocationCard({
       )}
       <MapActions target={{ lat: view.lat, lon: view.lon }} subject={subject} />
       <MapsHint live />
+      {mine && live.onStopShare && (
+        <div className="space-y-1 border-t border-current/15 pt-2">
+          {live.sharingHereSessionId === start.sessionId && (
+            <p className="text-[10px] opacity-70 leading-snug">{TAB_BOUND_COPY}</p>
+          )}
+          <button
+            type="button"
+            onClick={() => live.onStopShare?.(start.sessionId)}
+            aria-label="Stop sharing your live location"
+            {...trackProps(UiElement.CHAT_LIVE_LOCATION_STOP)}
+            className={ACTION_CLASS}
+          >
+            <CircleStop className="w-3.5 h-3.5" aria-hidden="true" />
+            Stop sharing
+          </button>
+        </div>
+      )}
     </div>
   );
 }

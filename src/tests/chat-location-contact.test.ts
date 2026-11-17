@@ -465,10 +465,10 @@ describe('location and contact telemetry on web (catalog 1.23.0)', () => {
     }
   });
 
-  it('leaves the send-side events as web gaps (web does not send yet)', () => {
+  it('emits the send-side events now that web sends locations (catalog 1.24.0)', () => {
     for (const name of ['CHAT_LOCATION_SHARE', 'CHAT_LIVE_LOCATION_DURATION', 'CHAT_LIVE_LOCATION_STOP'] as const) {
-      expect(webScope.has(UiElement[name])).toBe(false);
-      expect(referenced.has(name)).toBe(false);
+      expect(webScope.has(UiElement[name])).toBe(true);
+      expect(referenced.has(name)).toBe(true);
     }
   });
 });

@@ -7,6 +7,7 @@ import {
   saveLastKnownLocation,
 } from '../utils/location';
 import { MatchingApi } from '../api/matching';
+import { isPageForeground } from '../lib/browser-location';
 
 export type CoordinateSource = 'LIVE_GPS' | 'LAST_KNOWN' | 'PROFILE_CITY' | 'DEFAULT';
 
@@ -59,6 +60,11 @@ export function useUserLocation(
   );
 
   const requestLocation = useCallback(() => {
+    // Matching location is foreground-only: a hidden tab never prompts for, reads or sends it (the
+    // chat live-location share is separate, lib/browser-location.ts). The effect below retries once
+    // the page becomes visible.
+    if (!isPageForeground()) return;
+
     // Check if running in browser with geolocation available
     if (typeof window === 'undefined' || !navigator?.geolocation) {
       const fallback = resolveFallbackCoordinates(profileCityText);
@@ -135,7 +141,18 @@ export function useUserLocation(
       setLoading(false);
       return;
     }
-    requestLocation();
+    if (isPageForeground()) {
+      requestLocation();
+      return;
+    }
+    // Opened in a background tab: read the location the first time the member looks at the page.
+    const onVisible = () => {
+      if (!isPageForeground()) return;
+      document.removeEventListener('visibilitychange', onVisible);
+      requestLocation();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [requestLocation, enabled]);
 
   return {

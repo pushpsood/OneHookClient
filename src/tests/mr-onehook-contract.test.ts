@@ -3,10 +3,8 @@ import {
   buildMemberChatRequestBody,
   classifyMemberChatAvailability,
   isSessionErrorCode,
-  MEMBER_CHAT_PATH,
   parseMemberChatResponse,
   matchSuggestionNote,
-  PUBLIC_PRODUCT_CHAT_PATH,
 } from '../lib/mr-onehook-contract';
 import type { SelectedExcerpt } from '../lib/mr-onehook-excerpts';
 
@@ -21,13 +19,6 @@ const excerpt: SelectedExcerpt = {
   sentAt: '2026-10-04T10:00:00.000Z',
   text: 'I would really like to visit Japan.',
 };
-
-describe('endpoint paths', () => {
-  it('match the OneHook UX Enhancement backend routes', () => {
-    expect(PUBLIC_PRODUCT_CHAT_PATH).toBe('/api/public/product-chat');
-    expect(MEMBER_CHAT_PATH).toBe('/api/member/product-connection-chat');
-  });
-});
 
 describe('classifyMemberChatAvailability — entitlement/auth gating', () => {
   it('classifies 402 MESSAGE_LIMIT_REACHED as LIMIT_REACHED (free tier daily allowance)', () => {

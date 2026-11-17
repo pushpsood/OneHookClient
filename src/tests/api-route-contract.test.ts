@@ -1,22 +1,42 @@
 /**
- * Route contract: the web app calls only HTTP routes that are Smithy operations.
+ * API contract: every request the web app makes to a OneHook API goes through the generated
+ * `onehook-api-client` package. Nothing in src/ builds a OneHook URL or request by hand.
  *
- * Smithy (OneHookBackend/packages/api-models/model/smithy) is the single source of every API, and the
- * synced manifest src/lib/analytics/generated/apiManifest.ts lists each operation's
- * `{operationId, method, path, service}`. ./api-route-scan.ts finds every request in src/ (the REST
- * helpers in src/api, raw fetches to the API or to Mr. OneHook, XHR uploads, and the
- * `onehook-api-client` SDK calls) and resolves it. This test then requires:
+ * Each API's Smithy model is owned by the repo that serves it, and each owner's route manifest lists its
+ * operations as `{operationId, method, path, service}`: the backend's is synced to
+ * src/lib/analytics/generated/apiManifest.ts, Mr OneHook's and the portal's come from their packages
+ * (`<package>/manifest`). ./api-route-scan.ts finds every request in src/ (raw
+ * fetches, XHR, and calls on the generated clients) and resolves it. This test then requires:
  *
- *  - every resolved `method + path` to be a manifest operation of that origin (path-parameter names
- *    ignored): the API base against the AWS services, `chatbotUrl` against MrOneHookService, and
- *    `portalModerationBaseUrl` against the admin portal's ModerationEvidenceService (the path joined to
- *    the configured base URL's path, e.g. /api/p/onehook/gamma/moderation + /evidence/presign);
- *  - every SDK call (`sdkClient.getState(...)` → GetState, `new XCommand`) to be a manifest operationId;
- *  - every call site to resolve. A site the scanner can't resolve fails here unless it is listed in
- *    {@link EXCEPTIONS} with a reason; an exception that no longer matches fails too.
+ *  - NO hand-built request to an API: a raw `fetch`/XHR whose URL starts with the API base,
+ *    `chatbotUrl` or `portalModerationBaseUrl` fails, whatever its path. Use the client from the package
+ *    the API's owner publishes instead: `sdkClient` (`onehook-api-client`, OneHookBackend) for the backend,
+ *    `mrOneHookClient` (`onehook-mr-onehook-client`, OneHookUXEnhancement) for Mr OneHook,
+ *    `createModerationEvidenceClient` (`saha-equation-admin-portal-client`, OneHookAdminPortal) for the portal's
+ *    evidence API. A missing operation is added to that owner's Smithy model and published, never written
+ *    here;
+ *  - every SDK call (`sdkClient.getState(...)` → GetState, `new XCommand`) to be a manifest operation
+ *    of the service its client serves;
+ *  - every raw request left to go to a URL the API returned (presigned S3), listed in
+ *    {@link EXCEPTIONS} with a reason, and every call site to resolve. An exception that no longer
+ *    matches fails too.
  */
 import { describe, it, expect } from 'vitest';
-import { API_OPERATIONS, type ApiOperation } from '../lib/analytics/generated/apiManifest';
+import { API_OPERATIONS as BACKEND_OPERATIONS } from '../lib/analytics/generated/apiManifest';
+import { API_OPERATIONS as MR_ONEHOOK_OPERATIONS } from 'onehook-mr-onehook-client/manifest';
+import { API_OPERATIONS as PORTAL_OPERATIONS } from 'saha-equation-admin-portal-client/manifest';
+
+/** One manifest entry; the owners' manifests share this shape (their `auth` values differ). */
+interface ApiOperation {
+  readonly operationId: string;
+  readonly method: string;
+  readonly path: string;
+  readonly service: string;
+  readonly auth: string;
+}
+
+/** Every operation the web app may call, from each owner's manifest. */
+const API_OPERATIONS: readonly ApiOperation[] = [...BACKEND_OPERATIONS, ...MR_ONEHOOK_OPERATIONS, ...PORTAL_OPERATIONS];
 import { portalModerationBaseUrl } from '../utils/env.config';
 import {
   normalizePath,
@@ -25,6 +45,7 @@ import {
   type Base,
   type ResolvedRoute,
   type ScanResult,
+  type SdkService,
 } from './api-route-scan';
 
 const ROOT = new URL('../../', import.meta.url).pathname;
@@ -94,16 +115,23 @@ const EXCEPTIONS: readonly Exception[] = [
     reason:
       'PUT of the report evidence bundle to the presigned S3 URL (and method) that the portal evidence presign returned. It goes to S3, not to a OneHook API.',
   },
+  {
+    kind: 'site',
+    file: 'src/api/live-location.ts',
+    owner: 'stopOnUnload',
+    target: 'auth.endpoint',
+    count: 1,
+    reason:
+      'The stopLiveLocation GraphQL mutation sent to the AppSync endpoint as a keepalive fetch from pagehide, because the Amplify client cannot send during unload. It is AppSync GraphQL, not a Smithy REST route.',
+  },
 ];
 
 /**
  * Exported request helpers that no file in src/ calls, so they make no request today. Pinned so that
  * the first caller makes the scanner resolve (or report) it.
- *
- *  - createFetchTransport: the analytics SDK's generic transport factory. The app sends signals through
- *    api/analytics.ts (POST /signals, checked above) instead.
+ * (None today.)
  */
-const EXPECTED_UNCALLED_HELPERS = ['src/lib/analytics/analyticsClient.ts:createFetchTransport'];
+const EXPECTED_UNCALLED_HELPERS: string[] = [];
 
 const routeKey = (method: string, path: string) => `${method.toUpperCase()} ${normalizePath(path)}`;
 
@@ -154,6 +182,28 @@ const MANIFEST: Record<Base, Set<string>> = Object.fromEntries(
 ) as Record<Base, Set<string>>;
 const OPERATION_IDS = new Set(API_OPERATIONS.map((o) => o.operationId));
 
+/** Manifest services each generated client serves. */
+const SDK_SERVICES: Record<SdkService, (o: ApiOperation) => boolean> = {
+  aws: ofBase('api'),
+  'mr-onehook': (o) => o.service === 'mr-onehook',
+  'moderation-evidence': (o) => o.service === 'moderation-evidence',
+};
+const OPERATIONS_OF: Record<SdkService, Set<string>> = Object.fromEntries(
+  (Object.keys(SDK_SERVICES) as SdkService[]).map((svc) => [
+    svc,
+    new Set(API_OPERATIONS.filter(SDK_SERVICES[svc]).map((o) => o.operationId)),
+  ])
+) as Record<SdkService, Set<string>>;
+
+/** The Smithy operation a hand-built route corresponds to, for the error message. */
+function operationFor(r: ResolvedRoute): string {
+  const op = API_OPERATIONS.filter(ofBase(r.base)).find((o) => {
+    const rel = relativeToBase(o.path, BASE_PATH[r.base]);
+    return rel !== null && routeKey(o.method, rel) === routeKey(r.method, r.path);
+  });
+  return op ? `use the SDK operation ${op.operationId}` : 'not a Smithy operation either: add it to Smithy, then call it through the SDK';
+}
+
 const isRouteException = (r: ResolvedRoute, e: Exception): e is RouteException =>
   e.kind === 'route' && e.base === r.base && routeKey(e.method, e.path) === routeKey(r.method, r.path);
 
@@ -166,9 +216,13 @@ function violations(scan: ScanResult, exceptions: readonly Exception[]) {
     .filter((r) => !exceptions.some((e) => isRouteException(r, e)))
     .map((r) => `${where(r)} ${r.base} ${routeKey(r.method, r.path)}${r.via ? ` (via ${r.via})` : ''}`);
 
+  const handBuilt = scan.routes
+    .filter((r) => !exceptions.some((e) => isRouteException(r, e)))
+    .map((r) => `${where(r)} ${r.base} ${routeKey(r.method, r.path)}${r.via ? ` (via ${r.via})` : ''}: ${operationFor(r)}`);
+
   const unknownSdkCalls = scan.sdkCalls
-    .filter((c) => !OPERATION_IDS.has(c.operationId))
-    .map((c) => `${where(c)} ${c.call} -> ${c.operationId}`);
+    .filter((c) => !OPERATIONS_OF[c.service].has(c.operationId))
+    .map((c) => `${where(c)} ${c.call} -> ${c.operationId}${OPERATION_IDS.has(c.operationId) ? ` (an operation of another service than ${c.service})` : ''}`);
 
   const unresolved = scan.unresolved
     .filter((u) => !exceptions.some((e) => e.kind === 'site' && e.file === u.file && e.owner === u.owner && e.target === u.target))
@@ -182,7 +236,7 @@ function violations(scan: ScanResult, exceptions: readonly Exception[]) {
     return n === e.count ? [] : [`${e.file} ${e.owner}(${e.target}) matches ${n} call sites, expected ${e.count}`];
   });
 
-  return { unknownRoutes, unknownSdkCalls, unresolved, stale };
+  return { unknownRoutes, handBuilt, unknownSdkCalls, unresolved, stale };
 }
 
 describe('web → API route contract (Smithy manifest)', () => {
@@ -193,11 +247,15 @@ describe('web → API route contract (Smithy manifest)', () => {
     expect(v.unresolved).toEqual([]);
   });
 
+  it('no request to a OneHook API is built by hand: every one goes through the onehook-api-client SDK', () => {
+    expect(v.handBuilt).toEqual([]);
+  });
+
   it('every literal route is a Smithy operation of its origin', () => {
     expect(v.unknownRoutes).toEqual([]);
   });
 
-  it('every SDK command is a Smithy operation', () => {
+  it('every SDK command is a Smithy operation of the service its client serves', () => {
     expect(v.unknownSdkCalls).toEqual([]);
   });
 
@@ -211,27 +269,28 @@ describe('web → API route contract (Smithy manifest)', () => {
   });
 
   it('sees every request layer it is meant to check', () => {
-    const routesFrom = new Set(scan.routes.map((r) => `${r.file}${r.via ? `#${r.via}` : ''}`));
+    const layers = new Set(scan.sdkCalls.map((c) => `${c.service} ${c.file}`));
     for (const layer of [
-      'src/api/rest.ts#request',
-      'src/api/chat.ts#chatRest',
-      'src/api/analytics.ts',
-      'src/lib/mr-onehook.ts',
-      'src/lib/mr-onehook.ts#authorizedFetch',
-      'src/components/Chatbot/ChatbotWidget.tsx',
+      'aws src/api/rest.ts',
+      'aws src/api/chat.ts',
+      'aws src/api/analytics.ts',
+      'aws src/api/state.ts',
+      'aws src/api/identity.ts',
+      'aws src/api/profile.ts',
+      'aws src/api/matching.ts',
+      'aws src/api/liveness.ts',
+      'mr-onehook src/lib/mr-onehook.ts',
+      'mr-onehook src/components/Chatbot/ChatbotWidget.tsx',
+      'moderation-evidence src/features/moderation/report/evidence-api.ts',
     ]) {
-      expect(routesFrom, layer).toContain(layer);
-    }
-    const sdkFiles = new Set(scan.sdkCalls.map((c) => c.file));
-    for (const f of ['src/api/state.ts', 'src/api/identity.ts', 'src/api/profile.ts', 'src/api/matching.ts', 'src/api/liveness.ts']) {
-      expect(sdkFiles, f).toContain(f);
+      expect(layers, layer).toContain(layer);
     }
   });
 
-  it('checks the portal moderation evidence calls against ModerationEvidenceService', () => {
+  it('calls the portal moderation evidence API only through ModerationEvidenceService', () => {
     expect(BASE_PATH['admin-portal']).toMatch(/^\/api\/p\/[^/]+\/[^/]+\/moderation$/);
-    const portal = scan.routes.filter((r) => r.base === 'admin-portal').map((r) => routeKey(r.method, r.path));
-    expect([...new Set(portal)].sort()).toEqual(['POST /evidence/complete', 'POST /evidence/presign']);
+    const ops = scan.sdkCalls.filter((c) => c.service === 'moderation-evidence').map((c) => c.operationId);
+    expect([...new Set(ops)].sort()).toEqual(['CompleteEvidence', 'PresignEvidence']);
     expect([...MANIFEST['admin-portal']].sort()).toEqual(['POST /evidence/complete', 'POST /evidence/presign']);
   });
 });
@@ -260,6 +319,74 @@ describe('the route scanner itself', () => {
       'src/api/fake.ts:10 mr-onehook GET /state/blocks',
     ]);
     expect(v.unresolved).toEqual([]);
+  });
+
+  it('fails a hand-built request even when its route IS a Smithy operation, naming the SDK operation', () => {
+    const v = violations(
+      fake(`${header}
+        export const Fake = {
+          unblock: (id: string) => request('DELETE', \`/state/blocks/\${encodeURIComponent(id)}\`),
+          sessions: () => fetch(\`\${chatbotUrl}/api/member/product-connection-chat/sessions\`, { method: 'GET' }),
+        };`),
+      []
+    );
+    expect(v.unknownRoutes).toEqual([]);
+    expect(v.handBuilt).toEqual([
+      'src/api/fake.ts:8 api DELETE /state/blocks/{} (via request): use the SDK operation UnblockUser',
+      'src/api/fake.ts:9 mr-onehook GET /api/member/product-connection-chat/sessions: use the SDK operation ListChatSessions',
+    ]);
+  });
+
+  it('fails an SDK call on the wrong client for its service', () => {
+    const v = violations(
+      scanSources([
+        {
+          path: 'src/lib/fake.ts',
+          text: `
+            import { mrOneHookClient } from '../api/external-sdk-clients';
+            import { sdkClient } from '../api/sdk-client';
+            export const a = () => mrOneHookClient.getState({});
+            export const b = () => sdkClient.listChatSessions({});
+            export const c = () => mrOneHookClient.listChatSessions({});
+          `,
+        },
+      ]),
+      []
+    );
+    expect(v.unknownSdkCalls).toEqual([
+      'src/lib/fake.ts:4 mrOneHookClient.getState -> GetState (an operation of another service than mr-onehook)',
+      'src/lib/fake.ts:5 sdkClient.listChatSessions -> ListChatSessions (an operation of another service than aws)',
+    ]);
+  });
+
+  it('reports a generated client constructed outside its module', () => {
+    const scan = scanSources([
+      {
+        path: 'src/lib/fake.ts',
+        text: `
+          import { MrOneHookService } from 'onehook-mr-onehook-client';
+          export const mine = new MrOneHookService({ endpoint: 'https://x' });
+        `,
+      },
+    ]);
+    expect(scan.unresolved.map((u) => u.reason)).toContain(
+      'a second MrOneHookService SDK client outside src/api/external-sdk-clients.ts'
+    );
+  });
+
+  it('reports a portal client built outside its module', () => {
+    const scan = scanSources([
+      {
+        path: 'src/lib/fake.ts',
+        text: `
+          import { createPortalClient } from 'saha-equation-admin-portal-client';
+          export const mine = createPortalClient({ endpoint: 'https://x', tenant: { service: 'onehook', stage: 'gamma' } });
+        `,
+      },
+    ]);
+    expect(scan.unresolved.map((u) => u.reason)).toContain(
+      'a second createPortalClient() SDK client outside src/api/external-sdk-clients.ts'
+    );
   });
 
   it('fails a portal moderation route that is not a ModerationEvidenceService operation', () => {

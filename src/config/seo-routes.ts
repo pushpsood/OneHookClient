@@ -141,6 +141,8 @@ export const ROUTE_SEO: Record<string, RouteSeo> = {
     title: 'The Science of One — How OneHook Dating Works',
     description:
       'How OneHook turns attention, timing, profile meaning and what you ask for into considered introductions, while your match chats stay private.',
+    image: '/media/og/onehook-og-science.png',
+    imageAlt: 'The science of one: considered introductions from OneHook.',
   },
   '/pricing': {
     title: 'OneHook Pricing — Free, Super & Infinity Dating Plans',

@@ -23,11 +23,6 @@ export const MR_ONEHOOK_MOODS: readonly MrOneHookMood[] = [
   'Excited',
 ];
 
-/** Anonymous product chat used by the public landing widget. */
-export const PUBLIC_PRODUCT_CHAT_PATH = '/api/public/product-chat';
-/** Authenticated member product + connection chat (and its `/sessions` sub-routes). */
-export const MEMBER_CHAT_PATH = '/api/member/product-connection-chat';
-
 /** A single rendered turn in the local Mr.OneHook transcript. */
 export interface MrOneHookMessage {
   role: 'user' | 'assistant';
