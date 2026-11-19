@@ -1,7 +1,8 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 963a0e6c686534101845009a720ed931f8816e765ead51d78fce4706e8ac9258
+// telemetry-integrity: sha256 d6cec8a8fa32f0829743a77f20b9f22eaa3e5634975e8acfe5529d3a11b87e4d
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
-// Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync
+// Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync.
+// iOS / Android copies: pulled from onehook-api-client (telemetry/) by OneHookPlatform scripts/sync-api-specs.mjs.
 // Catalog version 1.24.0, hash 139c2761335ed6ce.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and

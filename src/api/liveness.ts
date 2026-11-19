@@ -20,13 +20,13 @@ export type LivenessStatus =
 export const LivenessApi = {
   /** Create a Rekognition streaming liveness session. */
   createSession: async (): Promise<{ sessionId: string }> => {
-    const res: any = await (sdkClient as any).createLivenessSession({});
+    const res = await sdkClient.createLivenessSession({});
     return { sessionId: res.sessionId };
   },
 
   /** Read the authoritative liveness verification status for the caller. */
   getStatus: async (): Promise<{ status: LivenessStatus }> => {
-    const res: any = await (sdkClient as any).getLivenessStatus({});
-    return { status: (res?.status as LivenessStatus) ?? 'NONE' };
+    const res = await sdkClient.getLivenessStatus({});
+    return { status: (res.status as LivenessStatus | undefined) ?? 'NONE' };
   },
 };
