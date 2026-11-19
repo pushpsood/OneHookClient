@@ -17,7 +17,9 @@
     NEVER edit the generated catalog file (TelemetryCatalog.* / telemetryCatalog.ts).
     Need a new id? Add it to OneHookBackend/packages/telemetry/src/catalog.ts, run
       npm run telemetry:generate && npm run telemetry:sync
-    and deploy the backend BEFORE shipping the client that uses it.
+    (web), publish onehook-api-client and bump it in OneHookPlatform
+      node scripts/sync-api-specs.mjs --bump onehook-api-client@<version>
+    (iOS, Android), and deploy the backend BEFORE shipping a client that uses it.
     Unregistered or wrong-platform ids are REJECTED by the server and never stored.
 
  3. Parity: an element may be missing on a platform ONLY if it is listed, with a
