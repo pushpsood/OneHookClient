@@ -49,7 +49,7 @@ new accounts are created in the apps.
 |---|---|---|---|
 | Must | Free | 1 | Mixed discovery deck; Mr OneHook limited to 10 messages per day |
 | Super | Paid | 1 | Choose a discovery category, save OneHook suggestions, saved Mr OneHook chats |
-| Infinity | Paid | 3 | Everything in Super, plus more connections and the option to hide past hooks from discovery |
+| Infinity | Paid | 1 | Everything in Super, plus 10 archived chats (each kept 90 days) and the option to hide past hooks from discovery |
 
 ### Hooks
 

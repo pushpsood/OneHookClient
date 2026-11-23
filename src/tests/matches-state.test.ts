@@ -28,6 +28,24 @@ describe('toUserStateSnapshot (GET /state/{userId})', () => {
     expect(snap.state).toBe(UserState.HOOKED);
   });
 
+  it('tolerates the archive fields State added (pending, decisionWindow, unarchiveReserved)', () => {
+    const res = {
+      ...base,
+      hooks: [],
+      activeConnections: 0,
+      effectiveCapacity: 1,
+      discoveryPaused: true,
+      unarchiveReserved: true,
+      pending: { hookRequestsIn: 2, hookRequestsOut: 1, archiveRequestsIn: 0, archiveRequestsOut: 1 },
+      decisionWindow: { matchId: 'match-new-2', heldRequestCount: 1 },
+    } satisfies UserStateResponse;
+    const snap = toUserStateSnapshot(res);
+    expect(snap.hooks).toEqual([]);
+    // The reserved slot pauses discovery: State folds it into discoveryPaused.
+    expect(snap.discoveryPaused).toBe(true);
+    expect(snap.state).toBe(UserState.HOOKED);
+  });
+
   it('defaults an absent matching mode to OFF (State: matching_status absent means OFF)', () => {
     const snap = toUserStateSnapshot({ ...base, hooks: [] });
     expect(snap.matching).toEqual({ status: 'OFF', generation: 0 });
@@ -69,10 +87,10 @@ describe('toUserStateSnapshot (GET /state/{userId})', () => {
 });
 
 describe('capacity from the backend-owned tier catalogue', () => {
-  it('MUST and SUPER hold one hook, INFINITY three (both hook origins count together, E29)', () => {
+  it('every tier holds one hook (both hook origins count together, E29)', () => {
     expect(maxConnectionsForTier(SubscriptionTier.MUST)).toBe(1);
     expect(maxConnectionsForTier(SubscriptionTier.SUPER)).toBe(1);
-    expect(maxConnectionsForTier(SubscriptionTier.INFINITY)).toBe(3);
+    expect(maxConnectionsForTier(SubscriptionTier.INFINITY)).toBe(1);
     // An unknown / missing tier fails closed to the free ceiling.
     expect(maxConnectionsForTier(undefined)).toBe(1);
   });

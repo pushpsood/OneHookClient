@@ -72,8 +72,11 @@ describe('downgrade, suspension and blocks', () => {
 
   it('a suspended chat is read-only and a CONVERSATION_SUSPENDED write re-reads the state', () => {
     const chat = read('features/chat/ChatView.tsx');
-    expect(chat).toContain('readOnlyReason={suspended ? HOOK_COPY.suspendedComposer : undefined}');
-    expect(chat).toContain('if (isConversationSuspended(err)) onSuspended?.();');
+    expect(chat).toContain('readOnlyReason={suspended ? readOnly.composer : undefined}');
+    expect(chat).toContain('if (refusedAsSuspended(err)) return;');
+    // An ARCHIVED refusal makes the chat read-only at once, with the archived copy.
+    expect(chat).toContain("if (reason === 'ARCHIVED') setArchived(true);");
+    expect(chat).toContain('const suspended = Boolean(suspendedByState) || archived;');
     expect(read('lib/call-errors.ts')).toContain("err.errorType === 'CONVERSATION_SUSPENDED'");
   });
 

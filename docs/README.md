@@ -21,7 +21,7 @@ The README stays the reference for configuration, auth, E2EE, Mr OneHook, teleme
 
 - **App routes**: `../src/App.tsx` (member app shell: `../src/app/AppContent.tsx`)
 - **Global Store**: `../src/store/app-store.ts`
-- **API Client**: `../src/api/sdk-client.ts` (generated `onehook-api-client` SDK; service wrappers in `../src/api/`). `../src/lib/api-client.ts` now holds only the shared `ApiError` type.
+- **API Client**: `../src/api/sdk-client.ts` (generated `onehook-api-client` REST SDK) and `../src/api/external-sdk-clients.ts` (`onehook-mr-onehook-client` and `saha-equation-admin-portal-client` SDKs; service wrappers in `../src/api/`). `../src/lib/api-client.ts` holds the shared `ApiError` type.
 - **Runtime Config**: `../src/config/deployment.config.ts` and `../src/utils/env.config.ts`
 - **Auth**: `../src/lib/cognito-auth.ts`
 - **E2EE**: `../src/lib/chat-encryption.ts`

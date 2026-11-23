@@ -3,8 +3,8 @@
  * comparison screen.
  *
  * ── Source of truth ─────────────────────────────────────────────────────────────────────
- * The tiers themselves — their wire values, order, display names (Must / Super / Infinity) and
- * connection ceilings — are owned by the backend Smithy model (`club.onehook.common#SubscriptionTier`)
+ * The tiers themselves — their wire values, order, display names (Must / Super / Infinity),
+ * connection ceilings and archive allowances — are owned by the backend Smithy model (`club.onehook.common#SubscriptionTier`)
  * and consumed ONLY from `onehook-api-client` (`SubscriptionTier` + `onehook-api-client/membership`).
  * This file adds web marketing copy (price, tagline, benefit lists, feature matrix) keyed by that
  * enum and must never re-declare a tier name or ceiling. `membership-source-of-truth.test.ts`
@@ -20,9 +20,10 @@
  * discovery power (unlimited likes, rewind, see who liked you, global mode, incognito, boosts,
  * insights). Those are dating-discovery upgrades layered on top of the always-free messenger.
  *
- * The one capacity that is deliberately gated is CONCURRENT CONNECTIONS ("hooks"): only the top tier
- * allows more than one at a time. Paying for the middle tier buys discovery reach, NOT the ability to
- * juggle more people.
+ * Every tier holds ONE connection ("hook") at a time; no plan buys the ability to juggle more people.
+ * The top tier instead includes archived chats (docs/archives.md in OneHookBackend): a member who
+ * lets a hook go can keep the conversation read-only and later ask to continue it. The allowance and
+ * how long an archive lasts come from the SDK (`archivePlanAllowance`, `archiveValidityDays`).
  *
  * There is NO in-app / on-web purchase flow. Memberships are applied to your account; the only
  * call-to-action anywhere in this surface is the app-download smart link.
@@ -66,6 +67,10 @@ export interface MembershipTier extends TierCopy {
   readonly displayName: SubscriptionTierDisplayName;
   /** Default concurrent-connection ceiling (from the SDK). */
   readonly maxConnections: number;
+  /** Archived chats the plan includes at once (from the SDK; 0 = archives are bought). */
+  readonly archivePlanAllowance: number;
+  /** Days an archive made on this tier lasts (from the SDK). */
+  readonly archiveValidityDays: number;
   /**
    * Display name of the tier this one builds on (the next-lower tier in SDK order). Cards render
    * "Everything in X, plus …" instead of repeating the lower tier's benefits.
@@ -73,9 +78,13 @@ export interface MembershipTier extends TierCopy {
   readonly inheritsFrom?: SubscriptionTierDisplayName;
 }
 
+const INFINITY_INFO = subscriptionTierInfo(SubscriptionTier.INFINITY);
+/** e.g. "10 archived chats, each kept 90 days" (from the SDK). */
+const INFINITY_ARCHIVES = `${INFINITY_INFO.archivePlanAllowance} archived chats, each kept ${INFINITY_INFO.archiveValidityDays} days`;
+
 /**
  * Prices (INR): free ₹0; middle ₹499/mo or ₹3,999/yr (~33% off vs 12 × ₹499 = ₹5,988);
- * top ₹999/mo or ₹7,999/yr (~33% off vs 12 × ₹999 = ₹11,988).
+ * top ₹1,500/mo or ₹14,999/yr (~17% off vs 12 × ₹1,500 = ₹18,000).
  */
 const TIER_COPY: Readonly<Record<SubscriptionTier, TierCopy>> = {
   [SubscriptionTier.MUST]: {
@@ -115,16 +124,12 @@ const TIER_COPY: Readonly<Record<SubscriptionTier, TierCopy>> = {
     ],
   },
   [SubscriptionTier.INFINITY]: {
-    tagline: `Everything in ${subscriptionTierInfo(SubscriptionTier.SUPER).displayName}, plus up to ${
-      subscriptionTierInfo(SubscriptionTier.INFINITY).maxConnections
-    } connections at once.`,
-    pricing: { monthly: 999, annual: 7999 },
+    tagline: `Everything in ${subscriptionTierInfo(SubscriptionTier.SUPER).displayName}, plus ${INFINITY_ARCHIVES}.`,
+    pricing: { monthly: 1500, annual: 14999 },
     mostPopular: false,
-    headline: `Chat with ${subscriptionTierInfo(SubscriptionTier.INFINITY).maxConnections} people at once`,
+    headline: `Keep ${INFINITY_ARCHIVES}`,
     adds: [
-      `${subscriptionTierInfo(SubscriptionTier.INFINITY).maxConnections} connections at once — chat with up to ${
-        subscriptionTierInfo(SubscriptionTier.INFINITY).maxConnections
-      } people`,
+      `${INFINITY_ARCHIVES}: let a hook go without losing the conversation`,
       'Top priority in discovery',
       '3 boosts a month',
       '5 invites a month',
@@ -139,6 +144,8 @@ export const MEMBERSHIP_TIERS: readonly MembershipTier[] = SUBSCRIPTION_TIERS.ma
   wire: info.wire,
   displayName: info.displayName,
   maxConnections: info.maxConnections,
+  archivePlanAllowance: info.archivePlanAllowance,
+  archiveValidityDays: info.archiveValidityDays,
   inheritsFrom: i > 0 ? SUBSCRIPTION_TIERS[i - 1].displayName : undefined,
 }));
 
@@ -157,8 +164,14 @@ export function tierByWire(wire: SubscriptionTier): MembershipTier {
   return found;
 }
 
-/** ~33% saving on both paid tiers when billed annually. */
-export const ANNUAL_DISCOUNT_LABEL = 'Save ~33%';
+/** Whole-percent saving of the annual plan over 12 monthly payments (0 for the free tier). */
+export function annualSavingPercent(tier: MembershipTier): number {
+  const yearOfMonths = tier.pricing.monthly * 12;
+  return yearOfMonths > 0 ? Math.round((1 - tier.pricing.annual / yearOfMonths) * 100) : 0;
+}
+
+/** The best annual saving across the paid tiers (Super ~33%, Infinity ~17%). */
+export const ANNUAL_DISCOUNT_LABEL = `Save up to ~${Math.max(...MEMBERSHIP_TIERS.map(annualSavingPercent))}%`;
 
 /**
  * A single feature row in the comparison matrix. `values` is keyed by the SDK wire value so the
@@ -195,6 +208,15 @@ const connections = (): Record<SubscriptionTier, FeatureValue> =>
     SubscriptionTier,
     FeatureValue
   >;
+
+/** Plan-included archived chats straight from the SDK ("10 · 90 days"; a dash when the plan has none). */
+const archives = (): Record<SubscriptionTier, FeatureValue> =>
+  Object.fromEntries(
+    SUBSCRIPTION_TIERS.map((t) => [
+      t.wire,
+      t.archivePlanAllowance > 0 ? `${t.archivePlanAllowance} · ${t.archiveValidityDays} days` : false,
+    ]),
+  ) as Record<SubscriptionTier, FeatureValue>;
 
 /** The full benefit matrix, grouped for readability. */
 export const FEATURE_GROUPS: readonly FeatureGroup[] = [
@@ -237,6 +259,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
   {
     title: 'Extras',
     rows: [
+      { label: 'Archived chats included', values: archives() },
       { label: 'Mr.OneHook AI', values: { [MUST]: '10 msgs/day', [SUPER]: '∞', [INFINITY]: '∞' } },
       { label: 'Profile view insights', values: { [MUST]: false, [SUPER]: true, [INFINITY]: true } },
       { label: 'Monthly invites', values: { [MUST]: '1', [SUPER]: '3', [INFINITY]: '5' } },

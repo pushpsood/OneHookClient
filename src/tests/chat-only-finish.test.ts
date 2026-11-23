@@ -9,8 +9,15 @@ vi.mock('aws-amplify/auth', () => ({ fetchAuthSession: async () => ({ tokens: un
 
 import { bodyCode, errorCode, errorGaps, errorMessage } from '../lib/api-errors';
 import { ApiError } from '../lib/api-client';
-import { GraphQLOperationError } from '../api/graphql-error';
-import { SUSPENDED_CALL_COPY, friendlyCallError, isConversationSuspended } from '../lib/call-errors';
+import { GraphQLOperationError, toGraphQLError } from '../api/graphql-error';
+import {
+  ARCHIVED_CALL_COPY,
+  SUSPENDED_CALL_COPY,
+  conversationSuspensionReason,
+  friendlyCallError,
+  isConversationSuspended,
+} from '../lib/call-errors';
+import { HOOK_COPY, readOnlyCopy } from '../features/chat/hook-copy';
 import { UiElement } from '../lib/analytics/analytics';
 import { uiElementsForPlatform } from '../lib/analytics/generated/telemetryCatalog';
 import { enableFailure } from '../features/settings/matching-mode';
@@ -121,6 +128,42 @@ describe('suspended chats', () => {
   it('a refused startCall explains that calls are paused', () => {
     expect(friendlyCallError(new GraphQLOperationError('raw', 'CONVERSATION_SUSPENDED'))).toBe(SUSPENDED_CALL_COPY);
     expect(SUSPENDED_CALL_COPY).toMatch(/paused/);
+  });
+});
+
+describe('archived chats (docs/archives.md): CONVERSATION_SUSPENDED with errorInfo.reason ARCHIVED', () => {
+  // What Amplify rejects with for verify-not-suspended.js: util.error(message, type, null, {reason}).
+  const appsync = (reason?: string) => ({
+    data: null,
+    errors: [
+      {
+        message: reason === 'ARCHIVED' ? 'This conversation is archived' : 'This conversation is paused',
+        errorType: 'CONVERSATION_SUSPENDED',
+        errorInfo: reason ? { reason } : null,
+      },
+    ],
+  });
+
+  it('keeps errorInfo on the normalised error and reads the reason', () => {
+    const archived = toGraphQLError(appsync('ARCHIVED'), 'fallback');
+    expect(archived).toBeInstanceOf(GraphQLOperationError);
+    expect((archived as GraphQLOperationError).errorInfo).toEqual({ reason: 'ARCHIVED' });
+    expect(conversationSuspensionReason(archived)).toBe('ARCHIVED');
+    expect(conversationSuspensionReason(toGraphQLError(appsync('PAUSED'), 'f'))).toBe('PAUSED');
+  });
+
+  it('a refusal without a reason (older backend) reads as PAUSED; other errors have none', () => {
+    expect(conversationSuspensionReason(toGraphQLError(appsync(), 'f'))).toBe('PAUSED');
+    expect(conversationSuspensionReason(new GraphQLOperationError('no', 'CallNotAllowed'))).toBeUndefined();
+    expect(conversationSuspensionReason(new Error('offline'))).toBeUndefined();
+  });
+
+  it('shows "This conversation is archived" instead of the paused copy', () => {
+    expect(readOnlyCopy('ARCHIVED').title).toBe('This conversation is archived');
+    expect(readOnlyCopy('ARCHIVED').composer).toBe(HOOK_COPY.archivedComposer);
+    expect(readOnlyCopy('PAUSED').title).toBe(HOOK_COPY.suspendedTitle);
+    expect(friendlyCallError(toGraphQLError(appsync('ARCHIVED'), 'f'))).toBe(ARCHIVED_CALL_COPY);
+    expect(friendlyCallError(toGraphQLError(appsync('PAUSED'), 'f'))).toBe(SUSPENDED_CALL_COPY);
   });
 });
 

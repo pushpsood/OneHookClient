@@ -25,10 +25,15 @@ import { DistanceApi } from '../../api/rest';
 import { useChatMessages, useHookRequests, usePartnerProfiles } from '../../hooks/use-api';
 import { useAppStore } from '../../store/app-store';
 import { isMatchingOn } from '../../lib/app-mode';
-import { SUSPENDED_CALL_COPY, isConversationSuspended } from '../../lib/call-errors';
+import {
+  ARCHIVED_CALL_COPY,
+  SUSPENDED_CALL_COPY,
+  conversationSuspensionReason,
+  type SuspensionReason,
+} from '../../lib/call-errors';
 import type { PartnerProfile } from '../../lib/profile-model';
 import { HookRequestsSheet } from './HookRequestsSheet';
-import { HOOK_COPY, originLabel, sendRequestErrorCopy } from './hook-copy';
+import { HOOK_COPY, originLabel, readOnlyCopy, sendRequestErrorCopy } from './hook-copy';
 import { useCallEligibility } from '../../hooks/use-calls';
 import { useCall } from '../../app/CallProvider';
 import { CallButtons } from '../../components/call/CallButtons';
@@ -364,11 +369,16 @@ export function ChatView({
     if (onRefetchState) await onRefetchState();
   };
 
-  // A write was refused because the conversation is suspended (the state we hold is stale).
-  const handleSuspended = useCallback(() => {
-    showToast(HOOK_COPY.suspendedTitle + '. ' + HOOK_COPY.suspendedBody, 'info');
-    void onRefetchState?.();
-  }, [showToast, onRefetchState]);
+  // A write was refused because the conversation is suspended or archived (the state we hold is
+  // stale). An archived match leaves State's hooks, so the refresh drops it from the chat list.
+  const handleSuspended = useCallback(
+    (reason: SuspensionReason) => {
+      const copy = readOnlyCopy(reason);
+      showToast(copy.title + '. ' + copy.body, 'info');
+      void onRefetchState?.();
+    },
+    [showToast, onRefetchState]
+  );
 
   // Rows for the conversation picker: Mr.OneHook pinned first, then matches.
   const pickerRows: (SortableConversation & {
@@ -1133,7 +1143,7 @@ function MatchConversation({
   peerName,
   currentUserId,
   wallpaper,
-  suspended,
+  suspended: suspendedByState,
   onSuspended,
   onReportPeer,
   reportOpen,
@@ -1148,13 +1158,29 @@ function MatchConversation({
   wallpaper: ChatWallpaper;
   /** Read-only: a member of this hook must choose which hooks to keep (R24, E23). */
   suspended?: boolean;
-  /** A write was refused with CONVERSATION_SUSPENDED (the state we hold was stale). */
-  onSuspended?: () => void;
+  /** A write was refused with CONVERSATION_SUSPENDED (the state we hold was stale), and why. */
+  onSuspended?: (reason: SuspensionReason) => void;
   onReportPeer?: () => void;
   reportOpen?: boolean;
   onCloseReport?: () => void;
   onRequestUnmatch?: () => void;
 }) {
+  // A write refused as ARCHIVED (docs/archives.md) makes the chat read-only at once, before the state
+  // refresh removes it: the archived match is no longer one of State's hooks.
+  const [archived, setArchived] = useState(false);
+  const suspended = Boolean(suspendedByState) || archived;
+  const readOnly = readOnlyCopy(archived ? 'ARCHIVED' : 'PAUSED');
+  /** True (and reported) when `err` is a CONVERSATION_SUSPENDED refusal. */
+  const refusedAsSuspended = useCallback(
+    (err: unknown): boolean => {
+      const reason = conversationSuspensionReason(err);
+      if (!reason) return false;
+      if (reason === 'ARCHIVED') setArchived(true);
+      onSuspended?.(reason);
+      return true;
+    },
+    [onSuspended]
+  );
   const {
     messages,
     loading,
@@ -1334,8 +1360,8 @@ function MatchConversation({
       // The local user just sent — re-check whether that satisfied the "both messaged" gate.
       eligibility.recheck();
     } catch (err) {
-      if (isConversationSuspended(err)) onSuspended?.();
-      else if (err instanceof Error && err.message) showToast(err.message, 'error');
+      if (refusedAsSuspended(err)) return;
+      if (err instanceof Error && err.message) showToast(err.message, 'error');
     }
   };
 
@@ -1344,11 +1370,11 @@ function MatchConversation({
       try {
         await sendAttachment(attachment);
       } catch (err) {
-        if (isConversationSuspended(err)) onSuspended?.();
-        else showToast(err instanceof Error ? err.message : 'That attachment could not be sent.', 'error');
+        if (refusedAsSuspended(err)) return;
+        showToast(err instanceof Error ? err.message : 'That attachment could not be sent.', 'error');
       }
     },
-    [sendAttachment, showToast, onSuspended]
+    [sendAttachment, showToast, refusedAsSuspended]
   );
 
   const handlePickFile = useCallback(
@@ -1386,16 +1412,15 @@ function MatchConversation({
       try {
         sent = await sendMessage(frameStructuredContent(payload));
       } catch (err) {
-        if (isConversationSuspended(err)) {
-          onSuspended?.();
-          throw new Error(`${HOOK_COPY.suspendedTitle}.`);
+        if (refusedAsSuspended(err)) {
+          throw new Error(`${readOnlyCopy(conversationSuspensionReason(err) ?? 'PAUSED').title}.`);
         }
         throw err;
       }
       if (!sent) throw new Error("This chat isn't ready yet. Try again in a moment.");
       eligibility.recheck();
     },
-    [sendMessage, onSuspended, eligibility.recheck]
+    [sendMessage, refusedAsSuspended, eligibility.recheck]
   );
 
   const sendCurrentLocation = useCallback(
@@ -1468,7 +1493,7 @@ function MatchConversation({
         >
           <PauseCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
           <p className="text-xs leading-relaxed">
-            <span className="font-semibold">{HOOK_COPY.suspendedTitle}.</span> {HOOK_COPY.suspendedBody}
+            <span className="font-semibold">{readOnly.title}.</span> {readOnly.body}
           </p>
         </div>
       )}
@@ -1502,7 +1527,7 @@ function MatchConversation({
             disabled={call.active}
             // A suspended hook refuses call signalling (CONVERSATION_SUSPENDED): explain instead of ringing.
             locked={Boolean(suspended) || eligibility.locked}
-            lockMessage={suspended ? SUSPENDED_CALL_COPY : eligibility.lockMessage}
+            lockMessage={suspended ? (archived ? ARCHIVED_CALL_COPY : SUSPENDED_CALL_COPY) : eligibility.lockMessage}
             onAudio={() =>
               peerId && void call.startCall({ matchId, peerId, peerName, media: 'AUDIO' })
             }
@@ -1615,7 +1640,7 @@ function MatchConversation({
         value={input}
         onChange={setInput}
         onSend={handleSend}
-        readOnlyReason={suspended ? HOOK_COPY.suspendedComposer : undefined}
+        readOnlyReason={suspended ? readOnly.composer : undefined}
         leading={
           <AttachmentComposer
             disabled={loading || Boolean(suspended)}

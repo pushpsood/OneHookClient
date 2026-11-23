@@ -6,6 +6,9 @@ import {
   MEMBERSHIP_TIERS,
   MOST_POPULAR_TIER,
   PAID_TIER_NAMES,
+  ANNUAL_DISCOUNT_LABEL,
+  annualSavingPercent,
+  priceLabel,
   tierByWire,
   type FeatureRow,
 } from '../config/membership.config';
@@ -15,14 +18,21 @@ import {
  * onehook-api-client catalogue; these assertions lock the web copy to it and encode the product's
  * non-negotiables:
  *  - the web tiers are exactly the SDK tiers, in SDK order, with SDK names and ceilings;
- *  - only the top tier allows more than one concurrent connection;
+ *  - every tier holds one connection at a time; only the top tier includes archived chats;
  *  - exactly one tier — the middle one — is the "Most popular" tier;
  *  - messaging is free forever: every messaging row is `true` for ALL tiers.
  */
 describe('membership catalogue — mirrors onehook-api-client', () => {
   it('has exactly the SDK tiers in SDK order, with SDK display names and ceilings', () => {
-    expect(MEMBERSHIP_TIERS.map(({ wire, displayName, maxConnections }) => ({ wire, displayName, maxConnections })))
-      .toEqual(SUBSCRIPTION_TIERS.map((t) => ({ ...t })));
+    expect(
+      MEMBERSHIP_TIERS.map(({ wire, displayName, maxConnections, archivePlanAllowance, archiveValidityDays }) => ({
+        wire,
+        displayName,
+        maxConnections,
+        archivePlanAllowance,
+        archiveValidityDays,
+      })),
+    ).toEqual(SUBSCRIPTION_TIERS.map((t) => ({ ...t })));
   });
 
   it('every tier inherits from the tier directly below it', () => {
@@ -39,9 +49,15 @@ describe('membership catalogue — mirrors onehook-api-client', () => {
 });
 
 describe('membership catalogue — connection ceilings', () => {
-  it('only the top tier allows more than one connection', () => {
-    const multi = MEMBERSHIP_TIERS.filter((t) => t.maxConnections > 1);
-    expect(multi.map((t) => t.wire)).toEqual([MEMBERSHIP_TIERS.at(-1)!.wire]);
+  it('every tier holds exactly one connection', () => {
+    expect(MEMBERSHIP_TIERS.map((t) => t.maxConnections)).toEqual(MEMBERSHIP_TIERS.map(() => 1));
+  });
+
+  it('no tier copy promises more than one connection', () => {
+    for (const t of MEMBERSHIP_TIERS) {
+      const copy = [t.tagline, t.headline, ...t.adds].join('\n');
+      expect(copy, t.displayName).not.toMatch(/connections at once|people at once/i);
+    }
   });
 
   it('the connections rows in the matrix equal the SDK ceilings', () => {
@@ -50,6 +66,33 @@ describe('membership catalogue — connection ceilings', () => {
     for (const row of connectionRows) {
       for (const t of SUBSCRIPTION_TIERS) expect(row.values[t.wire]).toBe(String(t.maxConnections));
     }
+  });
+});
+
+describe('membership catalogue — archived chats and prices', () => {
+  it('only the top tier includes archived chats, and its copy uses the SDK allowance and validity', () => {
+    const withArchives = MEMBERSHIP_TIERS.filter((t) => t.archivePlanAllowance > 0);
+    expect(withArchives.map((t) => t.wire)).toEqual([SubscriptionTier.INFINITY]);
+    const infinity = tierByWire(SubscriptionTier.INFINITY);
+    const phrase = `${infinity.archivePlanAllowance} archived chats, each kept ${infinity.archiveValidityDays} days`;
+    expect(infinity.tagline).toContain(phrase);
+    expect(infinity.headline).toContain(phrase);
+    const row = FEATURE_GROUPS.flatMap((g) => g.rows).find((r) => r.label === 'Archived chats included');
+    for (const t of SUBSCRIPTION_TIERS) {
+      expect(row?.values[t.wire]).toBe(
+        t.archivePlanAllowance > 0 ? `${t.archivePlanAllowance} · ${t.archiveValidityDays} days` : false,
+      );
+    }
+  });
+
+  it('prices: Super ₹499/month or ₹3,999/year, Infinity ₹1,500/month or ₹14,999/year', () => {
+    expect(priceLabel(tierByWire(SubscriptionTier.SUPER), 'monthly')).toBe('₹499/month');
+    expect(priceLabel(tierByWire(SubscriptionTier.SUPER), 'annual')).toBe('₹3,999/year');
+    expect(priceLabel(tierByWire(SubscriptionTier.INFINITY), 'monthly')).toBe('₹1,500/month');
+    expect(priceLabel(tierByWire(SubscriptionTier.INFINITY), 'annual')).toBe('₹14,999/year');
+    expect(annualSavingPercent(tierByWire(SubscriptionTier.SUPER))).toBe(33);
+    expect(annualSavingPercent(tierByWire(SubscriptionTier.INFINITY))).toBe(17);
+    expect(ANNUAL_DISCOUNT_LABEL).toBe('Save up to ~33%');
   });
 });
 

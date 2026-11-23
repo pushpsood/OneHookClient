@@ -15,9 +15,9 @@ describe('StateApi: Single-Threaded Constraint', () => {
     expect(initialState.maxConnections).toBe(1);
   });
 
-  it('only the top tier (Infinity) allows more than one concurrent connection', () => {
+  it('every tier, Infinity included, allows one concurrent connection', () => {
     expect(maxConnectionsForTier(SubscriptionTier.SUPER)).toBe(1);
-    expect(maxConnectionsForTier(SubscriptionTier.INFINITY)).toBe(3);
+    expect(maxConnectionsForTier(SubscriptionTier.INFINITY)).toBe(1);
   });
 
   it('hook creation payload should include both userA and userB', () => {

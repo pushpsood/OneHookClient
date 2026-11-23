@@ -15,6 +15,11 @@ export const HOOK_COPY = {
   suspendedBody:
     'You can still read this chat. Messages and calls are paused while one of you chooses which hooks to keep after a plan change.',
   suspendedComposer: 'This chat is paused',
+  // An archived conversation (docs/archives.md): read-only for both members. Archive UI ships on iOS
+  // first; the web only explains a refused write and drops the chat on the next state refresh.
+  archivedTitle: 'This conversation is archived',
+  archivedBody: 'You can still read it. New messages are paused.',
+  archivedComposer: 'This conversation is archived',
   noRequests: 'No requests right now.',
   noSentRequests: 'You have not sent any requests.',
 } as const;
@@ -70,4 +75,11 @@ export function acceptRequestErrorCopy(err: unknown): string {
   }
   if (errorStatus(err) === 404) return 'This request is no longer available.';
   return "We couldn't accept that request. Please try again.";
+}
+
+/** Banner, toast and composer copy for a read-only conversation, by why it is read-only. */
+export function readOnlyCopy(reason: 'ARCHIVED' | 'PAUSED'): { title: string; body: string; composer: string } {
+  return reason === 'ARCHIVED'
+    ? { title: HOOK_COPY.archivedTitle, body: HOOK_COPY.archivedBody, composer: HOOK_COPY.archivedComposer }
+    : { title: HOOK_COPY.suspendedTitle, body: HOOK_COPY.suspendedBody, composer: HOOK_COPY.suspendedComposer };
 }

@@ -18,7 +18,9 @@ Versions are the ranges declared in `package.json`.
 - **AWS Amplify 6** (`aws-amplify`, `@aws-amplify/ui-react`, `@aws-amplify/ui-react-liveness`):
   Cognito auth, AppSync GraphQL client and Face Liveness UI
 - **`onehook-api-client`**: Smithy-generated REST SDK for the OneHook backend, installed from the
-  npm registry at the version pinned in `package-lock.json` (currently 1.0.42)
+  npm registry (`^2.0.0`, pinned in `package-lock.json`)
+- **`onehook-mr-onehook-client`**: Smithy-generated SDK for Mr OneHook product & connection chat and AI session persistence (`^2.0.0`)
+- **`saha-equation-admin-portal-client`**: Smithy-generated SDK for admin portal feature gateways (moderation evidence and admissions) (`^2.0.0`)
 - **Vitest 4**: testing (`fake-indexeddb` for the E2EE key-store tests)
 - **AWS CDK 2** (`aws-cdk-lib`, `aws-cdk`): site and pipeline infrastructure under `infra/`
 
@@ -229,8 +231,23 @@ been removed; a v1 envelope fails with an "old encryption format" error.
   silently. Covered by `src/tests/sign-out-key-hygiene.test.ts`.
 - Settings and the account recovery dialog list registered devices and allow revoking one
   (`DeviceManagementCard`, `DELETE /chat/devices/{deviceId}`).
-- Voice/video call SDP and ICE payloads are sealed with the same v2 envelope, to the peer's devices
-  only (`src/lib/call-signal.ts`).
+- **Structured messages (0x03 frame format)**: End-to-end encrypted rich payloads encapsulated in
+  structured frames (`src/lib/chat-structured.ts`, rendered by `StructuredMessageBubble.tsx`):
+  - **Location sharing**: Send current location once, or broadcast live location for 15 minutes, 1 hour,
+    or 8 hours (`src/components/chat/LocationShareSheet.tsx`, `src/lib/live-location-sharing.ts`,
+    `src/lib/browser-location.ts`). Includes interactive leaflet/tile map previews, real-time beacon
+    updates to AppSync GraphQL, unload keepalive beacon (`fetch` keepalive on tab close), and external
+    links to Apple Maps or Google Maps with turn-by-turn directions.
+  - **Contact card sharing**: Send and receive contact cards (`src/components/chat/ContactShareSheet.tsx`,
+    `src/lib/contact-share.ts`) containing display names, phone numbers, email addresses, and postal
+    addresses. Receivers can inspect contacts, download generated `.vcf` vCard files locally, or initiate
+    direct calls/emails.
+- **Voice/video calls**:
+  - WebRTC SDP and ICE signaling payloads are sealed with the same v2 envelope, to the peer's devices
+    only (`src/lib/call-signal.ts`).
+  - Video calls display the local camera preview from call start in a Picture-in-Picture window that
+    swaps with the large remote window on tap, snaps to any corner (clearing in-call controls), with
+    translucent controls that auto-hide on inactivity.
 - There is no forward secrecy and no safety-number verification of peer keys; history recovery shows
   a 6-digit code to compare across devices.
 
@@ -265,10 +282,11 @@ code, including any 403) is handled on its own path and never gates the feature.
 
 ## Telemetry Contract
 
-`TELEMETRY_CONTRACT.txt` (synced from OneHookBackend) is a hard rule: every user interaction emits
-one `ui_interaction` with a backend-generated `UiElement` id via `trackProps` / `trackUi`
-(`src/lib/analytics/`). The generated catalog `src/lib/analytics/generated/telemetryCatalog.ts`
-must not be edited by hand.
+`TELEMETRY_CONTRACT.txt` (synced from OneHookBackend, catalog version `1.28.0`) is a hard rule: every
+user interaction emits one `ui_interaction` with a backend-generated `UiElement` id via `trackProps` /
+`trackUi` (`src/lib/analytics/`). The generated catalog `src/lib/analytics/generated/telemetryCatalog.ts`
+must not be edited by hand. It covers chat reactions, message multi-select for Mr OneHook, structured
+location sharing (current and live duration options), and contact cards.
 
 `scripts/telemetry-contract.mjs` prints the contract, checks the catalog's sha256 integrity stamp,
 and runs the `telemetry-coverage`, `telemetry-guard`, `telemetry-sdk` and `telemetry-standard`

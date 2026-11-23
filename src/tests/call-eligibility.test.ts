@@ -217,7 +217,9 @@ describe('call button + ChatView wiring contract', () => {
     expect(chatView).toContain('useCallEligibility');
     // A suspended hook (chat-only profiles §8.5) locks the buttons too, with its own explanation.
     expect(chatView).toContain('locked={Boolean(suspended) || eligibility.locked}');
-    expect(chatView).toContain('lockMessage={suspended ? SUSPENDED_CALL_COPY : eligibility.lockMessage}');
+    expect(chatView).toContain(
+      'lockMessage={suspended ? (archived ? ARCHIVED_CALL_COPY : SUSPENDED_CALL_COPY) : eligibility.lockMessage}'
+    );
     // Re-check after the local send and when a peer message arrives.
     expect(chatView).toContain('eligibility.recheck()');
     expect((chatView.match(/eligibility\.recheck\(\)/g) ?? []).length).toBeGreaterThanOrEqual(2);

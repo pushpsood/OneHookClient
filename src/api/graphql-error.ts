@@ -16,17 +16,27 @@
 export class GraphQLOperationError extends Error {
   /** AppSync error type, e.g. `DeviceNotFound`, `BadRequest`, `RecoverySessionExpired`. */
   readonly errorType?: string;
+  /** AppSync `errorInfo` (util.error's 4th argument), e.g. `{reason: 'ARCHIVED'}` on CONVERSATION_SUSPENDED. */
+  readonly errorInfo?: Record<string, unknown>;
 
-  constructor(message: string, errorType?: string) {
+  constructor(message: string, errorType?: string, errorInfo?: Record<string, unknown>) {
     super(message);
     this.name = 'GraphQLOperationError';
     this.errorType = errorType;
+    this.errorInfo = errorInfo;
   }
 }
 
 interface GraphQLErrorEntry {
   message?: string;
   errorType?: string;
+  errorInfo?: unknown;
+}
+
+/** The entry's `errorInfo` when it is a plain object (AppSync sends null when none was given). */
+function infoOf(entry: GraphQLErrorEntry | undefined): Record<string, unknown> | undefined {
+  const info = entry?.errorInfo;
+  return typeof info === 'object' && info !== null && !Array.isArray(info) ? (info as Record<string, unknown>) : undefined;
 }
 
 /** Reads an `errors` array off anything Amplify hands back, whether resolved or rejected. */
@@ -53,7 +63,8 @@ export function toGraphQLError(value: unknown, fallback: string): Error {
   const messages = [...new Set(entries.map((entry) => entry.message).filter(Boolean))] as string[];
 
   if (messages.length > 0) {
-    return new GraphQLOperationError(messages.join(' '), entries.find((e) => e.errorType)?.errorType);
+    const typed = entries.find((e) => e.errorType);
+    return new GraphQLOperationError(messages.join(' '), typed?.errorType, infoOf(typed));
   }
   // A genuine Error (TypeError: Failed to fetch, AbortError, …) already says something useful.
   if (value instanceof Error) return value;

@@ -13,6 +13,24 @@ export function isConversationSuspended(err: unknown): boolean {
   );
 }
 
+/** Why a conversation is read-only: archived (docs/archives.md) or paused (downgrade selection). */
+export type SuspensionReason = 'ARCHIVED' | 'PAUSED';
+
+/**
+ * The reason of a CONVERSATION_SUSPENDED refusal (Chat's `errorInfo.reason`), or undefined when the
+ * error is not one. A refusal without a reason (older backend, call path) reads as PAUSED.
+ */
+export function conversationSuspensionReason(err: unknown): SuspensionReason | undefined {
+  if (!isConversationSuspended(err)) return undefined;
+  const info =
+    err instanceof GraphQLOperationError
+      ? err.errorInfo
+      : ((err as { errorInfo?: unknown }).errorInfo as Record<string, unknown> | undefined);
+  const reason = (info && typeof info === 'object' ? (info as { reason?: unknown }).reason : undefined) ??
+    (err as { reason?: unknown }).reason;
+  return reason === 'ARCHIVED' ? 'ARCHIVED' : 'PAUSED';
+}
+
 /**
  * Maps a call failure to friendly, user-facing copy, keyed off the AppSync `errorType` the backend
  * sets (see OneHookBackend/.../CallService.java + schema.graphql §8). The raw server message is a
@@ -33,9 +51,13 @@ const ERROR_COPY: Record<string, string> = {
 /** Shown on the call buttons of a suspended chat, and when a call is refused as suspended. */
 export const SUSPENDED_CALL_COPY = ERROR_COPY.CONVERSATION_SUSPENDED;
 
+/** Shown on the call buttons of an archived chat, and when a call is refused because it is archived. */
+export const ARCHIVED_CALL_COPY = 'This conversation is archived, so calls are off.';
+
 /** The friendly message for a failed call operation. */
 export function friendlyCallError(error: unknown): string {
-  if (isConversationSuspended(error)) return SUSPENDED_CALL_COPY;
+  const suspension = conversationSuspensionReason(error);
+  if (suspension) return suspension === 'ARCHIVED' ? ARCHIVED_CALL_COPY : SUSPENDED_CALL_COPY;
   if (error instanceof GraphQLOperationError && error.errorType && ERROR_COPY[error.errorType]) {
     return ERROR_COPY[error.errorType];
   }

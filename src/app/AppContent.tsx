@@ -176,7 +176,8 @@ export function AppContent() {
     trackScreenView(APP_TAB_SCREEN[appState]);
   }, [appState]);
 
-  // Discovery is paused only at capacity (R6). INFINITY members with a free slot keep discovering.
+  // Discovery is paused only at capacity (R6): while hooked, or while an outgoing unarchive request
+  // reserves the member's one slot (the backend folds both into discoveryPaused).
   const discoveryPaused = matchingOn && Boolean(userState?.discoveryPaused);
 
   // The "one connection at a time" exclusivity overlay was shown — differentiator research signal.
