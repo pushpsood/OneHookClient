@@ -69,18 +69,35 @@ import { MrOneHookConfirm, MrOneHookTabs } from '../../components/chat/MrOneHook
 import {
   leastRecentSession,
   mrOneHookTabs,
+  openChatAttachmentContent,
+  uploadMatchChatAttachments,
+  useMrOneHookAttachments,
   useMrOneHookChat,
   type MrOneHookMessage,
   type MrOneHookScope,
   type PendingExcerptReview,
 } from '../../lib/mr-onehook';
+import { MrOneHookPlan, type ExcerptSpeaker } from 'onehook-mr-onehook-client';
+import {
+  composerAction,
+  rejectionCopy,
+  type PendingAttachment,
+} from '../../lib/mr-onehook-attachments';
+import { attachmentProblemCopy, type AttachmentProblem } from '../../lib/mr-onehook-contract';
+import type { MrOneHookPlanContext } from '../../lib/mr-onehook-pro';
+import { notePlanFromChat, openMrOneHookPro, useMrOneHookPro } from '../../store/mr-onehook-pro-store';
+import {
+  AskMrOneHookButton,
+  composerSendLabel,
+  MrOneHookAttachButton,
+  PendingAttachmentChips,
+  SentAttachmentChips,
+} from '../../components/chat/MrOneHookAttachments';
 import {
   selectEphemeralExcerpts,
   toSelectableMessages,
   type ExcerptSelectionRequest,
 } from '../../lib/mr-onehook-excerpts';
-import { DEFAULT_SUBSCRIPTION_TIER, isPaidSubscriptionTier } from 'onehook-api-client/membership';
-import type { SubscriptionTier } from '../../types';
 import { ChatSettingsSheet } from '../../components/chat/ChatSettingsSheet';
 import { AttachmentBubble } from '../../components/chat/AttachmentBubble';
 import {
@@ -109,6 +126,7 @@ import { AttachmentComposer } from '../../components/chat/AttachmentComposer';
 import {
   decodeMessagePlaintext,
   AttachmentDecodeError,
+  type AttachmentEnvelope,
   type AttachmentKind,
 } from '../../lib/chat-attachments';
 import { ReportFlowDialog } from '../../features/moderation/report/ReportFlowDialog';
@@ -180,6 +198,10 @@ export function ChatView({
 
   const [distances, setDistances] = useState<Record<string, number | null>>({});
   const [selection, setSelection] = useState<Selection>(activeMatchId || MR_ONEHOOK);
+  // The member's Mr OneHook plan (Free / Pro) and whether Pro's entry points show.
+  const pro = useMrOneHookPro(currentUser.id);
+  // "Ask Mr OneHook" from a match chat: files already uploaded, waiting for that match's Mr OneHook chat.
+  const [askHandoff, setAskHandoff] = useState<{ matchId: string; items: PendingAttachment[] } | null>(null);
 
   // Overlay state
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -772,7 +794,9 @@ export function ChatView({
           currentUser={currentUser}
           wallpaper={wallpaper}
           matches={matches}
-          tier={userState?.subscriptionTier ?? DEFAULT_SUBSCRIPTION_TIER}
+          pro={pro}
+          handoff={askHandoff}
+          onHandoffTaken={() => setAskHandoff(null)}
         />
       ) : loadingMatches && !activeMatch ? (
         <div className="flex-1 flex items-center justify-center">
@@ -793,6 +817,11 @@ export function ChatView({
           reportOpen={chatReportOpen}
           onCloseReport={() => setChatReportOpen(false)}
           onRequestUnmatch={() => void runUnmatch()}
+          pro={pro}
+          onAskMrOneHook={(items) => {
+            setAskHandoff({ matchId: activeMatch.matchId, items });
+            selectConversation(MR_ONEHOOK);
+          }}
         />
       ) : (
         <EmptyState
@@ -928,6 +957,10 @@ function Composer({
   footerRight,
   leading,
   readOnlyReason,
+  above,
+  sendLabel,
+  sendEnabled,
+  sendIsUpsell,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -938,9 +971,19 @@ function Composer({
   leading?: ReactNode;
   /** The conversation is read-only (suspended); the field is disabled and says why. */
   readOnlyReason?: string;
+  /** Shown above the field (e.g. attachment chips). */
+  above?: ReactNode;
+  /** Replaces "Send" (e.g. "Get Mr OneHook Pro"). */
+  sendLabel?: string;
+  /** Overrides when the send button is enabled (default: there is text and nothing disables it). */
+  sendEnabled?: boolean;
+  /** The send button opens the Mr OneHook Pro screen instead of sending. */
+  sendIsUpsell?: boolean;
 }) {
+  const canSend = sendEnabled ?? (!disabled && !readOnlyReason && Boolean(value.trim()));
   return (
     <div className="p-4 md:p-6 border-t border-border bg-surface-card shrink-0">
+      {above}
       <div className="relative flex items-center">
         {leading}
         <input
@@ -951,15 +994,17 @@ function Composer({
           disabled={Boolean(readOnlyReason)}
           aria-label={readOnlyReason ?? 'Message'}
           placeholder={readOnlyReason || placeholder || 'Write a message…'}
-          className="w-full py-3 pr-20 pl-0 border-b border-border focus:border-accent transition-all outline-none text-sm bg-transparent placeholder:text-text-muted text-text disabled:cursor-not-allowed"
+          className={`w-full py-3 ${sendLabel ? 'pr-40' : 'pr-20'} pl-0 border-b border-border focus:border-accent transition-all outline-none text-sm bg-transparent placeholder:text-text-muted text-text disabled:cursor-not-allowed`}
         />
         <button
           onClick={onSend}
-          disabled={disabled || Boolean(readOnlyReason) || !value.trim()}
-          {...trackProps(UiElement.CHAT_SEND_BUTTON)}
+          disabled={!canSend}
+          {...(sendIsUpsell
+            ? trackProps(UiElement.CHAT_MR_ONEHOOK_UPGRADE_OPEN, { targetId: 'composer' })
+            : trackProps(UiElement.CHAT_SEND_BUTTON))}
           className="absolute right-0 bottom-3 text-xs font-semibold text-ig-blue hover:opacity-80 transition-opacity disabled:opacity-30 flex items-center gap-1 cursor-pointer"
         >
-          Send
+          {sendLabel ?? 'Send'}
         </button>
       </div>
       <div className="mt-2 flex items-center justify-between text-[10px] text-text-muted font-mono">
@@ -1149,6 +1194,8 @@ function MatchConversation({
   reportOpen,
   onCloseReport,
   onRequestUnmatch,
+  pro,
+  onAskMrOneHook,
 }: {
   key?: string;
   matchId: string;
@@ -1164,6 +1211,10 @@ function MatchConversation({
   reportOpen?: boolean;
   onCloseReport?: () => void;
   onRequestUnmatch?: () => void;
+  /** The member's Mr OneHook plan; "Ask Mr OneHook" shows only while Pro is on in this environment. */
+  pro: MrOneHookPlanContext;
+  /** Pro: the selected files were uploaded; open this match's Mr OneHook chat with them attached. */
+  onAskMrOneHook: (items: PendingAttachment[]) => void;
 }) {
   // A write refused as ARCHIVED (docs/archives.md) makes the chat read-only at once, before the state
   // refresh removes it: the archived match is no longer one of State's hooks.
@@ -1228,6 +1279,87 @@ function MatchConversation({
   const [locationOpen, setLocationOpen] = useState(false);
   const contactShare = useContactShare();
   const [input, setInput] = useState('');
+
+  // "Ask Mr OneHook": the member selects images/files of this conversation; on Pro they are uploaded
+  // (decrypted here, never by a server) and this match's Mr OneHook chat opens with them attached.
+  const attachmentEnvelopes = useMemo(() => {
+    const map = new Map<string, { envelope: AttachmentEnvelope; sender: ExcerptSpeaker }>();
+    for (const m of messages) {
+      if (m.undecryptable) continue;
+      try {
+        const decoded = decodeMessagePlaintext(m.ciphertext);
+        if (decoded.type === 'attachment') {
+          map.set(m.messageId, { envelope: decoded.envelope, sender: m.senderId === 'me' ? 'self' : 'match' });
+        }
+      } catch {
+        /* an unreadable envelope is not selectable */
+      }
+    }
+    return map;
+  }, [messages]);
+  const [askMode, setAskMode] = useState(false);
+  const [askSelected, setAskSelected] = useState<string[]>([]);
+  const [asking, setAsking] = useState(false);
+  const [askNotice, setAskNotice] = useState<string | null>(null);
+  const maxAskFiles = pro.limits.maxAttachmentsPerMessage;
+  const toggleAskSelected = (messageId: string) => {
+    setAskNotice(null);
+    setAskSelected((prev) => {
+      if (prev.includes(messageId)) return prev.filter((id) => id !== messageId);
+      const entry = attachmentEnvelopes.get(messageId);
+      if (entry && entry.envelope.size > pro.limits.maxAttachmentBytes) {
+        setAskNotice('Files over 5 MB can’t be shared with Mr OneHook.');
+        return prev;
+      }
+      if (prev.length >= maxAskFiles) {
+        setAskNotice(`You can share up to ${maxAskFiles} files at a time.`);
+        return prev;
+      }
+      return [...prev, messageId];
+    });
+  };
+  const exitAskMode = () => {
+    setAskMode(false);
+    setAskSelected([]);
+    setAskNotice(null);
+  };
+  const askMrOneHook = async () => {
+    if (pro.plan !== MrOneHookPlan.PRO) {
+      // Free keeps the selection; the button reads "Get Mr OneHook Pro".
+      openMrOneHookPro();
+      return;
+    }
+    if (asking || askSelected.length === 0) return;
+    setAsking(true);
+    setAskNotice(null);
+    try {
+      const files = [];
+      for (const id of askSelected) {
+        const entry = attachmentEnvelopes.get(id);
+        if (!entry) continue;
+        const blob = await attachmentCache.resolveBlob(entry.envelope, matchId);
+        files.push({
+          name: entry.envelope.name || `${entry.envelope.kind}-${id}`,
+          size: blob.size,
+          type: entry.envelope.mime,
+          blob,
+          origin: { matchId, sender: entry.sender },
+        });
+      }
+      const result = await uploadMatchChatAttachments(files);
+      if (result.ok === false) {
+        setAskNotice(attachmentProblemCopy(result.problem));
+        if (result.problem.kind === 'PRO_REQUIRED') openMrOneHookPro();
+        return;
+      }
+      exitAskMode();
+      onAskMrOneHook(result.items);
+    } catch {
+      setAskNotice('Those files couldn’t be opened on this device. Try again.');
+    } finally {
+      setAsking(false);
+    }
+  };
 
   // Snapshot of decrypted messages for the optional evidence share. Text comes from the SAME local
   // decrypt the chat UI uses (the E2EE hook); attachments/undecryptable/system messages map to a
@@ -1520,7 +1652,17 @@ function MatchConversation({
           </button>
         </div>
       )}
-      <div className="shrink-0 h-10 px-4 flex items-center justify-end border-b border-border/60 bg-surface-card/60">
+      <div className="shrink-0 h-10 px-4 flex items-center justify-end gap-3 border-b border-border/60 bg-surface-card/60">
+        {pro.proVisible && attachmentEnvelopes.size > 0 && !askMode && (
+          <button
+            type="button"
+            onClick={() => setAskMode(true)}
+            {...trackProps(UiElement.CHAT_MR_ONEHOOK_OPEN)}
+            className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-accent hover:opacity-80 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" /> Ask Mr OneHook about files
+          </button>
+        )}
         {peerId && (
           <CallButtons
             peerName={peerName}
@@ -1593,7 +1735,29 @@ function MatchConversation({
                 />
               ) : (
                 ((m) => (
-                  <div key={m.messageId} className={`max-w-md ${m.senderId === 'me' ? 'ml-auto' : ''}`}>
+                  <div
+                    key={m.messageId}
+                    className={`max-w-md relative ${m.senderId === 'me' ? 'ml-auto' : ''} ${
+                      askMode && attachmentEnvelopes.has(m.messageId) && askSelected.includes(m.messageId)
+                        ? 'ring-2 ring-accent rounded-2xl'
+                        : ''
+                    }`}
+                  >
+                    {askMode && attachmentEnvelopes.has(m.messageId) && (
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={askSelected.includes(m.messageId)}
+                        aria-label={`Select ${attachmentEnvelopes.get(m.messageId)?.envelope.name || 'this file'} for Mr OneHook`}
+                        onClick={() => toggleAskSelected(m.messageId)}
+                        {...trackProps(UiElement.CHAT_MR_ONEHOOK_SCOPE_SELECT, { targetId: 'attachment' })}
+                        className={`absolute top-6 z-10 w-6 h-6 rounded-full border-2 flex items-center justify-center cursor-pointer ${
+                          m.senderId === 'me' ? '-left-8' : '-right-8'
+                        } ${askSelected.includes(m.messageId) ? 'bg-accent border-accent text-bg' : 'bg-surface border-border'}`}
+                      >
+                        {askSelected.includes(m.messageId) && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
                     <div
                       className={`text-[9px] uppercase tracking-widest opacity-40 mb-1 flex items-center gap-2 ${
                         m.senderId === 'me' ? 'justify-end' : ''
@@ -1635,6 +1799,38 @@ function MatchConversation({
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {askMode && (
+        <div
+          className="shrink-0 px-4 py-3 border-t border-accent/40 bg-accent/5 flex items-center gap-3 flex-wrap"
+          data-testid="ask-mr-onehook-bar"
+        >
+          <div className="flex-1 min-w-0 text-xs text-text">
+            <p className="font-semibold">
+              {askSelected.length === 0
+                ? 'Select up to ' + maxAskFiles + ' photos or files'
+                : `${askSelected.length} selected`}
+            </p>
+            <p className="text-text-secondary">
+              {askNotice ?? 'Mr OneHook reads them for one answer. They are not kept.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={exitAskMode}
+            {...trackProps(UiElement.CHAT_MR_ONEHOOK_CONTEXT_SHARE, { action: 'dismiss' })}
+            className="px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-text cursor-pointer"
+          >
+            Cancel
+          </button>
+          <AskMrOneHookButton
+            plan={pro.plan}
+            selectedCount={askSelected.length}
+            busy={asking}
+            onClick={() => void askMrOneHook()}
+          />
+        </div>
+      )}
 
       <Composer
         value={input}
@@ -1710,16 +1906,26 @@ function MrOneHookConversation({
   currentUser,
   wallpaper,
   matches,
-  tier,
+  pro,
+  handoff,
+  onHandoffTaken,
 }: {
   currentUser: UserProfile;
   wallpaper: ChatWallpaper;
   matches: HydratedMatch[];
-  tier: SubscriptionTier;
+  pro: MrOneHookPlanContext;
+  /** "Ask Mr OneHook" from a match chat: open that match's chat with these files attached. */
+  handoff: { matchId: string; items: PendingAttachment[] } | null;
+  onHandoffTaken: () => void;
 }) {
   // Scope the conversation to product-only (default) or a single match the user picks here.
-  const [scope, setScope] = useState<MrOneHookScope>({ type: 'product' });
+  const [scope, setScope] = useState<MrOneHookScope>(() =>
+    handoff ? { type: 'match', matchId: handoff.matchId } : { type: 'product' },
+  );
   const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
+  useEffect(() => {
+    if (handoff) setScope({ type: 'match', matchId: handoff.matchId });
+  }, [handoff]);
 
   const activeMatch =
     scope.type === 'match' ? matches.find((m) => m.matchId === scope.matchId) ?? null : null;
@@ -1814,6 +2020,17 @@ function MrOneHookConversation({
               Mr.OneHook can reference this chat only after you review &amp; approve excerpts.
             </span>
           )}
+          {pro.proVisible && (
+            <button
+              type="button"
+              onClick={openMrOneHookPro}
+              {...trackProps(UiElement.CHAT_MR_ONEHOOK_UPGRADE_OPEN, { targetId: 'chat_header' })}
+              className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-full border border-accent/40 text-xs font-semibold text-accent hover:bg-accent/5 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+              {pro.plan === MrOneHookPlan.PRO ? 'Mr OneHook Pro' : 'Get Mr OneHook Pro'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1824,11 +2041,13 @@ function MrOneHookConversation({
           wallpaper={wallpaper}
           match={activeMatch}
           matchName={activeMatchName}
-          tier={tier}
+          pro={pro}
           onOpenScope={setScope}
+          handoff={handoff?.matchId === activeMatch.matchId ? handoff.items : undefined}
+          onHandoffTaken={onHandoffTaken}
         />
       ) : (
-        <MrOneHookProductScope currentUser={currentUser} wallpaper={wallpaper} tier={tier} onOpenScope={setScope} />
+        <MrOneHookProductScope currentUser={currentUser} wallpaper={wallpaper} pro={pro} onOpenScope={setScope} />
       )}
     </>
   );
@@ -1838,21 +2057,21 @@ function MrOneHookConversation({
 function MrOneHookProductScope({
   currentUser,
   wallpaper,
-  tier,
+  pro,
   onOpenScope,
 }: {
   currentUser: UserProfile;
   wallpaper: ChatWallpaper;
-  tier: SubscriptionTier;
+  pro: MrOneHookPlanContext;
   onOpenScope: (scope: MrOneHookScope) => void;
 }) {
   const chat = useMrOneHookChat({
     userId: currentUser.id,
     scope: { type: 'product' },
-    tier,
+    onPlan: notePlanFromChat,
     onOpenScope,
   });
-  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} tier={tier} scopeType="product" />;
+  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} pro={pro} scopeType="product" />;
 }
 
 /**
@@ -1865,16 +2084,20 @@ function MrOneHookMatchScope({
   wallpaper,
   match,
   matchName,
-  tier,
+  pro,
   onOpenScope,
+  handoff,
+  onHandoffTaken,
 }: {
   key?: string;
   currentUser: UserProfile;
   wallpaper: ChatWallpaper;
   match: HydratedMatch;
   matchName: string;
-  tier: SubscriptionTier;
+  pro: MrOneHookPlanContext;
   onOpenScope: (scope: MrOneHookScope) => void;
+  handoff?: PendingAttachment[];
+  onHandoffTaken: () => void;
 }) {
   const { messages } = useChatMessages(match.matchId, match.peerId || undefined);
 
@@ -1891,43 +2114,60 @@ function MrOneHookMatchScope({
   const chat = useMrOneHookChat({
     userId: currentUser.id,
     scope: { type: 'match', matchId: match.matchId },
-    tier,
+    onPlan: notePlanFromChat,
     resolveLocalExcerpts,
     onOpenScope,
   });
 
   return (
-    <MrOneHookChatBody chat={chat} wallpaper={wallpaper} matchName={matchName} tier={tier} scopeType="connection" />
+    <MrOneHookChatBody
+      chat={chat}
+      wallpaper={wallpaper}
+      matchName={matchName}
+      pro={pro}
+      scopeType="connection"
+      handoff={handoff}
+      onHandoffTaken={onHandoffTaken}
+    />
   );
 }
 
 /**
  * Shared presentational body for both scopes: transcript, typing indicator, the inline excerpt
  * review panel (shown only when the model asked for more context AND the device found some), and the
- * composer. The review panel is the explicit consent gate — nothing is shared until the user approves.
+ * composer with its files (Pro). The review panel is the explicit consent gate — nothing is shared
+ * until the user approves.
  */
 function MrOneHookChatBody({
   chat,
   wallpaper,
   matchName,
-  tier,
+  pro,
   scopeType,
+  handoff,
+  onHandoffTaken,
 }: {
   chat: ReturnType<typeof useMrOneHookChat>;
   wallpaper: ChatWallpaper;
   matchName?: string;
-  tier: SubscriptionTier;
+  pro: MrOneHookPlanContext;
   scopeType: 'product' | 'connection';
+  handoff?: PendingAttachment[];
+  onHandoffTaken?: () => void;
 }) {
-  const canSaveChats = isPaidSubscriptionTier(tier);
+  const { showToast } = useToast();
   const [confirm, setConfirm] = useState<null | { kind: 'replace'; oldest: string; title: string } | { kind: 'delete'; id: string; title: string }>(null);
   const [leavingId, setLeavingId] = useState<string | undefined>(undefined);
-  const tabs = mrOneHookTabs(chat.sessions, chat.currentSessionId, canSaveChats, chat.replacing);
-  const MAX_CHATS = 3;
+  const tabs = mrOneHookTabs(chat.sessions, chat.currentSessionId, chat.replacing);
+  // The plan's saved chats (Free 1, Pro 3). At the cap a new chat replaces the least recent one.
+  const maxChats = pro.limits.maxSessions;
+  const isPro = pro.plan === MrOneHookPlan.PRO;
   const addChat = () => {
     if (chat.loading) return;
     const oldest = leastRecentSession(chat.sessions);
-    if (chat.sessions.length >= MAX_CHATS && chat.currentSessionId && !chat.replacing && oldest) {
+    // Warn only when the cap is known (the Pro status was read); otherwise the server still replaces the
+    // least recent chat if it must, and the eviction notice says so.
+    if (pro.proVisible && chat.sessions.length >= maxChats && chat.currentSessionId && !chat.replacing && oldest) {
       const title = tabs.find((t) => t.sessionId === oldest.sessionId)?.title ?? 'your least recent chat';
       setConfirm({ kind: 'replace', oldest: oldest.sessionId, title });
       return;
@@ -1936,20 +2176,79 @@ function MrOneHookChatBody({
   };
   const { messages, loading, mood, pendingReview, availability, send, confirmReview, cancelReview } = chat;
   const [input, setInput] = useState('');
+  const [composerNotice, setComposerNotice] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   // Terminal availability (not entitled / signed out / not configured): block input entirely. The
   // reason is already surfaced as an assistant bubble by the hook, so the composer just locks.
   const unavailable = availability !== 'AVAILABLE';
+  const attachments = useMrOneHookAttachments({ plan: pro.plan, limits: pro.limits });
+
+  // "Ask Mr OneHook" from the match chat: the files arrive uploaded; keep polling them here.
+  const { adopt } = attachments;
+  const adoptedHandoff = useRef<PendingAttachment[] | undefined>(undefined);
+  useEffect(() => {
+    if (!handoff || handoff.length === 0 || adoptedHandoff.current === handoff) return;
+    adoptedHandoff.current = handoff;
+    adopt(handoff);
+    onHandoffTaken?.();
+  }, [handoff, adopt, onHandoffTaken]);
+
+  // "Your oldest chat was replaced" fades after a few seconds.
+  const { evictionNotice, dismissEvictionNotice } = chat;
+  useEffect(() => {
+    if (!evictionNotice) return;
+    const id = window.setTimeout(dismissEvictionNotice, 6000);
+    return () => window.clearTimeout(id);
+  }, [evictionNotice, dismissEvictionNotice]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading, pendingReview]);
 
+  const action = composerAction(pro.plan, attachments.items, input);
+  // Out of today's free messages: the composer offers Pro instead of sending.
+  const limitUpsell = availability === 'LIMIT_REACHED' && pro.proVisible;
+
   const handleSend = async () => {
-    if (!input.trim()) return;
+    if (limitUpsell || action === 'GET_PRO') {
+      openMrOneHookPro();
+      return;
+    }
+    if (action !== 'SEND' || loading || pendingReview || unavailable) return;
     const text = input;
+    const turn = attachments.items.length > 0 ? attachments.turnAttachments() : undefined;
     setInput('');
-    await send(text);
+    setComposerNotice(null);
+    const outcome = await send(text, turn);
+    if (outcome.status === 'sent') {
+      if (turn) attachments.clear();
+      return;
+    }
+    if (outcome.status !== 'attachment_problem') return;
+    // The turn was not sent: keep the text and the files.
+    setInput(text);
+    const problem: AttachmentProblem = outcome.problem;
+    switch (problem.kind) {
+      case 'PRO_REQUIRED':
+        openMrOneHookPro();
+        break;
+      case 'NOT_READY':
+        attachments.repoll();
+        break;
+      case 'NOT_USABLE':
+      case 'NOT_FOUND':
+        attachments.markFailed(problem);
+        break;
+      default:
+        break;
+    }
+    setComposerNotice(attachmentProblemCopy(problem));
+  };
+
+  const openSentAttachment = (attachmentId: string, name: string) => {
+    void openChatAttachmentContent(attachmentId, name).then((ok) => {
+      if (!ok) showToast('That file is no longer available.', 'error');
+    });
   };
 
   return (
@@ -1958,11 +2257,10 @@ function MrOneHookChatBody({
         <ChatBackdrop wallpaper={wallpaper} />
         {/* The chat tabs float at the top of the conversation, on the wallpaper (not part of the header). */}
         <div className="absolute top-0 inset-x-0 z-10 px-4 md:px-6 pt-3 pointer-events-none">
-          <div className="pointer-events-auto max-w-3xl mx-auto">
+          <div className="pointer-events-auto max-w-3xl mx-auto space-y-2">
             <MrOneHookTabs
               tabs={tabs}
               activeId={chat.currentSessionId}
-              locked={!canSaveChats}
               leavingId={leavingId}
               onSelect={(id) => void chat.resumeSession(id)}
               onDelete={(id) =>
@@ -1970,16 +2268,49 @@ function MrOneHookChatBody({
               }
               onAdd={addChat}
             />
+            {evictionNotice && (
+              <div
+                role="status"
+                className="mx-auto w-fit flex items-center gap-2 rounded-full bg-surface/95 border border-border px-3 py-1 text-xs text-text shadow-sm"
+                data-testid="mr-onehook-eviction-notice"
+              >
+                <span>{evictionNotice}</span>
+                <button
+                  type="button"
+                  onClick={dismissEvictionNotice}
+                  {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_LIMIT, { action: 'dismiss' })}
+                  aria-label="Dismiss"
+                  className="w-4 h-4 flex items-center justify-center text-text/50 hover:text-text cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
         {confirm?.kind === 'replace' && (
           <MrOneHookConfirm
             title={`Replace ${confirm.title}?`}
-            body={`You can keep ${MAX_CHATS} chats. Starting a new one removes ${confirm.title}, the one you used least recently. Its messages will be deleted.`}
+            body={
+              maxChats === 1
+                ? `On the Free plan you can keep 1 chat. Starting a new one removes ${confirm.title} and its messages.${pro.proVisible && !isPro ? ' With Mr OneHook Pro you can keep 3.' : ''}`
+                : `You can keep ${maxChats} chats. Starting a new one removes ${confirm.title}, the one you used least recently. Its messages will be deleted.`
+            }
             confirmLabel="Replace"
             element={UiElement.CHAT_MR_ONEHOOK_SESSION_LIMIT}
             confirmOptions={{ value: 'replace_least_recent' }}
             cancelOptions={{ value: 'cancel' }}
+            {...(pro.proVisible && !isPro
+              ? {
+                  extra: {
+                    label: 'Get Mr OneHook Pro',
+                    onClick: () => {
+                      setConfirm(null);
+                      openMrOneHookPro();
+                    },
+                  },
+                }
+              : {})}
             onCancel={() => setConfirm(null)}
             onConfirm={() => {
               const old = confirm.oldest;
@@ -2008,35 +2339,6 @@ function MrOneHookChatBody({
           />
         )}
         <div className="relative h-full px-6 md:px-8 pb-6 md:pb-8 pt-20 space-y-6 overflow-y-auto min-h-0">
-          {chat.sessionLimit && (
-            <div
-              className="max-w-md rounded-2xl border border-accent/40 bg-accent/5 p-4 space-y-3"
-              data-testid="session-limit"
-            >
-              <p className="text-sm text-text">
-                You have {chat.sessionLimit.maxSessions} saved chats, the most you can keep. Replace your least
-                recent chat, or delete one above.
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => void chat.replaceLeastRecentAndSend()}
-                  {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_LIMIT, { value: 'replace_least_recent' })}
-                  className="px-3 py-1.5 rounded-lg bg-ig-blue text-white text-xs font-semibold cursor-pointer"
-                >
-                  Replace least recent
-                </button>
-                <button
-                  type="button"
-                  onClick={chat.dismissSessionLimit}
-                  {...trackProps(UiElement.CHAT_MR_ONEHOOK_SESSION_LIMIT, { value: 'cancel' })}
-                  className="px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-text cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
           {messages.length === 0 && !loading ? (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-3 opacity-70">
               <Mascot mood="Happy" className="w-16 h-16" />
@@ -2064,6 +2366,13 @@ function MrOneHookChatBody({
                   }`}
                 >
                   {m.content}
+                  {m.attachments && m.attachments.length > 0 && (
+                    <SentAttachmentChips
+                      refs={m.attachments}
+                      inverted={m.role === 'user'}
+                      onOpen={(ref) => ref.attachmentId && openSentAttachment(ref.attachmentId, ref.name)}
+                    />
+                  )}
                 </div>
               </div>
             ))
@@ -2097,18 +2406,48 @@ function MrOneHookChatBody({
       <Composer
         value={input}
         onChange={setInput}
-        onSend={handleSend}
+        onSend={() => void handleSend()}
         disabled={loading || pendingReview !== null || unavailable}
+        above={
+          <>
+            <PendingAttachmentChips items={attachments.items} onRemove={attachments.remove} />
+            {composerNotice && (
+              <p role="status" className="pb-2 text-[11px] text-orange-600 dark:text-orange-400">
+                {composerNotice}
+              </p>
+            )}
+          </>
+        }
+        leading={
+          pro.proVisible && !unavailable ? (
+            <MrOneHookAttachButton
+              disabled={loading || pendingReview !== null}
+              onFiles={(files) => {
+                const rejected = attachments.add(files);
+                setComposerNotice(rejected.length ? rejectionCopy(rejected, pro.limits) : null);
+              }}
+            />
+          ) : undefined
+        }
+        sendIsUpsell={limitUpsell || action === 'GET_PRO'}
+        sendLabel={limitUpsell ? 'Get Mr OneHook Pro' : composerSendLabel(action)}
+        sendEnabled={
+          limitUpsell || action === 'GET_PRO'
+            ? true
+            : action === 'SEND' && !loading && pendingReview === null && !unavailable
+        }
         placeholder={
           unavailable
             ? availability === 'LIMIT_REACHED'
-              ? 'Today’s free messages are used up. Upgrade to Super or come back tomorrow.'
+              ? 'Today’s free messages are used up. Get Mr OneHook Pro or come back tomorrow.'
               : availability === 'NOT_AUTHENTICATED'
                 ? 'Sign in again to chat with Mr.OneHook.'
                 : 'Mr.OneHook is temporarily unavailable.'
             : pendingReview
               ? 'Review the excerpts above first…'
-              : 'Say something to Mr.OneHook…'
+              : scopeType === 'connection' && attachments.items.length > 0
+                ? `Ask about these files and ${matchName ?? 'your match'}…`
+                : 'Say something to Mr.OneHook…'
         }
         footerRight={
           typeof chat.remainingMessages === 'number'

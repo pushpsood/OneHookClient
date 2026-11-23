@@ -47,9 +47,9 @@ new accounts are created in the apps.
 
 | Tier | Price | Hooks at a time | Notes |
 |---|---|---|---|
-| Must | Free | 1 | Mixed discovery deck; Mr OneHook limited to 10 messages per day |
-| Super | Paid | 1 | Choose a discovery category, save OneHook suggestions, saved Mr OneHook chats |
-| Infinity | Paid | 1 | Everything in Super, plus 10 archived chats (each kept 90 days) and the option to hide past hooks from discovery |
+| Must | Free | 1 | Mixed discovery deck; Mr OneHook Free plan (10 messages per day, 1 saved chat) |
+| Super | Paid | 1 | Choose a discovery category, save OneHook suggestions; Mr OneHook Free plan |
+| Infinity | Paid | 1 | Everything in Super, plus 10 archived chats (each kept 90 days), the option to hide past hooks from discovery, and Mr OneHook Pro included |
 
 ### Hooks
 
@@ -86,8 +86,10 @@ voice and video calls; media and signaling are encrypted end to end.
 Mr OneHook is OneHook's AI assistant (Azure OpenAI). On the website it answers product questions. In
 the apps, a signed-in member can ask about OneHook, about one of their connections, or for help writing
 a reply. Chat messages are only ever shared with Mr OneHook as excerpts the member reviews and confirms
-first; the excerpts are used for that one answer and are not stored. Super and Infinity members can
-choose to save their Mr OneHook conversations (their own questions and Mr OneHook's answers). In a
+first; the excerpts are used for that one answer and are not stored. Every member can save Mr OneHook
+conversations (their own questions and Mr OneHook's answers): 1 on the Free plan, 3 with Mr OneHook
+Pro. Mr OneHook Pro is a separate subscription (or included with Infinity) with unlimited messages and
+files (photos, documents, voice notes and videos, including ones the member selects from a match chat). In a
 product chat, Mr OneHook can also record a "find me ..." suggestion that feeds the member's discovery
 deck.
 

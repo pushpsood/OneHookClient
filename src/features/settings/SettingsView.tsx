@@ -1,6 +1,9 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { subscriptionTierDisplayName } from 'onehook-api-client/membership';
-import { MOST_POPULAR_TIER, PAID_TIER_NAMES } from '../../config/membership.config';
+import { MOST_POPULAR_TIER } from '../../config/membership.config';
+import { MrOneHookPlan } from 'onehook-mr-onehook-client';
+import { openMrOneHookPro, useActivatingMembershipPoll, useMrOneHookPro } from '../../store/mr-onehook-pro-store';
+import { buildProScreenModel } from '../../lib/mr-onehook-pro';
 import { motion } from 'motion/react';
 import { SlidersHorizontal, UserCog, Sparkles, LogOut, Check, Heart } from 'lucide-react';
 import type { UserProfile } from '../../types';
@@ -50,6 +53,16 @@ export function SettingsView({
   const tierLabel = userState?.subscriptionTier
     ? subscriptionTierDisplayName(userState.subscriptionTier)
     : '—';
+  const pro = useMrOneHookPro(user.id);
+  const activating = Boolean(userState?.pendingSubscriptionTier);
+  useActivatingMembershipPoll(activating, user.id);
+  const proSummary = pro.status
+    ? buildProScreenModel(pro.status, {
+        membershipEndsAt: userState?.membershipEndsAt,
+        pendingUpgrade: activating,
+        tierName: userState?.subscriptionTier ? subscriptionTierDisplayName(userState.subscriptionTier) : undefined,
+      }).summary
+    : undefined;
 
   return (
     <motion.div
@@ -166,17 +179,32 @@ export function SettingsView({
           </div>
           <p className="text-xs text-text-secondary leading-relaxed max-w-md">
             Mr OneHook is your AI companion. He helps you understand your connections and get more
-            out of OneHook. Full access to the AI companion is included with {PAID_TIER_NAMES}.
+            out of OneHook. Every member gets 10 messages a day and 1 saved chat. Mr OneHook Pro adds
+            unlimited messages, 3 saved chats and files.
           </p>
-          <div className="flex items-center gap-2 text-xs">
-            {paid ? (
-              <span className="inline-flex items-center gap-1.5 text-green-600 font-semibold">
-                <Check className="w-3.5 h-3.5" /> Included with your plan
-              </span>
-            ) : (
-              <span className="text-text-secondary">Upgrade to {MOST_POPULAR_TIER.displayName} for full access.</span>
-            )}
-          </div>
+          {activating && (
+            <p role="status" className="text-xs text-text-secondary">Activating your membership…</p>
+          )}
+          {pro.proVisible && (
+            <div className="flex items-center justify-between gap-3 text-xs">
+              {pro.plan === MrOneHookPlan.PRO ? (
+                <span className="inline-flex items-center gap-1.5 text-green-600 font-semibold">
+                  <Check className="w-3.5 h-3.5" />{' '}
+                  {proSummary ?? 'Mr OneHook Pro'}
+                </span>
+              ) : (
+                <span className="text-text-secondary">Free plan</span>
+              )}
+              <button
+                type="button"
+                onClick={openMrOneHookPro}
+                {...trackProps(UiElement.PROFILE_UPGRADE_OPEN, { targetId: 'mr_onehook_pro' })}
+                className="px-3 py-1.5 rounded-lg border border-accent/50 text-accent font-semibold hover:bg-accent/5 cursor-pointer"
+              >
+                {pro.plan === MrOneHookPlan.PRO ? 'Manage Mr OneHook Pro' : 'Get Mr OneHook Pro'}
+              </button>
+            </div>
+          )}
 
           <div className="pt-4 border-t border-border space-y-2">
             <h3 className="text-sm font-semibold text-text">Personalization</h3>

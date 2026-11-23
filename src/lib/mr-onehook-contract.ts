@@ -4,7 +4,9 @@
  * Typed, framework-free models and (de)serialisers for the OneHook UX Enhancement backend:
  *   • `POST /api/public/product-chat`            — anonymous, product-only (landing widget)
  *   • `POST /api/member/product-connection-chat` — authenticated member product + connection chat
- *   • `GET/DELETE .../sessions[/:id]`            — tier-gated AI-session lifecycle
+ *   • `GET/DELETE .../sessions[/:id]`            — saved-session lifecycle (Free 1, Pro 3)
+ *   • `.../attachments[/:id[/content]]`           — Mr OneHook Pro file uploads
+ *   • `.../mr-onehook-pro[/...]`                  — the Mr OneHook Pro plan and subscription
  *
  * Everything here is pure so the request builder and response parser can be unit-tested without a
  * network. The builder is also the enforcement point for "never send message IDs/keys": an excerpt
@@ -12,6 +14,12 @@
  */
 
 import type { SelectedExcerpt } from './mr-onehook-excerpts';
+import {
+  AttachmentKind,
+  AttachmentSource,
+  MrOneHookPlan,
+  type ChatAttachmentRef,
+} from 'onehook-mr-onehook-client';
 
 export type MrOneHookMood = 'Happy' | 'Neutral' | 'Thinking' | 'Sad' | 'Excited';
 
@@ -29,6 +37,8 @@ export interface MrOneHookMessage {
   content: string;
   /** Transient inline error bubble — styled distinctly and never persisted. */
   isError?: boolean;
+  /** Files sent with this (user) turn. Uploaded ones carry an `attachmentId`; match-chat ones do not. */
+  attachments?: ChatAttachmentRef[];
 }
 
 export interface MrOneHookDemographics {
@@ -60,8 +70,8 @@ export interface MemberChatRequestInit {
   persist?: boolean;
   /** Continue an existing session; implies persistence. */
   sessionId?: string;
-  /** At the saved-chat limit, replace the least recently active saved chat (new sessions only). */
-  replaceLeastRecent?: boolean;
+  /** `READY` attachments (Mr OneHook Pro), up to 3. Files from a match chat need the same matchId. */
+  attachmentIds?: readonly string[];
 }
 
 export interface MemberChatRequestBody {
@@ -74,7 +84,8 @@ export interface MemberChatRequestBody {
     userConfirmed: boolean;
   };
   contextRequestId?: string;
-  sessionOptions?: { persist?: boolean; sessionId?: string; replaceLeastRecent?: boolean };
+  sessionOptions?: { persist?: boolean; sessionId?: string };
+  attachmentIds?: string[];
 }
 
 /**
@@ -86,6 +97,9 @@ export interface MemberChatRequestBody {
  *     the server's validation so a product-only request can never carry match excerpts.
  *   • `sessionOptions` is omitted entirely for a non-persisted request; a sessionId always implies
  *     `persist: true` (the server rejects a sessionId with persistence disabled).
+ *   • `replaceLeastRecent` is never sent: at the plan's cap the server always replaces the least
+ *     recently active saved chat and reports it in `evictedSessionIds`.
+ *   • `attachmentIds` is emitted only when there is at least one id.
  */
 export function buildMemberChatRequestBody(init: MemberChatRequestInit): MemberChatRequestBody {
   const message = init.message.trim();
@@ -119,8 +133,10 @@ export function buildMemberChatRequestBody(init: MemberChatRequestInit): MemberC
   if (init.sessionId) {
     body.sessionOptions = { persist: true, sessionId: init.sessionId };
   } else if (init.persist) {
-    body.sessionOptions = { persist: true, ...(init.replaceLeastRecent ? { replaceLeastRecent: true } : {}) };
+    body.sessionOptions = { persist: true };
   }
+
+  if (init.attachmentIds && init.attachmentIds.length > 0) body.attachmentIds = [...init.attachmentIds];
 
   return body;
 }
@@ -136,6 +152,8 @@ export interface MemberContextUsed {
   messageCount: number;
   chatSession: boolean;
   sessionMessageCount: number;
+  /** Attachments read for this turn. */
+  attachmentCount: number;
 }
 
 export interface MemberContextRequest {
@@ -187,6 +205,10 @@ export interface MemberChatResponse {
   contextUsed?: MemberContextUsed;
   requestId?: string;
   session?: MemberSessionMetadata;
+  /** Saved chats the server deleted to make room for this new one (least recently active first). */
+  evictedSessionIds?: string[];
+  /** The member's Mr OneHook plan for this turn. */
+  plan?: MrOneHookPlan;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -223,6 +245,7 @@ function parseContextUsed(value: unknown): MemberContextUsed | undefined {
     messageCount: num(value.messageCount),
     chatSession: bool(value.chatSession),
     sessionMessageCount: num(value.sessionMessageCount),
+    attachmentCount: num(value.attachmentCount),
   };
 }
 
@@ -265,6 +288,11 @@ export function parseMemberChatResponse(data: unknown): MemberChatResponse {
   if (typeof data.remainingMessages === 'number' && Number.isFinite(data.remainingMessages)) {
     response.remainingMessages = Math.max(0, Math.floor(data.remainingMessages));
   }
+  if (Array.isArray(data.evictedSessionIds)) {
+    const evicted = data.evictedSessionIds.filter((id): id is string => typeof id === 'string' && id.length > 0);
+    if (evicted.length > 0) response.evictedSessionIds = evicted;
+  }
+  if (isMrOneHookPlan(data.plan)) response.plan = data.plan;
   if (isRecord(data.matchSuggestion)
     && (data.matchSuggestion.status === 'RECORDED'
       || data.matchSuggestion.status === 'PREMIUM_REQUIRED'
@@ -329,7 +357,15 @@ export function parseSessionDetail(value: unknown): SessionDetail | undefined {
   const messages = v.messages
     .filter((m): m is Record<string, unknown> => typeof m === 'object' && m !== null)
     .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-    .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content as string, createdAt: typeof m.createdAt === 'string' ? m.createdAt : '' }));
+    .map((m) => {
+      const attachments = parseAttachmentRefs(m.attachments);
+      return {
+        role: m.role as 'user' | 'assistant',
+        content: m.content as string,
+        createdAt: typeof m.createdAt === 'string' ? m.createdAt : '',
+        ...(attachments.length > 0 ? { attachments } : {}),
+      };
+    });
   return {
     sessionId: v.sessionId,
     ...(typeof v.matchId === 'string' ? { matchId: v.matchId } : {}),
@@ -340,28 +376,12 @@ export function parseSessionDetail(value: unknown): SessionDetail | undefined {
   };
 }
 
-/**
- * A 409 `CHAT_SESSION_LIMIT_REACHED` for a NEW saved chat: the member must choose (replace the least
- * recent, or delete one). Returns undefined for anything else, including the limit while continuing an
- * existing chat, which the client treats like any other session error.
- */
-export function sessionLimitFromError(
-  errorBody: unknown,
-  continuingSession: boolean,
-): { maxSessions: number; sessions: SessionListItem[] } | undefined {
-  if (continuingSession || typeof errorBody !== 'object' || errorBody === null) return undefined;
-  const body = errorBody as { error?: unknown; maxSessions?: unknown; sessions?: unknown };
-  if (body.error !== 'CHAT_SESSION_LIMIT_REACHED') return undefined;
-  return {
-    maxSessions: typeof body.maxSessions === 'number' && body.maxSessions > 0 ? body.maxSessions : 3,
-    sessions: parseSessionList(body.sessions),
-  };
-}
-
 export interface SessionTurn {
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  /** Files sent with this (user) turn. */
+  attachments?: ChatAttachmentRef[];
 }
 
 export interface SessionDetail {
@@ -376,7 +396,11 @@ export interface SessionDetail {
 /**
  * Server error codes that mean "this session cannot be persisted/continued for this caller". The
  * client reacts by forgetting the stored sessionId and retrying the SAME question without
- * persistence, so a tier downgrade or a hit limit never blocks getting an answer.
+ * persistence, so a plan change or storage outage never blocks getting an answer.
+ *
+ * `CHAT_SESSION_LIMIT_REACHED` is now only a race (a concurrent request filled the plan's sessions at
+ * save time): the client first retries once as is ({@link isSessionLimitRace}), and only then falls
+ * back to a session-free answer.
  */
 export const SESSION_ERROR_CODES: ReadonlySet<string> = new Set([
   'CHAT_SESSION_NOT_FOUND',
@@ -390,13 +414,18 @@ export function isSessionErrorCode(code: unknown): boolean {
   return typeof code === 'string' && SESSION_ERROR_CODES.has(code);
 }
 
+/** 409 `CHAT_SESSION_LIMIT_REACHED`: a concurrent request filled the plan's saved chats. Retry once. */
+export function isSessionLimitRace(status: number, code: unknown): boolean {
+  return status === 409 && code === 'CHAT_SESSION_LIMIT_REACHED';
+}
+
 /**
  * Why a member request was refused in a way the UI must treat as terminal (not a transient "try
  * again"). These map to the backend auth/permission gate on `POST .../product-connection-chat`:
  *
- *   • LIMIT_REACHED     — HTTP 402 `MESSAGE_LIMIT_REACHED`: a free (Must) member has used today's 10
- *                         messages. Every member can chat; this resets at the next UTC midnight or on
- *                         upgrading to Super.
+ *   • LIMIT_REACHED     — HTTP 402 `MESSAGE_LIMIT_REACHED`: a member on the Free plan has used today's
+ *                         10 messages. Every member can chat; this resets at the next UTC midnight or
+ *                         with Mr OneHook Pro.
  *   • NOT_AUTHENTICATED — HTTP 401 `AUTH_REQUIRED` / `INVALID_ACCESS_TOKEN`: the session is missing or
  *                         expired; prompt the user to sign in again.
  *   • NOT_CONFIGURED    — HTTP 404 `ENDPOINT_NOT_FOUND` / 503 `CONTEXT_NOT_CONFIGURED`: the feature is
@@ -441,4 +470,302 @@ export function classifyMemberChatAvailability(
   if (status === 401) return 'NOT_AUTHENTICATED';
   if (status === 404) return 'NOT_CONFIGURED';
   return undefined;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plans (Free / Pro)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PLANS: readonly string[] = Object.values(MrOneHookPlan);
+
+export function isMrOneHookPlan(value: unknown): value is MrOneHookPlan {
+  return typeof value === 'string' && PLANS.includes(value);
+}
+
+/** Notice shown when a reply's `evictedSessionIds` removed saved chats. */
+export function evictionNotice(count: number): string {
+  return count > 1 ? 'Your oldest chats were replaced' : 'Your oldest chat was replaced';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attachments
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ATTACHMENT_KINDS: readonly string[] = Object.values(AttachmentKind);
+const ATTACHMENT_SOURCES: readonly string[] = Object.values(AttachmentSource);
+
+/** Parses `ChatSessionMessage.attachments`; drops malformed refs. */
+export function parseAttachmentRefs(value: unknown): ChatAttachmentRef[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isRecord)
+    .filter(
+      (a) =>
+        typeof a.name === 'string'
+        && typeof a.kind === 'string' && ATTACHMENT_KINDS.includes(a.kind)
+        && typeof a.source === 'string' && ATTACHMENT_SOURCES.includes(a.source),
+    )
+    .map((a) => ({
+      ...(typeof a.attachmentId === 'string' && a.attachmentId ? { attachmentId: a.attachmentId } : {}),
+      name: a.name as string,
+      kind: a.kind as AttachmentKind,
+      ...(typeof a.sizeBytes === 'number' && Number.isFinite(a.sizeBytes) ? { sizeBytes: a.sizeBytes } : {}),
+      source: a.source as AttachmentSource,
+    }));
+}
+
+/** How a chip labels a file of a saved turn: uploads open; match-chat files were never kept. */
+export function attachmentRefLabel(ref: ChatAttachmentRef): string {
+  return ref.attachmentId ? ref.name : `${ref.name} · From your chat`;
+}
+
+/**
+ * Why an attachment upload, its status poll, or a chat turn that carries attachments was refused.
+ *
+ *   • UNSUPPORTED_TYPE            — 415 `UNSUPPORTED_ATTACHMENT_TYPE`
+ *   • TOO_LARGE                   — 413 `ATTACHMENT_TOO_LARGE` (over 5 MiB)
+ *   • PROCESSING_UNAVAILABLE      — 429 `ATTACHMENT_PROCESSING_UNAVAILABLE` (burst or monthly allowance;
+ *                                   chat still works; `retryAt` says when files work again)
+ *   • RATE_LIMITED                — 429 `RATE_LIMITED` (transient)
+ *   • PRO_REQUIRED                — 403 `PRO_REQUIRED`: open the Pro screen
+ *   • MESSAGE_CONTEXT_NOT_ALLOWED — 403: the match does not allow its message history to be used
+ *   • MATCH_NOT_AVAILABLE         — 404: the match is gone
+ *   • NOT_FOUND                   — 404 `ATTACHMENT_NOT_FOUND` (expired, or another member's)
+ *   • NOT_READY                   — 409 `ATTACHMENT_NOT_READY`: still processing, keep polling
+ *   • NOT_USABLE                  — 400 `ATTACHMENT_NOT_USABLE` (failed processing, or another chat's)
+ *   • NOT_CONFIGURED              — 404 `ENDPOINT_NOT_FOUND` / 503 `ATTACHMENTS_NOT_CONFIGURED`
+ *   • NOT_AUTHENTICATED           — 401
+ *   • INVALID                     — 400 `INVALID_ATTACHMENT_REQUEST`
+ *   • UNAVAILABLE                 — anything else (503 temporarily unavailable, 500, unknown)
+ */
+export type AttachmentProblemKind =
+  | 'UNSUPPORTED_TYPE'
+  | 'TOO_LARGE'
+  | 'PROCESSING_UNAVAILABLE'
+  | 'RATE_LIMITED'
+  | 'PRO_REQUIRED'
+  | 'MESSAGE_CONTEXT_NOT_ALLOWED'
+  | 'MATCH_NOT_AVAILABLE'
+  | 'NOT_FOUND'
+  | 'NOT_READY'
+  | 'NOT_USABLE'
+  | 'NOT_CONFIGURED'
+  | 'NOT_AUTHENTICATED'
+  | 'INVALID'
+  | 'UNAVAILABLE';
+
+export interface AttachmentProblem {
+  kind: AttachmentProblemKind;
+  /** ISO-8601, PROCESSING_UNAVAILABLE only: when files can be processed again. */
+  retryAt?: string;
+}
+
+const ATTACHMENT_CODES: Readonly<Record<string, AttachmentProblemKind>> = {
+  UNSUPPORTED_ATTACHMENT_TYPE: 'UNSUPPORTED_TYPE',
+  ATTACHMENT_TOO_LARGE: 'TOO_LARGE',
+  PAYLOAD_TOO_LARGE: 'TOO_LARGE',
+  ATTACHMENT_PROCESSING_UNAVAILABLE: 'PROCESSING_UNAVAILABLE',
+  RATE_LIMITED: 'RATE_LIMITED',
+  PRO_REQUIRED: 'PRO_REQUIRED',
+  MESSAGE_CONTEXT_NOT_ALLOWED: 'MESSAGE_CONTEXT_NOT_ALLOWED',
+  MATCH_NOT_AVAILABLE: 'MATCH_NOT_AVAILABLE',
+  ATTACHMENT_NOT_FOUND: 'NOT_FOUND',
+  ATTACHMENT_NOT_READY: 'NOT_READY',
+  ATTACHMENT_NOT_USABLE: 'NOT_USABLE',
+  ENDPOINT_NOT_FOUND: 'NOT_CONFIGURED',
+  ATTACHMENTS_NOT_CONFIGURED: 'NOT_CONFIGURED',
+  AUTH_REQUIRED: 'NOT_AUTHENTICATED',
+  INVALID_ACCESS_TOKEN: 'NOT_AUTHENTICATED',
+  INVALID_ATTACHMENT_REQUEST: 'INVALID',
+};
+
+/** Classifies a failed attachment call (or an attachment-related chat-turn refusal). Code wins over status. */
+export function classifyAttachmentError(status: number, body: unknown): AttachmentProblem {
+  const record = isRecord(body) ? body : {};
+  const code = typeof record.error === 'string' ? record.error : '';
+  const retryAt = typeof record.retryAt === 'string' && record.retryAt ? record.retryAt : undefined;
+  const known = ATTACHMENT_CODES[code];
+  const kind: AttachmentProblemKind = known
+    ?? (status === 415 ? 'UNSUPPORTED_TYPE'
+      : status === 413 ? 'TOO_LARGE'
+        : status === 401 ? 'NOT_AUTHENTICATED'
+          : status === 429 ? 'RATE_LIMITED'
+            : 'UNAVAILABLE');
+  return kind === 'PROCESSING_UNAVAILABLE' && retryAt ? { kind, retryAt } : { kind };
+}
+
+/** Chat-turn codes that are about the turn's attachments (handled by the attachment flow, not as errors). */
+const CHAT_TURN_ATTACHMENT_CODES: ReadonlySet<string> = new Set([
+  'PRO_REQUIRED',
+  'ATTACHMENT_NOT_READY',
+  'ATTACHMENT_NOT_USABLE',
+  'ATTACHMENT_NOT_FOUND',
+  'MESSAGE_CONTEXT_NOT_ALLOWED',
+]);
+
+/** A refused chat turn that the attachment flow handles, or undefined for any other failure. */
+export function chatTurnAttachmentProblem(status: number, code: unknown): AttachmentProblem | undefined {
+  if (typeof code !== 'string' || !CHAT_TURN_ATTACHMENT_CODES.has(code)) return undefined;
+  return classifyAttachmentError(status, { error: code });
+}
+
+/** Shown when files hit the processing allowance; chat keeps working. */
+export const ATTACHMENT_HEAVY_USAGE_COPY =
+  "Files can't be processed right now because of heavy usage. You can keep chatting.";
+
+export const MESSAGE_CONTEXT_NOT_ALLOWED_COPY =
+  "This match doesn't allow Mr OneHook to use your conversation, so files they sent can't be shared. Files you sent can still be used.";
+
+/** One-line copy for an attachment problem. `formatTime` renders `retryAt` (defaults to the locale time). */
+export function attachmentProblemCopy(
+  problem: AttachmentProblem,
+  formatTime: (iso: string) => string = (iso) =>
+    new Date(iso).toLocaleString(undefined, { hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short' }),
+): string {
+  switch (problem.kind) {
+    case 'UNSUPPORTED_TYPE':
+      return 'This type of file isn’t supported.';
+    case 'TOO_LARGE':
+      return 'This file is over 5 MB.';
+    case 'PROCESSING_UNAVAILABLE':
+      return problem.retryAt
+        ? `${ATTACHMENT_HEAVY_USAGE_COPY} Files work again from ${formatTime(problem.retryAt)}.`
+        : ATTACHMENT_HEAVY_USAGE_COPY;
+    case 'RATE_LIMITED':
+      return 'Too many requests. Try again in a minute.';
+    case 'PRO_REQUIRED':
+      return 'Sending files needs Mr OneHook Pro.';
+    case 'MESSAGE_CONTEXT_NOT_ALLOWED':
+      return MESSAGE_CONTEXT_NOT_ALLOWED_COPY;
+    case 'MATCH_NOT_AVAILABLE':
+      return 'This conversation is no longer available.';
+    case 'NOT_FOUND':
+      return 'This file has expired. Attach it again.';
+    case 'NOT_READY':
+      return 'Still reading this file…';
+    case 'NOT_USABLE':
+      return 'This file couldn’t be read. Remove it and try again.';
+    case 'NOT_CONFIGURED':
+      return 'Files aren’t available right now.';
+    case 'NOT_AUTHENTICATED':
+      return 'Please sign in again.';
+    case 'INVALID':
+      return 'This file couldn’t be uploaded.';
+    default:
+      return 'This file couldn’t be processed right now. Try again later.';
+  }
+}
+
+/** Copy for a `FAILED` attachment's `failureReason`. */
+export function attachmentFailureCopy(reason: string | undefined): string {
+  switch (reason) {
+    case 'UNREADABLE':
+      return 'Nothing could be read from this file.';
+    case 'TOO_LONG':
+      return 'This file is too long to process.';
+    case 'PROCESSING_UNAVAILABLE':
+      return ATTACHMENT_HEAVY_USAGE_COPY;
+    default:
+      return 'This file couldn’t be read.';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mr OneHook Pro (purchase, auto-renew, "Keep Pro", notices)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Why a Pro call was refused:
+ *
+ *   • PAYMENT_DECLINED             — 402: nothing was bought
+ *   • INCLUDED_IN_MEMBERSHIP       — 409 `PRO_INCLUDED_IN_MEMBERSHIP`: nothing was charged
+ *   • ALREADY_ACTIVE               — 409 `PRO_ALREADY_ACTIVE`
+ *   • PURCHASE_IN_PROGRESS         — 409 `PRO_PURCHASE_IN_PROGRESS`
+ *   • MEMBERSHIP_NOT_ENDING        — 409: "Keep Pro" needs a membership that includes Pro and is set to end
+ *   • CONTINUATION_ALREADY_STARTED — 409: the kept plan's first charge was made (turn auto-renew off)
+ *   • PAUSED_FOR_MEMBERSHIP        — 409: the membership covers Pro now; nothing renews
+ *   • SUBSCRIPTION_NOT_FOUND       — 404 `PRO_SUBSCRIPTION_NOT_FOUND`
+ *   • COMING_SOON                  — 503 `PAYMENTS_NOT_CONFIGURED`
+ *   • PRO_OFF                      — 404 `ENDPOINT_NOT_FOUND`: Pro is off; hide its entry points
+ *   • NOT_AUTHENTICATED            — 401
+ *   • RATE_LIMITED                 — 429
+ *   • INVALID                      — 400 `INVALID_PRO_REQUEST`
+ *   • UNAVAILABLE                  — 503 `PRO_TEMPORARILY_UNAVAILABLE`, 500, network, unknown
+ */
+export type ProProblem =
+  | 'PAYMENT_DECLINED'
+  | 'INCLUDED_IN_MEMBERSHIP'
+  | 'ALREADY_ACTIVE'
+  | 'PURCHASE_IN_PROGRESS'
+  | 'MEMBERSHIP_NOT_ENDING'
+  | 'CONTINUATION_ALREADY_STARTED'
+  | 'PAUSED_FOR_MEMBERSHIP'
+  | 'SUBSCRIPTION_NOT_FOUND'
+  | 'COMING_SOON'
+  | 'PRO_OFF'
+  | 'NOT_AUTHENTICATED'
+  | 'RATE_LIMITED'
+  | 'INVALID'
+  | 'UNAVAILABLE';
+
+const PRO_CODES: Readonly<Record<string, ProProblem>> = {
+  PAYMENT_DECLINED: 'PAYMENT_DECLINED',
+  PRO_INCLUDED_IN_MEMBERSHIP: 'INCLUDED_IN_MEMBERSHIP',
+  PRO_ALREADY_ACTIVE: 'ALREADY_ACTIVE',
+  PRO_PURCHASE_IN_PROGRESS: 'PURCHASE_IN_PROGRESS',
+  MEMBERSHIP_NOT_ENDING: 'MEMBERSHIP_NOT_ENDING',
+  CONTINUATION_ALREADY_STARTED: 'CONTINUATION_ALREADY_STARTED',
+  PRO_PAUSED_FOR_MEMBERSHIP: 'PAUSED_FOR_MEMBERSHIP',
+  PRO_SUBSCRIPTION_NOT_FOUND: 'SUBSCRIPTION_NOT_FOUND',
+  PAYMENTS_NOT_CONFIGURED: 'COMING_SOON',
+  ENDPOINT_NOT_FOUND: 'PRO_OFF',
+  AUTH_REQUIRED: 'NOT_AUTHENTICATED',
+  INVALID_ACCESS_TOKEN: 'NOT_AUTHENTICATED',
+  RATE_LIMITED: 'RATE_LIMITED',
+  INVALID_PRO_REQUEST: 'INVALID',
+  PRO_TEMPORARILY_UNAVAILABLE: 'UNAVAILABLE',
+};
+
+/** Classifies a failed Pro call. The structured code wins; the status is the fallback. */
+export function classifyProError(status: number, code: unknown): ProProblem {
+  const known = typeof code === 'string' ? PRO_CODES[code] : undefined;
+  if (known) return known;
+  if (status === 402) return 'PAYMENT_DECLINED';
+  if (status === 401) return 'NOT_AUTHENTICATED';
+  if (status === 404 && !code) return 'PRO_OFF';
+  if (status === 429) return 'RATE_LIMITED';
+  return 'UNAVAILABLE';
+}
+
+export function proProblemCopy(problem: ProProblem): string {
+  switch (problem) {
+    case 'PAYMENT_DECLINED':
+      return 'Your payment was declined. Nothing was charged.';
+    case 'INCLUDED_IN_MEMBERSHIP':
+      return 'Your membership already includes Mr OneHook Pro. Nothing was charged.';
+    case 'ALREADY_ACTIVE':
+      return 'You already have Mr OneHook Pro.';
+    case 'PURCHASE_IN_PROGRESS':
+      return 'Your purchase is still being processed. Check back in a moment.';
+    case 'MEMBERSHIP_NOT_ENDING':
+      return 'Your membership isn’t set to end, so there is nothing to keep yet.';
+    case 'CONTINUATION_ALREADY_STARTED':
+      return 'Your Mr OneHook Pro plan has already started. Turn off auto-renew instead.';
+    case 'PAUSED_FOR_MEMBERSHIP':
+      return 'Your membership covers Mr OneHook Pro now, so nothing renews.';
+    case 'SUBSCRIPTION_NOT_FOUND':
+      return 'You don’t have a Mr OneHook Pro subscription.';
+    case 'COMING_SOON':
+      return 'Buying Mr OneHook Pro is coming soon.';
+    case 'PRO_OFF':
+      return 'Mr OneHook Pro isn’t available right now.';
+    case 'NOT_AUTHENTICATED':
+      return 'Please sign in again.';
+    case 'RATE_LIMITED':
+      return 'Too many requests. Try again in a minute.';
+    case 'INVALID':
+      return 'That request couldn’t be completed.';
+    default:
+      return 'Mr OneHook Pro is temporarily unavailable. Please try again later.';
+  }
 }

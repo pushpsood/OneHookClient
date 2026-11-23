@@ -100,6 +100,8 @@ export function getCiphertext(
  */
 export class AttachmentObjectUrlCache {
   private readonly urls = new Map<string, string>();
+  /** The decrypted Blob behind each URL (same lifetime: dropped with its URL). */
+  private readonly blobs = new Map<string, Blob>();
   private readonly inflight = new Map<string, Promise<string>>();
   private readonly maxEntries: number;
 
@@ -122,7 +124,7 @@ export class AttachmentObjectUrlCache {
     const existing = this.urls.get(objectKey);
     if (existing) return existing;
     const url = URL.createObjectURL(blob);
-    this.store(objectKey, url);
+    this.store(objectKey, url, blob);
     return url;
   }
 
@@ -150,7 +152,7 @@ export class AttachmentObjectUrlCache {
       // larger buffer, and a Blob built from that would capture the whole backing store.
       const blob = new Blob([plaintext.slice() as unknown as ArrayBuffer], { type: envelope.mime });
       const url = URL.createObjectURL(blob);
-      this.store(envelope.objectKey, url);
+      this.store(envelope.objectKey, url, blob);
       return url;
     })().finally(() => this.inflight.delete(envelope.objectKey));
 
@@ -158,15 +160,33 @@ export class AttachmentObjectUrlCache {
     return promise;
   }
 
+  /**
+   * The decrypted bytes of an attachment, from this cache or downloaded and decrypted like
+   * {@link resolve}. Used by "Ask Mr OneHook": the member's own device hands the plaintext to Mr OneHook
+   * only after they selected the file and asked.
+   */
+  async resolveBlob(envelope: AttachmentEnvelope, matchId: string): Promise<Blob> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const cached = this.blobs.get(envelope.objectKey);
+      if (cached) return cached;
+      await this.resolve(envelope, matchId);
+    }
+    const blob = this.blobs.get(envelope.objectKey);
+    if (!blob) throw new Error('Attachment could not be read.');
+    return blob;
+  }
+
   /** Revokes every object URL and empties the cache. Called on conversation unmount/teardown. */
   revokeAll(): void {
     for (const url of this.urls.values()) URL.revokeObjectURL(url);
     this.urls.clear();
+    this.blobs.clear();
     this.inflight.clear();
   }
 
-  private store(objectKey: string, url: string): void {
+  private store(objectKey: string, url: string, blob: Blob): void {
     this.urls.set(objectKey, url);
+    this.blobs.set(objectKey, blob);
     // Evict least-recently-used entries beyond the cap, revoking as we go so their decrypted blobs
     // are released rather than merely dereferenced.
     while (this.urls.size > this.maxEntries) {
@@ -175,6 +195,7 @@ export class AttachmentObjectUrlCache {
       const stale = this.urls.get(oldest);
       if (stale) URL.revokeObjectURL(stale);
       this.urls.delete(oldest);
+      this.blobs.delete(oldest);
     }
   }
 

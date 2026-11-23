@@ -91,6 +91,17 @@ export type UserStateSnapshot = {
    * matters while matching is not ON; kept as is when matching is turned on or off.
    */
   matchingTabHidden: boolean;
+  /**
+   * Epoch seconds: the paid membership (or an operator grant) is set to end then and will not renew.
+   * Absent while it renews. Mr OneHook Pro offers "Keep Mr OneHook Pro after <date>" while it is set.
+   */
+  membershipEndsAt?: number;
+  /**
+   * An upgrade to a tier that includes Mr OneHook Pro is waiting for Mr OneHook to settle the member's
+   * own Pro subscription (usually seconds); `subscriptionTier` stays the old tier until then. Show
+   * "Activating your membership".
+   */
+  pendingSubscriptionTier?: SubscriptionTier;
 };
 
 /**
