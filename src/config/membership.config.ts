@@ -74,6 +74,16 @@ export interface MembershipTier extends TierCopy {
 }
 
 /**
+ * Mr OneHook Pro (unlimited messages, 3 saved chats, files) is a subscription of its own; the top tier
+ * includes it. Every other tier gets Mr OneHook's Free plan.
+ */
+const MR_ONEHOOK_PRO_INCLUDED = 'Mr OneHook Pro included';
+const MR_ONEHOOK_FREE_PLAN = '10 msgs/day';
+
+/** The tier whose membership includes Mr OneHook Pro: the top tier, in SDK order. */
+export const MR_ONEHOOK_PRO_TIER: SubscriptionTier = SUBSCRIPTION_TIERS[SUBSCRIPTION_TIERS.length - 1].wire;
+
+/**
  * Prices (INR): free ₹0; middle ₹499/mo or ₹3,999/yr (~33% off vs 12 × ₹499 = ₹5,988);
  * top ₹999/mo or ₹7,999/yr (~33% off vs 12 × ₹999 = ₹11,988).
  */
@@ -109,7 +119,6 @@ const TIER_COPY: Readonly<Record<SubscriptionTier, TierCopy>> = {
       'Global mode — match anywhere',
       'Rewind your last swipe',
       'Boosted discovery placement',
-      'Unlimited Mr.OneHook AI',
       'Profile view insights',
       '3 invites a month, 1 boost a month',
     ],
@@ -126,6 +135,7 @@ const TIER_COPY: Readonly<Record<SubscriptionTier, TierCopy>> = {
         subscriptionTierInfo(SubscriptionTier.INFINITY).maxConnections
       } people`,
       'Top priority in discovery',
+      MR_ONEHOOK_PRO_INCLUDED,
       '3 boosts a month',
       '5 invites a month',
       'Early access to new features',
@@ -237,7 +247,12 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
   {
     title: 'Extras',
     rows: [
-      { label: 'Mr.OneHook AI', values: { [MUST]: '10 msgs/day', [SUPER]: '∞', [INFINITY]: '∞' } },
+      {
+        label: 'Mr.OneHook AI',
+        values: Object.fromEntries(
+          SUBSCRIPTION_TIERS.map((t) => [t.wire, t.wire === MR_ONEHOOK_PRO_TIER ? MR_ONEHOOK_PRO_INCLUDED : MR_ONEHOOK_FREE_PLAN]),
+        ) as Record<SubscriptionTier, FeatureValue>,
+      },
       { label: 'Profile view insights', values: { [MUST]: false, [SUPER]: true, [INFINITY]: true } },
       { label: 'Monthly invites', values: { [MUST]: '1', [SUPER]: '3', [INFINITY]: '5' } },
       { label: 'Monthly boosts', values: { [MUST]: false, [SUPER]: '1', [INFINITY]: '3' } },

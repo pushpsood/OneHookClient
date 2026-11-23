@@ -238,3 +238,134 @@ describe('matchSuggestion — "find me ..." outcome', () => {
     expect(matchSuggestionNote({ status: 'MATCHING_OFF', reasoning: '' })).toMatch(/Turn on matching/);
   });
 });
+
+describe('Mr OneHook Pro and attachments: error mapping', () => {
+  it('maps attachment upload/poll errors by code, falling back to the status', async () => {
+    const { classifyAttachmentError } = await import('../lib/mr-onehook-contract');
+    expect(classifyAttachmentError(415, { error: 'UNSUPPORTED_ATTACHMENT_TYPE' })).toEqual({ kind: 'UNSUPPORTED_TYPE' });
+    expect(classifyAttachmentError(413, { error: 'ATTACHMENT_TOO_LARGE' })).toEqual({ kind: 'TOO_LARGE' });
+    expect(classifyAttachmentError(413, {})).toEqual({ kind: 'TOO_LARGE' });
+    expect(
+      classifyAttachmentError(429, { error: 'ATTACHMENT_PROCESSING_UNAVAILABLE', retryAt: '2026-12-01T00:00:00Z' }),
+    ).toEqual({ kind: 'PROCESSING_UNAVAILABLE', retryAt: '2026-12-01T00:00:00Z' });
+    expect(classifyAttachmentError(429, { error: 'RATE_LIMITED' })).toEqual({ kind: 'RATE_LIMITED' });
+    expect(classifyAttachmentError(403, { error: 'PRO_REQUIRED' })).toEqual({ kind: 'PRO_REQUIRED' });
+    expect(classifyAttachmentError(403, { error: 'MESSAGE_CONTEXT_NOT_ALLOWED' })).toEqual({ kind: 'MESSAGE_CONTEXT_NOT_ALLOWED' });
+    expect(classifyAttachmentError(404, { error: 'MATCH_NOT_AVAILABLE' })).toEqual({ kind: 'MATCH_NOT_AVAILABLE' });
+    expect(classifyAttachmentError(404, { error: 'ATTACHMENT_NOT_FOUND' })).toEqual({ kind: 'NOT_FOUND' });
+    expect(classifyAttachmentError(404, { error: 'ENDPOINT_NOT_FOUND' })).toEqual({ kind: 'NOT_CONFIGURED' });
+    expect(classifyAttachmentError(503, { error: 'ATTACHMENTS_NOT_CONFIGURED' })).toEqual({ kind: 'NOT_CONFIGURED' });
+    expect(classifyAttachmentError(409, { error: 'ATTACHMENT_NOT_READY' })).toEqual({ kind: 'NOT_READY' });
+    expect(classifyAttachmentError(503, { error: 'ATTACHMENTS_TEMPORARILY_UNAVAILABLE' })).toEqual({ kind: 'UNAVAILABLE' });
+    expect(classifyAttachmentError(500, null)).toEqual({ kind: 'UNAVAILABLE' });
+  });
+
+  it('heavy usage reads as a pause on files, never on chat', async () => {
+    const { attachmentProblemCopy, ATTACHMENT_HEAVY_USAGE_COPY } = await import('../lib/mr-onehook-contract');
+    expect(ATTACHMENT_HEAVY_USAGE_COPY).toBe(
+      "Files can't be processed right now because of heavy usage. You can keep chatting.",
+    );
+    expect(attachmentProblemCopy({ kind: 'PROCESSING_UNAVAILABLE' })).toBe(ATTACHMENT_HEAVY_USAGE_COPY);
+    expect(attachmentProblemCopy({ kind: 'PROCESSING_UNAVAILABLE', retryAt: 'X' }, () => '5 pm')).toBe(
+      `${ATTACHMENT_HEAVY_USAGE_COPY} Files work again from 5 pm.`,
+    );
+    expect(attachmentProblemCopy({ kind: 'MESSAGE_CONTEXT_NOT_ALLOWED' })).toMatch(/doesn't allow/);
+  });
+
+  it('chat-turn refusals about files go to the attachment flow; others do not', async () => {
+    const { chatTurnAttachmentProblem } = await import('../lib/mr-onehook-contract');
+    expect(chatTurnAttachmentProblem(403, 'PRO_REQUIRED')).toEqual({ kind: 'PRO_REQUIRED' });
+    expect(chatTurnAttachmentProblem(409, 'ATTACHMENT_NOT_READY')).toEqual({ kind: 'NOT_READY' });
+    expect(chatTurnAttachmentProblem(400, 'ATTACHMENT_NOT_USABLE')).toEqual({ kind: 'NOT_USABLE' });
+    expect(chatTurnAttachmentProblem(404, 'ATTACHMENT_NOT_FOUND')).toEqual({ kind: 'NOT_FOUND' });
+    expect(chatTurnAttachmentProblem(403, 'MESSAGE_CONTEXT_NOT_ALLOWED')).toEqual({ kind: 'MESSAGE_CONTEXT_NOT_ALLOWED' });
+    expect(chatTurnAttachmentProblem(409, 'CHAT_SESSION_LIMIT_REACHED')).toBeUndefined();
+    expect(chatTurnAttachmentProblem(402, 'MESSAGE_LIMIT_REACHED')).toBeUndefined();
+    // The attachment codes never gate the whole chat.
+    expect(classifyMemberChatAvailability(403, 'PRO_REQUIRED')).toBeUndefined();
+    expect(classifyMemberChatAvailability(409, 'ATTACHMENT_NOT_READY')).toBeUndefined();
+  });
+
+  it('maps Pro purchase / auto-renew / continuation errors', async () => {
+    const { classifyProError, proProblemCopy } = await import('../lib/mr-onehook-contract');
+    expect(classifyProError(402, 'PAYMENT_DECLINED')).toBe('PAYMENT_DECLINED');
+    expect(classifyProError(402, undefined)).toBe('PAYMENT_DECLINED');
+    expect(classifyProError(409, 'PRO_INCLUDED_IN_MEMBERSHIP')).toBe('INCLUDED_IN_MEMBERSHIP');
+    expect(classifyProError(409, 'PRO_ALREADY_ACTIVE')).toBe('ALREADY_ACTIVE');
+    expect(classifyProError(409, 'PRO_PURCHASE_IN_PROGRESS')).toBe('PURCHASE_IN_PROGRESS');
+    expect(classifyProError(409, 'MEMBERSHIP_NOT_ENDING')).toBe('MEMBERSHIP_NOT_ENDING');
+    expect(classifyProError(409, 'CONTINUATION_ALREADY_STARTED')).toBe('CONTINUATION_ALREADY_STARTED');
+    expect(classifyProError(409, 'PRO_PAUSED_FOR_MEMBERSHIP')).toBe('PAUSED_FOR_MEMBERSHIP');
+    expect(classifyProError(404, 'PRO_SUBSCRIPTION_NOT_FOUND')).toBe('SUBSCRIPTION_NOT_FOUND');
+    expect(classifyProError(503, 'PAYMENTS_NOT_CONFIGURED')).toBe('COMING_SOON');
+    expect(classifyProError(503, 'PRO_TEMPORARILY_UNAVAILABLE')).toBe('UNAVAILABLE');
+    expect(classifyProError(404, 'ENDPOINT_NOT_FOUND')).toBe('PRO_OFF');
+    expect(classifyProError(404, undefined)).toBe('PRO_OFF');
+    expect(classifyProError(401, 'AUTH_REQUIRED')).toBe('NOT_AUTHENTICATED');
+    expect(classifyProError(500, undefined)).toBe('UNAVAILABLE');
+    expect(proProblemCopy('PAYMENT_DECLINED')).toMatch(/declined/);
+    expect(proProblemCopy('COMING_SOON')).toMatch(/coming soon/i);
+    expect(proProblemCopy('INCLUDED_IN_MEMBERSHIP')).toMatch(/already includes/);
+  });
+
+  it('the limit copy upsells Mr OneHook Pro, not a membership tier', async () => {
+    const source = (await import('node:fs')).readFileSync(new URL('../lib/mr-onehook.ts', import.meta.url), 'utf8');
+    expect(source).toContain('Get Mr OneHook Pro for unlimited messages');
+    expect(source).not.toContain('Upgrade to Super to keep chatting');
+  });
+
+  it('sends attachmentIds only when there are some', () => {
+    expect(buildMemberChatRequestBody({ message: 'hi', attachmentIds: ['a', 'b'] }).attachmentIds).toEqual(['a', 'b']);
+    expect(buildMemberChatRequestBody({ message: 'hi', attachmentIds: [] })).not.toHaveProperty('attachmentIds');
+    expect(buildMemberChatRequestBody({ message: 'hi' })).not.toHaveProperty('attachmentIds');
+  });
+});
+
+describe('Mr OneHook errors through the generated SDK', () => {
+  it('a 413/415/429 from UploadChatAttachment reaches the attachment flow with its code and retryAt', async () => {
+    const { MrOneHookService } = await import('onehook-mr-onehook-client');
+    const { fetchHandler } = await import('./support/sdk-fetch-handler');
+    const { sdkFailure } = await import('../api/external-sdk-clients');
+    const { classifyAttachmentError } = await import('../lib/mr-onehook-contract');
+    const answers: Array<[number, Record<string, unknown>]> = [
+      [413, { error: 'ATTACHMENT_TOO_LARGE' }],
+      [415, { error: 'UNSUPPORTED_ATTACHMENT_TYPE' }],
+      [429, { error: 'ATTACHMENT_PROCESSING_UNAVAILABLE', retryAt: '2026-12-01T00:00:00Z' }],
+    ];
+    const seen: Array<Record<string, string>> = [];
+    let i = 0;
+    const client = new MrOneHookService({
+      endpoint: 'https://chatbot.test',
+      token: async () => ({ token: 't' }),
+      maxAttempts: 1,
+      requestHandler: fetchHandler(async (_url, init) => {
+        seen.push(init?.headers as Record<string, string>);
+        const [status, body] = answers[i++];
+        return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+      }),
+    });
+    const kinds = [];
+    for (let n = 0; n < answers.length; n += 1) {
+      try {
+        await client.uploadChatAttachment({
+          body: new Uint8Array([1, 2, 3]),
+          contentType: 'image/png',
+          fileName: encodeURIComponent('é photo.png'),
+          matchId: 'm1',
+          sender: 'match',
+        });
+      } catch (err) {
+        const f = sdkFailure(err);
+        kinds.push(f ? classifyAttachmentError(f.status, f.body) : null);
+      }
+    }
+    expect(kinds).toEqual([
+      { kind: 'TOO_LARGE' },
+      { kind: 'UNSUPPORTED_TYPE' },
+      { kind: 'PROCESSING_UNAVAILABLE', retryAt: '2026-12-01T00:00:00Z' },
+    ]);
+    expect(seen[0]['x-attachment-name']).toBe('%C3%A9%20photo.png');
+    expect(seen[0]['x-attachment-match-id']).toBe('m1');
+    expect(seen[0]['x-attachment-sender']).toBe('match');
+  });
+});

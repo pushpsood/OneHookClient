@@ -12,20 +12,37 @@
  * context (`needsMoreContext`) AND the user explicitly approves the excerpts the device selected.
  * Excerpts are never persisted — not in the transcript, not in the session payload, not in logs.
  *
- * Must (free) chats live only in memory and reset when the app is closed (10 messages per UTC day).
- * Session persistence is tier-gated: only a paid (Super / Infinity) local display tier requests it, and any
- * server-side session denial is handled by transparently retrying the same question without a
- * session so the user still gets an answer.
+ * Plans (from `GET /api/member/mr-onehook-pro` and `plan` in every reply): Free (Must and Super) gets
+ * 10 messages per UTC day and 1 saved chat; Pro (a Pro subscription, or a membership that includes it)
+ * gets unlimited messages, 3 saved chats and files. Every signed-in member saves chats: at the plan's
+ * cap a new chat replaces the least recently active one on the server, and the reply lists it in
+ * `evictedSessionIds` (the tab goes, and a short notice says so). Any other server-side session denial
+ * is handled by transparently retrying the same question without a session so the user still gets an
+ * answer.
+ *
+ * Files (Pro): see `mr-onehook-attachments.ts` for the upload → poll → send flow; this module wires it
+ * to the generated SDK ({@link sdkAttachmentDeps}, {@link useMrOneHookAttachments}).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ProductConnectionChatCommandInput } from 'onehook-mr-onehook-client';
+import {
+  AttachmentKind,
+  AttachmentSource,
+  AttachmentStatus,
+  MrOneHookPlan,
+  type ChatAttachment,
+  type ChatAttachmentRef,
+  type ProductConnectionChatCommandInput,
+} from 'onehook-mr-onehook-client';
 import { fetchIdToken, mrOneHookClient, sdkFailure, withoutMetadata } from '../api/external-sdk-clients';
-import { isPaidSubscriptionTier } from 'onehook-api-client/membership';
-import type { SubscriptionTier } from '../types';
 import {
   buildMemberChatRequestBody,
+  chatTurnAttachmentProblem,
   classifyMemberChatAvailability,
+  classifyAttachmentError,
+  evictionNotice,
   isSessionErrorCode,
+  isSessionLimitRace,
+  type AttachmentProblem,
   type MemberChatAvailability,
   parseMemberChatResponse,
   matchSuggestionNote,
@@ -35,10 +52,22 @@ import {
   type MrOneHookMood,
   parseSessionDetail,
   parseSessionList,
-  sessionLimitFromError,
   type SessionListItem,
 } from './mr-onehook-contract';
 import type { ExcerptSelectionRequest, ExcerptSelectionResult } from './mr-onehook-excerpts';
+import {
+  ATTACHMENT_POLL_MIN_GAP_MS,
+  createPollGate,
+  encodeAttachmentName,
+  runAttachment,
+  selectAttachments,
+  type AttachmentCallResult,
+  type AttachmentDeps,
+  type AttachmentOrigin,
+  type LocalFile,
+  type PendingAttachment,
+  type SelectionRejection,
+} from './mr-onehook-attachments';
 
 
 /** A saved-chat call's result: the output, or the HTTP status of a failure (a network error throws). */
@@ -63,7 +92,7 @@ const NETWORK_ERROR_COPY =
   "Hmm, I can't connect right now. Check your connection and try again in a moment.";
 // Terminal availability copy — shown once, not retryable, and used to gate the entry point.
 const LIMIT_REACHED_COPY =
-  'You’ve used today’s 10 free messages with Mr.OneHook. Upgrade to Super to keep chatting, or come back tomorrow.';
+  'You’ve used today’s 10 free messages with Mr.OneHook. Get Mr OneHook Pro for unlimited messages, or come back tomorrow.';
 const NOT_AUTHENTICATED_COPY =
   'Please sign in again to chat with Mr.OneHook.';
 const NOT_CONFIGURED_COPY =
@@ -91,6 +120,27 @@ class MemberChatTerminalError extends Error {
 /** Product-only scope, or a single authorized match. */
 export type MrOneHookScope = { type: 'product' } | { type: 'match'; matchId: string };
 
+/** A turn the attachment flow handles (Pro needed, a file not ready / not usable, match history not allowed). */
+class AttachmentTurnError extends Error {
+  constructor(readonly problem: AttachmentProblem) {
+    super(problem.kind);
+    this.name = 'AttachmentTurnError';
+  }
+}
+
+/** What happened to a sent turn, so the composer can restore the text or open the Pro screen. */
+export type SendOutcome =
+  | { status: 'sent' }
+  | { status: 'failed' }
+  | { status: 'skipped' }
+  | { status: 'attachment_problem'; problem: AttachmentProblem };
+
+/** Files sent with a turn: their ids, and the refs shown as chips on the user's bubble. */
+export interface TurnAttachments {
+  ids: string[];
+  refs: ChatAttachmentRef[];
+}
+
 /** Resolves local, already-decrypted excerpts for a server `contextRequest`. Match scope only. */
 export type LocalExcerptResolver = (request: ExcerptSelectionRequest) => ExcerptSelectionResult;
 
@@ -111,8 +161,8 @@ export interface PendingExcerptReview {
 export interface UseMrOneHookChatOptions {
   userId: string;
   scope: MrOneHookScope;
-  /** Verified local display tier; only a paid (Super / Infinity) tier requests session persistence. */
-  tier: SubscriptionTier;
+  /** A reply reported the member's Mr OneHook plan (e.g. it changed since the Pro status was read). */
+  onPlan?: (plan: MrOneHookPlan) => void;
   /** Supplied for match scope so a `needsMoreContext` turn can search local history. */
   resolveLocalExcerpts?: LocalExcerptResolver;
   /**
@@ -135,29 +185,25 @@ export interface UseMrOneHookChat {
    * stop accepting input once this is anything else.
    */
   availability: MemberChatAvailability;
-  /** Free tier: messages left today, from the last reply (undefined for Super+ or before the first reply). */
+  /** Free plan: messages left today, from the last reply (undefined on Pro or before the first reply). */
   remainingMessages?: number;
-  send: (text: string) => Promise<void>;
+  send: (text: string, attachments?: TurnAttachments) => Promise<SendOutcome>;
   confirmReview: () => Promise<void>;
   cancelReview: () => void;
   clear: () => void;
-  /**
-   * Super and above: the member's saved chats (all scopes; the total is capped server-side). Empty for
-   * Must, whose chat lives only in memory and resets when the app is closed.
-   */
+  /** The member's saved chats (all scopes; the plan caps the total server-side: Free 1, Pro 3). */
   sessions: SessionListItem[];
   refreshSessions: () => Promise<void>;
   /** Opens a saved product chat in this conversation. */
   resumeSession: (sessionId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
+  /** "Your oldest chat was replaced": set when a reply's `evictedSessionIds` removed saved chats. */
+  evictionNotice: string | null;
+  dismissEvictionNotice: () => void;
   /**
-   * Set when a NEW chat was refused because the member already has the maximum saved chats. The member
-   * either replaces the least recent one ({@link replaceLeastRecentAndSend}) or deletes one and sends again.
+   * The member started a new chat at the plan's cap: the least recent saved chat is left out of the tabs
+   * (the server replaces it when the first message is saved).
    */
-  sessionLimit: SessionLimit | null;
-  replaceLeastRecentAndSend: () => Promise<void>;
-  dismissSessionLimit: () => void;
-  /** The member agreed to replace the least recent saved chat: the current chat is now a new one. */
   replacing: boolean;
   /** Starts a new chat that replaces the least recent saved chat when its first message is sent. */
   startReplacingLeastRecent: () => void;
@@ -166,18 +212,15 @@ export interface UseMrOneHookChat {
 }
 
 /**
- * The chat tabs. Pure, for tests.
- * - Super+: saved chats oldest first ("Chat 1"...), plus "New chat" while the current chat is unsaved.
- *   While replacing, the least recent chat is left out (the new chat takes its place).
- * - Must: one "Chat" tab.
+ * The chat tabs. Pure, for tests. Every plan: saved chats oldest first ("Chat 1"...), plus "New chat"
+ * while the current chat is unsaved. While replacing, the least recent chat is left out (the new chat
+ * takes its place).
  */
 export function mrOneHookTabs(
   sessions: SessionListItem[],
   activeId: string | undefined,
-  paid: boolean,
   replacing: boolean,
 ): Array<{ sessionId?: string; title: string }> {
-  if (!paid) return [{ title: 'Chat' }];
   const oldest = leastRecentSession(sessions);
   const saved = [...sessions]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -203,16 +246,24 @@ export function rememberSessionForScope(userId: string, scope: MrOneHookScope, s
   persistSessionId(userId, scope, sessionId);
 }
 
-export interface SessionLimit {
-  maxSessions: number;
-  sessions: SessionListItem[];
-  /** The message that was refused; sent again once there is room. */
-  pendingMessage: string;
+/**
+ * Applies a reply's `evictedSessionIds` to the saved-chat list: those tabs go. Pure, for tests. Returns
+ * the remaining sessions and the notice to show (null when nothing was evicted).
+ */
+export function applyEvictions(
+  sessions: SessionListItem[],
+  evictedSessionIds: readonly string[] | undefined,
+): { sessions: SessionListItem[]; notice: string | null } {
+  if (!evictedSessionIds || evictedSessionIds.length === 0) return { sessions, notice: null };
+  const evicted = new Set(evictedSessionIds);
+  return { sessions: sessions.filter((s) => !evicted.has(s.sessionId)), notice: evictionNotice(evicted.size) };
 }
 
-class SessionLimitReachedError extends Error {
-  constructor(readonly maxSessions: number, readonly sessions: SessionListItem[]) {
-    super('CHAT_SESSION_LIMIT_REACHED');
+/** Forgets a scope's remembered session when the server evicted it. */
+function forgetEvictedSessionIds(userId: string, scopes: MrOneHookScope[], evicted: readonly string[]): void {
+  for (const scope of scopes) {
+    const remembered = loadSessionId(userId, scope);
+    if (remembered && evicted.includes(remembered)) persistSessionId(userId, scope, undefined);
   }
 }
 
@@ -228,22 +279,8 @@ function sessionStorageKey(userId: string, scope: MrOneHookScope): string {
   return `onehook.mrOneHook.session.${userId}.${scopeKey(scope)}`;
 }
 
-/**
- * Must (free) members' chat lives only in memory: it resets when the app is closed. Removes any transcript
- * an earlier version stored for them on this device.
- */
-function forgetStoredTranscript(userId: string, scope: MrOneHookScope): void {
-  if (typeof window === 'undefined' || !userId) return;
-  try {
-    window.localStorage.removeItem(transcriptStorageKey(userId, scope));
-    window.localStorage.removeItem(sessionStorageKey(userId, scope));
-  } catch {
-    /* ignore disabled storage */
-  }
-}
-
-function loadTranscript(userId: string, scope: MrOneHookScope, persistAllowed = true): MrOneHookMessage[] {
-  if (typeof window === 'undefined' || !userId || !persistAllowed) return [];
+function loadTranscript(userId: string, scope: MrOneHookScope): MrOneHookMessage[] {
+  if (typeof window === 'undefined' || !userId) return [];
   try {
     const raw = window.localStorage.getItem(transcriptStorageKey(userId, scope));
     if (!raw) return [];
@@ -254,13 +291,8 @@ function loadTranscript(userId: string, scope: MrOneHookScope, persistAllowed = 
   }
 }
 
-function saveTranscript(
-  userId: string,
-  scope: MrOneHookScope,
-  messages: MrOneHookMessage[],
-  persistAllowed = true,
-): void {
-  if (typeof window === 'undefined' || !userId || !persistAllowed) return;
+function saveTranscript(userId: string, scope: MrOneHookScope, messages: MrOneHookMessage[]): void {
+  if (typeof window === 'undefined' || !userId) return;
   try {
     // Persist only durable turns; error bubbles are transient UI, not conversation history. Excerpts
     // are never part of a transcript turn, so nothing sensitive is written here.
@@ -303,12 +335,13 @@ function toEpochMs(iso?: string): number | undefined {
 }
 
 export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHookChat {
-  const { userId, scope, tier, resolveLocalExcerpts, onOpenScope } = options;
+  const { userId, scope, resolveLocalExcerpts, onOpenScope } = options;
   const matchId = scope.type === 'match' ? scope.matchId : undefined;
-  const persistAllowed = isPaidSubscriptionTier(tier);
+  // Every signed-in member saves chats (Free 1, Pro 3); the server enforces the cap.
+  const persistAllowed = Boolean(userId);
   const key = scopeKey(scope);
 
-  const [messages, setMessages] = useState<MrOneHookMessage[]>(() => loadTranscript(userId, scope, persistAllowed));
+  const [messages, setMessages] = useState<MrOneHookMessage[]>(() => loadTranscript(userId, scope));
   const [loading, setLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [mood, setMood] = useState<MrOneHookMood>('Happy');
@@ -317,7 +350,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   const [availability, setAvailability] = useState<MemberChatAvailability>('AVAILABLE');
   const [remainingMessages, setRemainingMessages] = useState<number | undefined>(undefined);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
-  const [sessionLimit, setSessionLimit] = useState<SessionLimit | null>(null);
+  const [evictionNoticeText, setEvictionNoticeText] = useState<string | null>(null);
   const [replacing, setReplacing] = useState(false);
   /** Bumped when a reply saves a chat, so the tabs reload the list. */
   const [sessionsVersion, setSessionsVersion] = useState(0);
@@ -327,6 +360,8 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   const [currentSessionId, setCurrentSessionId] = useState<string | undefined>(undefined);
   const onOpenScopeRef = useRef(onOpenScope);
   onOpenScopeRef.current = onOpenScope;
+  const onPlanRef = useRef(options.onPlan);
+  onPlanRef.current = options.onPlan;
 
   const sessionIdRef = useRef<string | undefined>(persistAllowed ? loadSessionId(userId, scope) : undefined);
   const resolveRef = useRef<LocalExcerptResolver | undefined>(resolveLocalExcerpts);
@@ -334,11 +369,10 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
 
   // Reload when the user or scope changes so transcripts/sessions never bleed across accounts/scopes.
   useEffect(() => {
-    if (!persistAllowed) forgetStoredTranscript(userId, scope);
-    setMessages(loadTranscript(userId, scope, persistAllowed));
+    setMessages(loadTranscript(userId, scope));
     sessionIdRef.current = persistAllowed ? loadSessionId(userId, scope) : undefined;
     setSession(null);
-    setSessionLimit(null);
+    setEvictionNoticeText(null);
     setReplacing(false);
     setPendingReview(null);
     setHasError(false);
@@ -349,9 +383,9 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   }, [userId, key, persistAllowed]);
 
   useEffect(() => {
-    saveTranscript(userId, scope, messages, persistAllowed);
+    saveTranscript(userId, scope, messages);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, key, messages, persistAllowed]);
+  }, [userId, key, messages]);
 
   const pushError = useCallback((copy: string) => {
     setMessages((prev) => [...prev, { role: 'assistant', content: copy, isError: true }]);
@@ -365,13 +399,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
    * transient, retryable error bubble.
    */
   const handleFailure = useCallback(
-    (err: unknown, pendingMessage?: string) => {
-      if (err instanceof SessionLimitReachedError) {
-        setSessions(err.sessions);
-        setSessionLimit({ maxSessions: err.maxSessions, sessions: err.sessions, pendingMessage: pendingMessage ?? '' });
-        setMood('Neutral');
-        return;
-      }
+    (err: unknown) => {
       if (err instanceof MemberChatTerminalError) {
         setAvailability(err.outcome);
         pushError(availabilityCopy(err.outcome));
@@ -387,8 +415,9 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   );
 
   /**
-   * Posts one member request, transparently retrying WITHOUT a session when the server reports a
-   * session-level denial (tier not eligible, limit reached, unknown/expired session, storage off).
+   * Posts one member request. A 409 `CHAT_SESSION_LIMIT_REACHED` (a concurrent request filled the plan's
+   * saved chats) is retried once as is; any other session-level denial (unknown/expired session, storage
+   * off) is answered by retrying WITHOUT a session.
    */
   const postOnce = useCallback(
     async (init: {
@@ -397,7 +426,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       historyTruncated?: boolean;
       userConfirmed?: boolean;
       contextRequestId?: string;
-      replaceLeastRecent?: boolean;
+      attachmentIds?: string[];
     }): Promise<MemberChatResponse> => {
       const token = await fetchIdToken();
       if (!token) throw new Error('NOT_AUTHENTICATED');
@@ -417,12 +446,9 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
           ...(init.historyTruncated !== undefined ? { historyTruncated: init.historyTruncated } : {}),
           ...(init.userConfirmed !== undefined ? { userConfirmed: init.userConfirmed } : {}),
           ...(init.contextRequestId ? { contextRequestId: init.contextRequestId } : {}),
+          ...(init.attachmentIds && init.attachmentIds.length > 0 ? { attachmentIds: init.attachmentIds } : {}),
           ...(useSession && persistAllowed
-            ? {
-                persist: true,
-                ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}),
-                ...(init.replaceLeastRecent || replacingRef.current ? { replaceLeastRecent: true } : {}),
-              }
+            ? { persist: true, ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {}) }
             : {}),
         });
         try {
@@ -436,18 +462,16 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       };
 
       let response = await attempt(persistAllowed);
-      if (response.ok === false && persistAllowed) {
-        const errorBody = response.body;
-        // A NEW saved chat at the limit: let the member choose (replace the least recent, or delete one).
-        const limit = sessionLimitFromError(errorBody, Boolean(sessionIdRef.current));
-        if (limit) throw new SessionLimitReachedError(limit.maxSessions, limit.sessions);
-        if (isSessionErrorCode(errorBody.error)) {
-          // The session can't be used — forget it and answer the same question session-free.
-          sessionIdRef.current = undefined;
-          persistSessionId(userId, scope, undefined);
-          setSession(null);
-          response = await attempt(false);
-        }
+      if (response.ok === false && persistAllowed && isSessionLimitRace(response.status, response.body.error)) {
+        // A rare race at save time: the server makes room on the next try.
+        response = await attempt(true);
+      }
+      if (response.ok === false && persistAllowed && isSessionErrorCode(response.body.error)) {
+        // The session can't be used — forget it and answer the same question session-free.
+        sessionIdRef.current = undefined;
+        persistSessionId(userId, scope, undefined);
+        setSession(null);
+        response = await attempt(false);
       }
 
       if (response.ok === false) {
@@ -455,19 +479,33 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         // from a transient server error (retryable bubble). The structured `error` code is the
         // tie-breaker over the HTTP status.
         const errorBody = response.body;
+        if (init.attachmentIds && init.attachmentIds.length > 0) {
+          const problem = chatTurnAttachmentProblem(response.status, errorBody.error);
+          if (problem) throw new AttachmentTurnError(problem);
+        } else if (errorBody.error === 'PRO_REQUIRED') {
+          throw new AttachmentTurnError({ kind: 'PRO_REQUIRED' });
+        }
         const outcome = classifyMemberChatAvailability(response.status, errorBody.error);
         if (outcome) throw new MemberChatTerminalError(outcome);
         throw new Error('SERVER_ERROR');
       }
       return parseMemberChatResponse((response as { data: unknown }).data);
     },
-    // scope captured via key + matchId; persistAllowed derived from tier.
+    // scope captured via key + matchId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [matchId, persistAllowed, userId, key],
   );
 
   const applySession = useCallback(
     (result: MemberChatResponse) => {
+      if (result.plan) onPlanRef.current?.(result.plan);
+      if (result.evictedSessionIds && result.evictedSessionIds.length > 0) {
+        const evicted = result.evictedSessionIds;
+        setSessions((prev) => applyEvictions(prev, evicted).sessions);
+        setEvictionNoticeText(evictionNotice(evicted.length));
+        // Another scope may remember an evicted chat (e.g. a match chat): forget it there too.
+        forgetEvictedSessionIds(userId, [{ type: 'product' }, ...(matchId ? [{ type: 'match', matchId } as const] : [])], evicted);
+      }
       if (result.session) {
         sessionIdRef.current = result.session.sessionId;
         persistSessionId(userId, scope, result.session.sessionId);
@@ -478,7 +516,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [userId, key],
+    [userId, key, matchId],
   );
 
   /** Handles a parsed response: either stage a local excerpt review, or render the final answer. */
@@ -525,13 +563,17 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   );
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, attachments?: TurnAttachments): Promise<SendOutcome> => {
       const trimmed = text.trim();
-      if (!trimmed || loading || pendingReview) return;
+      if (!trimmed || loading || pendingReview) return { status: 'skipped' };
       // Terminal availability (not entitled / signed out / not configured) — stop accepting input.
-      if (availability !== 'AVAILABLE') return;
+      if (availability !== 'AVAILABLE') return { status: 'skipped' };
 
-      const userMessage: MrOneHookMessage = { role: 'user', content: trimmed };
+      const userMessage: MrOneHookMessage = {
+        role: 'user',
+        content: trimmed,
+        ...(attachments && attachments.refs.length > 0 ? { attachments: attachments.refs } : {}),
+      };
       setMessages((prev) => [...prev.filter((m) => !m.isError), userMessage]);
       setLoading(true);
       setHasError(false);
@@ -539,10 +581,21 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
 
       try {
         // First pass never carries excerpts — the model must ask for context before we share any.
-        const result = await postOnce({ message: trimmed });
+        const result = await postOnce({
+          message: trimmed,
+          ...(attachments && attachments.ids.length > 0 ? { attachmentIds: attachments.ids } : {}),
+        });
         handleResult(result, trimmed);
+        return { status: 'sent' };
       } catch (err) {
-        handleFailure(err, trimmed);
+        if (err instanceof AttachmentTurnError) {
+          // The composer keeps the text and files and handles it (Pro screen, keep polling, ...).
+          setMessages((prev) => prev.filter((m) => m !== userMessage));
+          setMood('Neutral');
+          return { status: 'attachment_problem', problem: err.problem };
+        }
+        handleFailure(err);
+        return { status: 'failed' };
       } finally {
         setLoading(false);
       }
@@ -635,9 +688,8 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         setCurrentSessionId(detail.sessionId);
         setReplacing(false);
         persistSessionId(userId, scope, detail.sessionId);
-        setMessages(detail.messages.map((m) => ({ role: m.role, content: m.content })));
+        setMessages(sessionTurnsToMessages(detail.messages));
         setPendingReview(null);
-        setSessionLimit(null);
         setHasError(false);
         setMood('Happy');
       } catch {
@@ -654,9 +706,6 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       const response = await removeSession(sessionId);
       if (response.ok === false && response.status !== 404) throw new Error('SERVER_ERROR');
       setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
-      setSessionLimit((prev) => (prev
-        ? { ...prev, sessions: prev.sessions.filter((s) => s.sessionId !== sessionId) }
-        : prev));
       if (sessionIdRef.current === sessionId) {
         sessionIdRef.current = undefined;
         persistSessionId(userId, scope, undefined);
@@ -669,34 +718,16 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     [removeSession, persistAllowed, userId, key],
   );
 
-  const replaceLeastRecentAndSend = useCallback(async () => {
-    if (!sessionLimit || loading) return;
-    const { pendingMessage } = sessionLimit;
-    setSessionLimit(null);
-    if (!pendingMessage) return;
-    setLoading(true);
-    setMood('Thinking');
-    try {
-      const result = await postOnce({ message: pendingMessage, replaceLeastRecent: true });
-      handleResult(result, pendingMessage);
-      void refreshSessions();
-    } catch (err) {
-      handleFailure(err, pendingMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, [sessionLimit, loading, postOnce, handleResult, handleFailure, refreshSessions]);
-
-  const dismissSessionLimit = useCallback(() => setSessionLimit(null), []);
+  const dismissEvictionNotice = useCallback(() => setEvictionNoticeText(null), []);
 
   const startReplacingLeastRecent = useCallback(() => {
     clear();
     setReplacing(true);
   }, [clear]);
 
-  // Super and above: load the saved chats for the tabs. The server is the source of truth for a saved
-  // chat's turns, so a remembered chat is reloaded from it; with none remembered, the most recent saved
-  // chat of this scope opens, rather than starting another.
+  // Load the saved chats for the tabs. The server is the source of truth for a saved chat's turns, so
+  // a remembered chat is reloaded from it; with none remembered, the most recent saved chat of this
+  // scope opens, rather than starting another.
   useEffect(() => {
     if (!persistAllowed || !userId) {
       setSessions([]);
@@ -713,7 +744,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         setSessions(list);
         const remembered = sessionIdRef.current;
         if (remembered && !list.some((s) => s.sessionId === remembered)) {
-          // Deleted elsewhere or expired.
+          // Deleted elsewhere, replaced at the plan's cap, or expired.
           sessionIdRef.current = undefined;
           persistSessionId(userId, scope, undefined);
         }
@@ -734,7 +765,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         sessionIdRef.current = detail.sessionId;
         persistSessionId(userId, scope, detail.sessionId);
         setCurrentSessionId(detail.sessionId);
-        setMessages(detail.messages.map((m) => ({ role: m.role, content: m.content })));
+        setMessages(sessionTurnsToMessages(detail.messages));
       } catch {
         /* the tabs are a convenience; chatting still works */
       }
@@ -763,11 +794,228 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
     refreshSessions,
     resumeSession,
     deleteSession,
-    sessionLimit,
-    replaceLeastRecentAndSend,
-    dismissSessionLimit,
+    evictionNotice: evictionNoticeText,
+    dismissEvictionNotice,
     replacing,
     startReplacingLeastRecent,
     currentSessionId,
   };
+}
+
+/** Saved turns to transcript messages (with their files as chips). */
+function sessionTurnsToMessages(turns: { role: 'user' | 'assistant'; content: string; attachments?: ChatAttachmentRef[] }[]): MrOneHookMessage[] {
+  return turns.map((m) => ({
+    role: m.role,
+    content: m.content,
+    ...(m.attachments && m.attachments.length > 0 ? { attachments: m.attachments } : {}),
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attachments (Mr OneHook Pro): the generated SDK behind the attachment flow
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function attachmentCall(call: () => Promise<object>): Promise<AttachmentCallResult> {
+  try {
+    const out = withoutMetadata(await call()) as { attachment: ChatAttachment };
+    return { ok: true, attachment: out.attachment };
+  } catch (err) {
+    const failure = sdkFailure(err);
+    if (!failure) throw err;
+    return { ok: false, status: failure.status, body: failure.body };
+  }
+}
+
+const sleepMs = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+/** One gate for every file of this tab, so concurrent polls stay within GetChatAttachment's budget. */
+const pollGate = createPollGate(ATTACHMENT_POLL_MIN_GAP_MS, () => Date.now(), sleepMs);
+
+/** UploadChatAttachment / GetChatAttachment through `mrOneHookClient`, for {@link runAttachment}. */
+export function sdkAttachmentDeps(cancelled?: () => boolean): AttachmentDeps {
+  return {
+    upload: (input) =>
+      attachmentCall(() =>
+        mrOneHookClient.uploadChatAttachment({
+          body: input.body,
+          contentType: input.contentType,
+          fileName: input.fileName,
+          ...(input.matchId ? { matchId: input.matchId } : {}),
+          ...(input.sender ? { sender: input.sender } : {}),
+        }),
+      ),
+    get: async (attachmentId) => {
+      await pollGate();
+      return attachmentCall(() => mrOneHookClient.getChatAttachment({ attachmentId }));
+    },
+    sleep: sleepMs,
+    now: () => Date.now(),
+    ...(cancelled ? { cancelled } : {}),
+  };
+}
+
+/**
+ * Uploads files a member selected in a match chat ("Ask Mr OneHook"), decrypted on this device, with
+ * `X-Attachment-Match-Id` / `X-Attachment-Sender`. Resolves with the uploaded items (status
+ * `processing`, to be polled in the Mr OneHook chat), or the first refusal (e.g. 403
+ * `MESSAGE_CONTEXT_NOT_ALLOWED`: the match does not allow its history to be used).
+ */
+export async function uploadMatchChatAttachments(
+  files: Array<LocalFile & { origin: AttachmentOrigin }>,
+  deps: AttachmentDeps = sdkAttachmentDeps(),
+): Promise<{ ok: true; items: PendingAttachment[] } | { ok: false; problem: AttachmentProblem }> {
+  const items: PendingAttachment[] = [];
+  for (const file of files) {
+    const [selected] = selectAttachments([], [file], { maxAttachmentBytes: Number.MAX_SAFE_INTEGER, maxAttachmentsPerMessage: 1 }, file.origin).items;
+    let result: AttachmentCallResult;
+    try {
+      result = await deps.upload({
+        body: new Uint8Array(await file.blob.arrayBuffer()),
+        contentType: selected.contentType,
+        fileName: encodeAttachmentName(file.name),
+        matchId: file.origin.matchId,
+        sender: file.origin.sender,
+      });
+    } catch {
+      return { ok: false, problem: { kind: 'UNAVAILABLE' } };
+    }
+    if (result.ok === false) return { ok: false, problem: classifyAttachmentError(result.status, result.body) };
+    items.push({
+      ...selected,
+      blob: undefined,
+      attachmentId: result.attachment.attachmentId,
+      kind: result.attachment.kind,
+      status: result.attachment.status === AttachmentStatus.READY
+        ? 'ready'
+        : result.attachment.status === AttachmentStatus.FAILED
+          ? 'failed'
+          : 'processing',
+    });
+  }
+  return { ok: true, items };
+}
+
+/** Opens an uploaded file of a saved turn (GetChatAttachmentContent) as a download. */
+export async function openChatAttachmentContent(attachmentId: string, name: string): Promise<boolean> {
+  try {
+    const out = await mrOneHookClient.getChatAttachmentContent({ attachmentId });
+    const bytes = out.body as Uint8Array;
+    const blob = new Blob([bytes.slice() as unknown as ArrayBuffer], { type: out.contentType || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = name;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface UseMrOneHookAttachments {
+  items: PendingAttachment[];
+  /** Adds picked files; returns what was refused client-side (over 5 MB, more than 3). */
+  add: (files: LocalFile[]) => SelectionRejection[];
+  /** Adds files already uploaded elsewhere ("Ask Mr OneHook" from a match chat). */
+  adopt: (items: PendingAttachment[]) => void;
+  remove: (localId: string) => void;
+  clear: () => void;
+  /** 409 `ATTACHMENT_NOT_READY` on send: poll these again. */
+  repoll: () => void;
+  /** A refused turn about the files (not usable / expired): mark them failed. */
+  markFailed: (problem: AttachmentProblem) => void;
+  /** The files sent with a turn, as ids and chips. */
+  turnAttachments: () => TurnAttachments;
+}
+
+/**
+ * The composer's files. Pro: each file uploads and polls as soon as it is added (or as soon as the plan
+ * becomes Pro). Free: files stay selected and nothing is uploaded.
+ */
+export function useMrOneHookAttachments(options: {
+  plan: MrOneHookPlan;
+  limits: { maxAttachmentBytes: number; maxAttachmentsPerMessage: number };
+  /** Test seam; defaults to the generated SDK. */
+  deps?: (cancelled: () => boolean) => AttachmentDeps;
+}): UseMrOneHookAttachments {
+  const { plan, limits } = options;
+  const [items, setItems] = useState<PendingAttachment[]>([]);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const running = useRef(new Set<string>());
+  const removed = useRef(new Set<string>());
+  const mounted = useRef(true);
+  const depsFactory = options.deps ?? sdkAttachmentDeps;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const start = useCallback(
+    (item: PendingAttachment) => {
+      if (running.current.has(item.localId)) return;
+      running.current.add(item.localId);
+      const cancelled = () => !mounted.current || removed.current.has(item.localId);
+      void runAttachment(item, depsFactory(cancelled), (next) => {
+        setItems((prev) => prev.map((i) => (i.localId === next.localId ? next : i)));
+      }).finally(() => running.current.delete(item.localId));
+    },
+    [depsFactory],
+  );
+
+  // Pro: run every file that is waiting (newly added, adopted, or selected before buying Pro).
+  useEffect(() => {
+    if (plan !== MrOneHookPlan.PRO) return;
+    for (const item of items) {
+      if ((item.status === 'selected' || (item.status === 'processing' && item.attachmentId)) && !running.current.has(item.localId)) {
+        start(item);
+      }
+    }
+  }, [plan, items, start]);
+
+  const add = useCallback(
+    (files: LocalFile[]) => {
+      const { items: next, rejected } = selectAttachments(itemsRef.current, files, limits);
+      setItems(next);
+      return rejected;
+    },
+    [limits],
+  );
+  const adopt = useCallback((adopted: PendingAttachment[]) => {
+    setItems((prev) => [...prev, ...adopted].slice(0, Math.max(1, limits.maxAttachmentsPerMessage)));
+  }, [limits.maxAttachmentsPerMessage]);
+  const remove = useCallback((localId: string) => {
+    removed.current.add(localId);
+    setItems((prev) => prev.filter((i) => i.localId !== localId));
+  }, []);
+  const clear = useCallback(() => {
+    for (const i of itemsRef.current) removed.current.add(i.localId);
+    setItems([]);
+  }, []);
+  const repoll = useCallback(() => {
+    setItems((prev) => prev.map((i) => (i.attachmentId && i.status === 'ready' ? { ...i, status: 'processing' } : i)));
+  }, []);
+  const markFailed = useCallback((problem: AttachmentProblem) => {
+    setItems((prev) => prev.map((i) => ({ ...i, status: 'failed', problem })));
+  }, []);
+  const turnAttachments = useCallback((): TurnAttachments => {
+    const ready = itemsRef.current.filter((i) => i.status === 'ready' && i.attachmentId);
+    return {
+      ids: ready.map((i) => i.attachmentId as string),
+      refs: ready.map((i) => ({
+        ...(i.origin ? {} : { attachmentId: i.attachmentId }),
+        name: i.name,
+        kind: i.kind ?? AttachmentKind.DOCUMENT,
+        sizeBytes: i.sizeBytes,
+        source: i.origin ? AttachmentSource.MATCH_CHAT : AttachmentSource.UPLOAD,
+      })),
+    };
+  }, []);
+
+  return { items, add, adopt, remove, clear, repoll, markFailed, turnAttachments };
 }

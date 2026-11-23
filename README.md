@@ -245,11 +245,39 @@ returns `needsMoreContext`, the browser selects bounded readable excerpts, displ
 review panel, and sends them only after confirmation. Excerpts carry only `speaker`, `sentAt`, and
 `text` and are never persisted in the local Mr OneHook transcript.
 
-Free (Must) members get 10 messages per UTC day, and their transcript lives only in memory. Paid
-(Super / Infinity) tiers keep the transcript in `localStorage` per user and scope and request
-server-side AI-session persistence (`GET`/`DELETE .../sessions[/:id]`), while the server remains
-authoritative. Returned session IDs are stored per user and product/match scope; stale, expired,
-denied, or unavailable sessions are forgotten and the same question is retried without persistence.
+**Plans.** Mr OneHook has two plans, separate from the membership tiers: Free (Must and Super: 10
+messages per UTC day, 1 saved chat, no files) and Pro (a Mr OneHook Pro subscription, or a membership
+tier that includes it, the top tier: unlimited messages, 3 saved chats, files). The client reads the
+plan from `GET .../api/member/mr-onehook-pro` (`src/store/mr-onehook-pro-store.ts`) and from `plan` in
+every reply; a 404 `ENDPOINT_NOT_FOUND` there means Pro is off and every Pro entry point hides.
+
+**Saved chats.** Every member keeps the transcript in `localStorage` per user and scope and requests
+server-side persistence (`GET`/`DELETE .../sessions[/:id]`), while the server remains authoritative. At
+the plan's cap a new chat replaces the least recently active one on the server; the reply lists it in
+`evictedSessionIds`, its tab goes and a short notice says "Your oldest chat was replaced". A 409
+`CHAT_SESSION_LIMIT_REACHED` is only a race and is retried once. Stale, expired, denied, or unavailable
+sessions are forgotten and the same question is retried without persistence.
+
+**Mr OneHook Pro screen** (`src/components/chat/MrOneHookProSheet.tsx`, opened from the Mr OneHook chat
+and Settings): offers and purchase (a fresh UUID `Idempotency-Key` per tap; 503
+`PAYMENTS_NOT_CONFIGURED` shows "Coming soon"), the subscription (period end, next charge, auto-renew,
+paused for the membership, refunds), "Keep Mr OneHook Pro after <date>" while State's
+`membershipEndsAt` is set, a kept plan (`SCHEDULED`, withdrawable), "Activating your membership" while
+State's `pendingSubscriptionTier` is set (State is polled briefly), notices and the file allowance. The
+screen copy is derived purely in `src/lib/mr-onehook-pro.ts`.
+
+**Files (Pro).** The signed-in chat's paperclip takes up to 3 files of at most 5 MB each (checked before
+upload). Each file is uploaded with `UploadChatAttachment`, polled with `GetChatAttachment` (every 1.5 s,
+all files sharing one gate that keeps within its 60-per-minute budget) until `READY`/`FAILED`, then sent
+as `attachmentIds` (`src/lib/mr-onehook-attachments.ts`). Free members can select files, but the send
+button reads "Get Mr OneHook Pro". 429 `ATTACHMENT_PROCESSING_UNAVAILABLE` reads "Files can't be
+processed right now because of heavy usage. You can keep chatting." Files of a saved turn show as
+chips; uploaded ones open through `GetChatAttachmentContent`, match-chat ones are labelled "From your
+chat". HEIC is uploaded as is (the web has no HEIC converter). In a match chat, "Ask Mr OneHook about
+files" lets the member select images and files of that conversation; on Pro the device's decrypted
+bytes (`AttachmentObjectUrlCache.resolveBlob`) are uploaded with `X-Attachment-Match-Id` /
+`X-Attachment-Sender` and that match's Mr OneHook chat opens with them attached. A 403
+`MESSAGE_CONTEXT_NOT_ALLOWED` explains that the match does not allow its history to be used.
 The public landing widget (`src/components/Chatbot/ChatbotWidget.tsx`, shown on `/`, `/pricing` and
 `/science`) remains separate on `POST ${chatbotUrl}/api/public/product-chat` without an authorization
 header.

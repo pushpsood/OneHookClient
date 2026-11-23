@@ -25,6 +25,7 @@ import { ProfileView } from '../features/profile/ProfileView';
 import { SettingsView } from '../features/settings/SettingsView';
 import { MATCHING_INTRO_COPY, MatchingIntroView } from '../features/matching/MatchingIntroView';
 import { KeyRecoveryResponder } from '../components/chat/KeyRecoveryResponder';
+import { MrOneHookProSheet } from '../components/chat/MrOneHookProSheet';
 import { useHistoryUnlock } from '../hooks/use-history-unlock';
 import { startAnalytics, stopAnalytics, trackScreenView, trackHookedStateView, APP_TAB_SCREEN, HookedStateAction, UiElement, trackProps } from '../lib/analytics/analytics';
 import { appTabsFor, canDiscover, defaultTabFor, isMatchingOn, resolveTab, type AppTab } from '../lib/app-mode';
@@ -565,6 +566,9 @@ export function AppContent() {
 
       {/* Background key recovery responder */}
       <KeyRecoveryResponder />
+
+      {/* The Mr OneHook Pro screen, opened from the Mr OneHook chat and Settings */}
+      <MrOneHookProSheet />
 
       {/* Logout confirmation — dims the app and encourages staying signed in on a personal device */}
       <LogoutConfirmDialog

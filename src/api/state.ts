@@ -90,6 +90,8 @@ export function toUserStateSnapshot(res: UserStateResponse): UserStateSnapshot {
     chatViewPass: res.chatViewPass ?? undefined,
     // Absent = shown. (`onehook-api-client` models the member from the SetMatchingTabHidden release.)
     matchingTabHidden: Boolean((res as UserStateResponse & { matchingTabHidden?: boolean }).matchingTabHidden),
+    ...(typeof res.membershipEndsAt === 'number' ? { membershipEndsAt: Number(res.membershipEndsAt) } : {}),
+    ...(res.pendingSubscriptionTier ? { pendingSubscriptionTier: res.pendingSubscriptionTier as SubscriptionTier } : {}),
   };
 }
 
