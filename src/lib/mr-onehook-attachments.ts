@@ -125,8 +125,8 @@ export function rejectionCopy(
  *   • GET_PRO  — Free with files selected: "Get Mr OneHook Pro" opens the Pro screen;
  *   • WAIT     — Pro, a file is still uploading or being read;
  *   • FIX      — Pro, a file failed: remove it first;
- *   • SEND     — send the message (with the READY ids);
- *   • DISABLED — nothing to send.
+ *   • SEND     — send the message (with the READY ids); files alone are enough, the text may be empty;
+ *   • DISABLED — nothing to send (no text and no files).
  */
 export type ComposerAction = 'SEND' | 'GET_PRO' | 'WAIT' | 'FIX' | 'DISABLED';
 
@@ -138,7 +138,8 @@ export function composerAction(
   if (items.length > 0 && plan !== MrOneHookPlan.PRO) return 'GET_PRO';
   if (items.some((i) => i.status === 'failed')) return 'FIX';
   if (items.some((i) => i.status !== 'ready')) return 'WAIT';
-  return text.trim() ? 'SEND' : 'DISABLED';
+  // Every file is ready here, so one file is a turn on its own (sent with `message: ""`).
+  return text.trim() || items.length > 0 ? 'SEND' : 'DISABLED';
 }
 
 export function readyAttachmentIds(items: readonly PendingAttachment[]): string[] {

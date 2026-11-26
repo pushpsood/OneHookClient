@@ -25,13 +25,16 @@ import {
 describe('membership catalogue — mirrors onehook-api-client', () => {
   it('has exactly the SDK tiers in SDK order, with SDK display names and ceilings', () => {
     expect(
-      MEMBERSHIP_TIERS.map(({ wire, displayName, maxConnections, archivePlanAllowance, archiveValidityDays }) => ({
-        wire,
-        displayName,
-        maxConnections,
-        archivePlanAllowance,
-        archiveValidityDays,
-      })),
+      MEMBERSHIP_TIERS.map(
+        ({ wire, displayName, maxConnections, archivePlanAllowance, archiveValidityDays, includesMrOneHookPro }) => ({
+          wire,
+          displayName,
+          maxConnections,
+          archivePlanAllowance,
+          archiveValidityDays,
+          includesMrOneHookPro,
+        }),
+      ),
     ).toEqual(SUBSCRIPTION_TIERS.map((t) => ({ ...t })));
   });
 

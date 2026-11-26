@@ -35,6 +35,7 @@ import {
 } from 'onehook-mr-onehook-client';
 import { fetchIdToken, mrOneHookClient, sdkFailure, withoutMetadata } from '../api/external-sdk-clients';
 import {
+  ATTACHMENTS_ONLY_TURN_TEXT,
   buildMemberChatRequestBody,
   chatTurnAttachmentProblem,
   classifyMemberChatAvailability,
@@ -54,7 +55,8 @@ import {
   parseSessionList,
   type SessionListItem,
 } from './mr-onehook-contract';
-import type { ExcerptSelectionRequest, ExcerptSelectionResult } from './mr-onehook-excerpts';
+import type { ExcerptSelectionRequest, ExcerptSelectionResult, SelectedExcerpt } from './mr-onehook-excerpts';
+import { noteMessageHistoryNotAllowed } from './mr-onehook-ask';
 import {
   ATTACHMENT_POLL_MIN_GAP_MS,
   createPollGate,
@@ -141,6 +143,20 @@ export interface TurnAttachments {
   refs: ChatAttachmentRef[];
 }
 
+/**
+ * Messages the member picked in a match chat ("Ask Mr OneHook about messages and files") and confirmed
+ * after seeing exactly what would be shared. Sent once, with the next question, as
+ * `ephemeralMessageContext` with `userConfirmed: true`. Match scope only; never stored.
+ */
+export interface ConfirmedExcerpts {
+  excerpts: SelectedExcerpt[];
+  historyTruncated: boolean;
+}
+
+/** Shown when a match does not allow its messages to be shared with Mr OneHook (403 MESSAGE_CONTEXT_NOT_ALLOWED). */
+export const MESSAGE_HISTORY_NOT_ALLOWED_COPY =
+  "This match doesn't allow Mr OneHook to use your conversation, so messages from it can't be shared.";
+
 /** Resolves local, already-decrypted excerpts for a server `contextRequest`. Match scope only. */
 export type LocalExcerptResolver = (request: ExcerptSelectionRequest) => ExcerptSelectionResult;
 
@@ -187,7 +203,8 @@ export interface UseMrOneHookChat {
   availability: MemberChatAvailability;
   /** Free plan: messages left today, from the last reply (undefined on Pro or before the first reply). */
   remainingMessages?: number;
-  send: (text: string, attachments?: TurnAttachments) => Promise<SendOutcome>;
+  /** `confirmed`: messages the member picked and confirmed in the match chat (match scope only). */
+  send: (text: string, attachments?: TurnAttachments, confirmed?: ConfirmedExcerpts) => Promise<SendOutcome>;
   confirmReview: () => Promise<void>;
   cancelReview: () => void;
   clear: () => void;
@@ -400,6 +417,10 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
    */
   const handleFailure = useCallback(
     (err: unknown) => {
+      if (err instanceof AttachmentTurnError && err.problem.kind === 'MESSAGE_CONTEXT_NOT_ALLOWED') {
+        pushError(MESSAGE_HISTORY_NOT_ALLOWED_COPY);
+        return;
+      }
       if (err instanceof MemberChatTerminalError) {
         setAvailability(err.outcome);
         pushError(availabilityCopy(err.outcome));
@@ -479,6 +500,12 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         // from a transient server error (retryable bubble). The structured `error` code is the
         // tie-breaker over the HTTP status.
         const errorBody = response.body;
+        // The match does not allow its history to be used: remember it so message selection is not
+        // offered again for this match.
+        if (errorBody.error === 'MESSAGE_CONTEXT_NOT_ALLOWED') noteMessageHistoryNotAllowed(matchId);
+        if (init.excerpts && init.excerpts.length > 0 && errorBody.error === 'MESSAGE_CONTEXT_NOT_ALLOWED') {
+          throw new AttachmentTurnError({ kind: 'MESSAGE_CONTEXT_NOT_ALLOWED' });
+        }
         if (init.attachmentIds && init.attachmentIds.length > 0) {
           const problem = chatTurnAttachmentProblem(response.status, errorBody.error);
           if (problem) throw new AttachmentTurnError(problem);
@@ -563,15 +590,19 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
   );
 
   const send = useCallback(
-    async (text: string, attachments?: TurnAttachments): Promise<SendOutcome> => {
+    async (text: string, attachments?: TurnAttachments, confirmed?: ConfirmedExcerpts): Promise<SendOutcome> => {
       const trimmed = text.trim();
-      if (!trimmed || loading || pendingReview) return { status: 'skipped' };
+      const hasFiles = Boolean(attachments && attachments.ids.length > 0);
+      // Files alone are a turn (Mr OneHook Pro): the request carries `message: ""` with the ids.
+      if ((!trimmed && !hasFiles) || loading || pendingReview) return { status: 'skipped' };
       // Terminal availability (not entitled / signed out / not configured) — stop accepting input.
       if (availability !== 'AVAILABLE') return { status: 'skipped' };
+      // What the turn reads as: the server saves a files-only turn as ATTACHMENTS_ONLY_TURN_TEXT.
+      const shownText = trimmed || ATTACHMENTS_ONLY_TURN_TEXT;
 
       const userMessage: MrOneHookMessage = {
         role: 'user',
-        content: trimmed,
+        content: shownText,
         ...(attachments && attachments.refs.length > 0 ? { attachments: attachments.refs } : {}),
       };
       setMessages((prev) => [...prev.filter((m) => !m.isError), userMessage]);
@@ -580,12 +611,18 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
       setMood('Thinking');
 
       try {
-        // First pass never carries excerpts — the model must ask for context before we share any.
+        // Excerpts go only when the member picked and confirmed them in the match chat; otherwise the
+        // first pass carries none and the model must ask for context before any is shared.
+        const shared = matchId && confirmed && confirmed.excerpts.length > 0 ? confirmed : undefined;
         const result = await postOnce({
           message: trimmed,
           ...(attachments && attachments.ids.length > 0 ? { attachmentIds: attachments.ids } : {}),
+          ...(shared
+            ? { excerpts: shared.excerpts, historyTruncated: shared.historyTruncated, userConfirmed: true }
+            : {}),
         });
-        handleResult(result, trimmed);
+        // A follow-up excerpt review re-sends the question without the files, so it needs words.
+        handleResult(result, shownText);
         return { status: 'sent' };
       } catch (err) {
         if (err instanceof AttachmentTurnError) {
@@ -600,7 +637,7 @@ export function useMrOneHookChat(options: UseMrOneHookChatOptions): UseMrOneHook
         setLoading(false);
       }
     },
-    [loading, pendingReview, availability, postOnce, handleResult, handleFailure],
+    [loading, pendingReview, availability, postOnce, handleResult, handleFailure, matchId],
   );
 
   const confirmReview = useCallback(async () => {

@@ -21,7 +21,10 @@ Versions are the ranges declared in `package.json`.
   npm registry (`^2.0.0`, pinned in `package-lock.json`)
 - **`onehook-mr-onehook-client`**: Smithy-generated SDK for Mr OneHook product & connection chat and AI session persistence (`^2.0.0`)
 - **`saha-equation-admin-portal-client`**: Smithy-generated SDK for admin portal feature gateways (moderation evidence and admissions) (`^2.0.0`)
-- **Vitest 4**: testing (`fake-indexeddb` for the E2EE key-store tests)
+- **`heic2any`** (`0.0.4`, exact): HEIC/HEIF to JPEG in the browser for Mr OneHook files, loaded on
+  demand. Third-party licences: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- **Vitest 4**: testing (`fake-indexeddb` for the E2EE key-store tests; `jsdom` and
+  `@testing-library/react` for the DOM tests that opt in with `// @vitest-environment jsdom`)
 - **AWS CDK 2** (`aws-cdk-lib`, `aws-cdk`): site and pipeline infrastructure under `infra/`
 
 ## Prerequisites
@@ -290,11 +293,33 @@ as `attachmentIds` (`src/lib/mr-onehook-attachments.ts`). Free members can selec
 button reads "Get Mr OneHook Pro". 429 `ATTACHMENT_PROCESSING_UNAVAILABLE` reads "Files can't be
 processed right now because of heavy usage. You can keep chatting." Files of a saved turn show as
 chips; uploaded ones open through `GetChatAttachmentContent`, match-chat ones are labelled "From your
-chat". HEIC is uploaded as is (the web has no HEIC converter). In a match chat, "Ask Mr OneHook about
-files" lets the member select images and files of that conversation; on Pro the device's decrypted
-bytes (`AttachmentObjectUrlCache.resolveBlob`) are uploaded with `X-Attachment-Match-Id` /
-`X-Attachment-Sender` and that match's Mr OneHook chat opens with them attached. A 403
-`MESSAGE_CONTEXT_NOT_ALLOWED` explains that the match does not allow its history to be used.
+chat". Once every file is `READY`, Send works without text: the turn is sent as `message: ""` with
+`attachmentIds`, and the server saves it as "Please look at the attached files." (shown the same way
+right away). A HEIC/HEIF photo (by type or `.heic`/`.heif` name) picked in the composer is converted to
+JPEG in the browser with `heic2any` before the 5 MB check and the upload (`src/lib/heic-to-jpeg.ts`);
+the library is loaded only on demand with `import('heic2any')`, so it is a separate chunk outside the
+main bundle, and if it fails to load or convert the original file is uploaded unchanged. heic2any (MIT)
+bundles libheif (LGPL-3.0); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+**Ask Mr OneHook about messages and files.** In a match chat, "Ask Mr OneHook about messages and files"
+(just "about messages" while Pro is off in the environment) opens a select mode, as on iOS. Text
+messages can be selected on every plan; photos and files (up to 3, at most 5 MB each) while Pro is
+available. Only messages this device decrypted can be selected, by the same rules as every excerpt
+(`isReadableTextTurn` in `src/lib/mr-onehook-excerpts.ts`): never a locked or "[Unable to decrypt]"
+message, a failed or sending one, a location or contact card, or a call event; a photo's or file's
+caption counts as text. The bar enforces the excerpt limits (30 messages, 12,000 characters; a message
+over 4,000 characters is shortened). "Ask Mr OneHook" then shows exactly what will be shared (each text
+with who sent it and when, and each file) and nothing leaves the device until the member taps "Share &
+ask"; "Don't share" sends nothing. On confirming, files are decrypted on the device
+(`AttachmentObjectUrlCache.resolveBlob`) and uploaded with `X-Attachment-Match-Id` /
+`X-Attachment-Sender`, and that match's Mr OneHook chat opens with the messages shown above the composer;
+they go with the next question as `ephemeralMessageContext` (`historyTruncated: true`,
+`userConfirmed: true`), the files as `attachmentIds`. With files selected on the Free plan the button
+reads "Get Mr OneHook Pro". The browser cannot read a match's `messageHistoryAllowed` ahead of a request,
+so an archived match, or a match for which the server answered 403 `MESSAGE_CONTEXT_NOT_ALLOWED` (remembered
+for the page), offers no message selection and says why; files can still be selected. Rules:
+`src/lib/mr-onehook-ask.ts`.
+
 The public landing widget (`src/components/Chatbot/ChatbotWidget.tsx`, shown on `/`, `/pricing` and
 `/science`) remains separate on `POST ${chatbotUrl}/api/public/product-chat` without an authorization
 header.

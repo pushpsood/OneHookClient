@@ -81,11 +81,22 @@ export const DEFAULT_EXCERPT_BOUNDS: ExcerptSelectionBounds = {
 /** Status wire values that mean "not a settled, readable turn" and are therefore never eligible. */
 const EXCLUDED_STATUSES = new Set(['FAILED', 'SENDING']);
 
-function isReadableTextTurn(message: SelectableMessage): boolean {
+/**
+ * Bodies the chat shows in place of a message it could not read (see `useChatMessages`). They are not
+ * the conversation and must never be shared as an excerpt.
+ */
+export const UNREADABLE_MESSAGE_PLACEHOLDERS: ReadonlySet<string> = new Set(['[Unable to decrypt]']);
+
+/**
+ * A readable, settled plain-text turn: the only kind of message that may become an excerpt (also used
+ * by "Ask Mr OneHook about messages and files" to decide which messages can be selected).
+ */
+export function isReadableTextTurn(message: SelectableMessage): boolean {
   if (message.undecryptable) return false;
   if (message.status && EXCLUDED_STATUSES.has(message.status.toUpperCase())) return false;
   const text = message.text?.trim();
   if (!text) return false;
+  if (UNREADABLE_MESSAGE_PLACEHOLDERS.has(text)) return false;
   // An attachment envelope is framed plaintext, not conversation — it must never be shared as text.
   if (isAttachmentFrame(message.text)) return false;
   // Nor is structured content: a location or contact card must never leave the device as an excerpt.

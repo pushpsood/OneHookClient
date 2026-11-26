@@ -54,6 +54,12 @@ function isMood(value: unknown): value is MrOneHookMood {
 // Request
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The user turn the server saves (and returns in the session) when files are sent without text. The
+ * chat shows the same words for the turn right away, so it reads the same after a reload.
+ */
+export const ATTACHMENTS_ONLY_TURN_TEXT = 'Please look at the attached files.';
+
 export interface MemberChatRequestInit {
   message: string;
   /** Omit for a product-only question. Required to send excerpts or use connection context. */
@@ -100,10 +106,13 @@ export interface MemberChatRequestBody {
  *   • `replaceLeastRecent` is never sent: at the plan's cap the server always replaces the least
  *     recently active saved chat and reports it in `evictedSessionIds`.
  *   • `attachmentIds` is emitted only when there is at least one id.
+ *   • `message` may be blank only when there is at least one attachment id (files sent without text;
+ *     the server saves that turn as {@link ATTACHMENTS_ONLY_TURN_TEXT}).
  */
 export function buildMemberChatRequestBody(init: MemberChatRequestInit): MemberChatRequestBody {
   const message = init.message.trim();
-  if (!message) throw new Error('A message is required');
+  const hasAttachments = Boolean(init.attachmentIds && init.attachmentIds.length > 0);
+  if (!message && !hasAttachments) throw new Error('A message is required');
 
   const includeProfile = init.includeProfile !== false;
   const includeMessageHistory = init.includeMessageHistory !== false;

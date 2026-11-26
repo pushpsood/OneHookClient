@@ -79,6 +79,13 @@ describe('buildMemberChatRequestBody — product-only', () => {
 
   it('throws on an empty message', () => {
     expect(() => buildMemberChatRequestBody({ message: '   ' })).toThrow();
+    expect(() => buildMemberChatRequestBody({ message: '', attachmentIds: [] })).toThrow();
+  });
+
+  it('files without text: message is "" and the attachment ids are sent', () => {
+    const body = buildMemberChatRequestBody({ message: '  ', attachmentIds: ['att-1', 'att-2'] });
+    expect(body.message).toBe('');
+    expect(body.attachmentIds).toEqual(['att-1', 'att-2']);
   });
 });
 

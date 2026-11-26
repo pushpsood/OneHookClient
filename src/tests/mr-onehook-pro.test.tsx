@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { MrOneHookProStatus, ProSubscription } from 'onehook-mr-onehook-client';
-import { subscriptionTierDisplayName, SUBSCRIPTION_TIERS } from 'onehook-api-client/membership';
+import {
+  includesMrOneHookPro,
+  MR_ONEHOOK_PRO_TIERS,
+  subscriptionTierDisplayName,
+  SUBSCRIPTION_TIERS,
+} from 'onehook-api-client/membership';
 import {
   buildProScreenModel,
   formatMinorInr,
@@ -307,23 +312,32 @@ describe('plan context', () => {
 });
 
 describe('Free vs Pro gating of "Ask Mr OneHook" and the composer', () => {
-  it('Free: "Get Mr OneHook Pro", enabled even with files selected', () => {
+  it('Free with files selected: "Get Mr OneHook Pro", enabled', () => {
     const out = renderToStaticMarkup(
-      <AskMrOneHookButton plan="FREE" selectedCount={2} onClick={() => undefined} />
+      <AskMrOneHookButton plan="FREE" selectedCount={2} fileCount={1} onClick={() => undefined} />
     );
     expect(out).toContain('Get Mr OneHook Pro');
     expect(out).toContain('data-action="get_pro"');
     expect(out).not.toContain('disabled=""');
   });
 
+  it('Free with only messages selected: "Ask Mr OneHook" (messages are not a Pro feature)', () => {
+    const out = renderToStaticMarkup(
+      <AskMrOneHookButton plan="FREE" selectedCount={2} fileCount={0} onClick={() => undefined} />
+    );
+    expect(out).toContain('Ask Mr OneHook');
+    expect(out).toContain('data-action="ask"');
+    expect(out).not.toContain('disabled=""');
+  });
+
   it('Pro: "Ask Mr OneHook", disabled until something is selected', () => {
     const none = renderToStaticMarkup(
-      <AskMrOneHookButton plan="PRO" selectedCount={0} onClick={() => undefined} />
+      <AskMrOneHookButton plan="PRO" selectedCount={0} fileCount={0} onClick={() => undefined} />
     );
     expect(none).toContain('Ask Mr OneHook');
     expect(none).toContain('disabled=""');
     const some = renderToStaticMarkup(
-      <AskMrOneHookButton plan="PRO" selectedCount={1} onClick={() => undefined} />
+      <AskMrOneHookButton plan="PRO" selectedCount={1} fileCount={1} onClick={() => undefined} />
     );
     expect(some).toContain('data-action="ask"');
     expect(some).not.toContain('disabled=""');
@@ -337,14 +351,17 @@ describe('Free vs Pro gating of "Ask Mr OneHook" and the composer', () => {
 });
 
 describe('membership matrix', () => {
-  it('the top tier lists Mr OneHook Pro as included; the others get the Free plan', () => {
+  it('the tiers that include Pro (SDK) list it as included; the others get the Free plan', () => {
     const row = ALL_FEATURE_ROWS.find((r) => r.label === 'Mr.OneHook AI');
     for (const t of SUBSCRIPTION_TIERS) {
       expect(row?.values[t.wire], t.displayName).toBe(
-        t.wire === MR_ONEHOOK_PRO_TIER ? 'Mr OneHook Pro included' : '10 msgs/day'
+        includesMrOneHookPro(t.wire) ? 'Mr OneHook Pro included' : '10 msgs/day'
       );
     }
-    expect(MR_ONEHOOK_PRO_TIER).toBe(SUBSCRIPTION_TIERS.at(-1)!.wire);
+    // Today only the top tier (Infinity) includes Pro.
+    expect(MR_ONEHOOK_PRO_TIERS).toEqual([SUBSCRIPTION_TIERS.at(-1)!.wire]);
+    expect(MR_ONEHOOK_PRO_TIER).toBe(MR_ONEHOOK_PRO_TIERS[0]);
+    expect(tierByWire(MR_ONEHOOK_PRO_TIER).includesMrOneHookPro).toBe(true);
     expect(tierByWire(MR_ONEHOOK_PRO_TIER).adds).toContain('Mr OneHook Pro included');
     for (const t of SUBSCRIPTION_TIERS.slice(0, -1)) {
       expect(tierByWire(t.wire).adds.join(' ')).not.toMatch(/Unlimited Mr\.?\s?OneHook/i);

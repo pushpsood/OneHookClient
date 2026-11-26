@@ -198,7 +198,7 @@ export function SettingsView({
               <button
                 type="button"
                 onClick={openMrOneHookPro}
-                {...trackProps(UiElement.PROFILE_UPGRADE_OPEN, { targetId: 'mr_onehook_pro' })}
+                {...trackProps(UiElement.PROFILE_MR_ONEHOOK_PRO_OPEN)}
                 className="px-3 py-1.5 rounded-lg border border-accent/50 text-accent font-semibold hover:bg-accent/5 cursor-pointer"
               >
                 {pro.plan === MrOneHookPlan.PRO ? 'Manage Mr OneHook Pro' : 'Get Mr OneHook Pro'}

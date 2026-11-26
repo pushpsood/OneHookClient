@@ -17,7 +17,13 @@ import {
 } from '../../store/mr-onehook-pro-store';
 import { buildProScreenModel, type ProScreenModel } from '../../lib/mr-onehook-pro';
 import { proProblemCopy, type ProProblem } from '../../lib/mr-onehook-contract';
-import { trackProps, UiElement } from '../../lib/analytics/analytics';
+import {
+  Screen,
+  trackProps,
+  trackScreenView,
+  trackUi,
+  UiElement,
+} from '../../lib/analytics/analytics';
 
 /** What Pro adds over Free, shown on the screen. */
 export const PRO_BENEFITS: readonly string[] = [
@@ -27,7 +33,11 @@ export const PRO_BENEFITS: readonly string[] = [
   'Ask Mr OneHook about photos and files from your chats',
 ];
 
-const PRO = UiElement.CHAT_MR_ONEHOOK_UPGRADE_OPEN;
+/** Escape or a click on the backdrop: the screen was dismissed without the Close button. */
+function dismissMrOneHookPro(): void {
+  trackUi(UiElement.MR_ONEHOOK_PRO_CLOSE, { action: 'dismiss' });
+  closeMrOneHookPro();
+}
 
 /**
  * The Mr OneHook Pro screen: plan, offers and purchase, the subscription (auto-renew, pause, refund),
@@ -43,9 +53,14 @@ export function MrOneHookProSheet() {
   const pending = Boolean(userState?.pendingSubscriptionTier);
   useActivatingMembershipPoll(open && pending, userId);
 
+  const visible = open && availability !== 'off';
+  useEffect(() => {
+    if (visible) trackScreenView(Screen.MR_ONEHOOK_PRO);
+  }, [visible]);
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeMrOneHookPro();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && dismissMrOneHookPro();
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
@@ -56,8 +71,8 @@ export function MrOneHookProSheet() {
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4"
       role="presentation"
-      data-track-exempt="backdrop: closing is tracked by the Close button"
-      onClick={closeMrOneHookPro}
+      data-track-exempt="duplicate: the dismiss is emitted in the handler via trackUi"
+      onClick={dismissMrOneHookPro}
     >
       <div
         role="dialog"
@@ -75,7 +90,7 @@ export function MrOneHookProSheet() {
           <button
             type="button"
             onClick={closeMrOneHookPro}
-            {...trackProps(PRO, { action: 'dismiss', targetId: 'close' })}
+            {...trackProps(UiElement.MR_ONEHOOK_PRO_CLOSE)}
             aria-label="Close"
             className="w-8 h-8 rounded-full flex items-center justify-center text-text/60 hover:bg-black/5 cursor-pointer"
           >
@@ -99,7 +114,7 @@ export function MrOneHookProSheet() {
             <button
               type="button"
               onClick={() => userId && void loadMrOneHookPro(userId, true)}
-              {...trackProps(UiElement.CHAT_RETRY)}
+              {...trackProps(UiElement.MR_ONEHOOK_PRO_REFRESH)}
               className="px-3 py-1.5 rounded-lg border border-border text-xs font-semibold cursor-pointer"
             >
               Try again
@@ -153,7 +168,8 @@ export function MrOneHookProContent({
 
   const offerButtons = (kind: 'buy' | 'keep') =>
     model.offers.map((offer) => {
-      const key = `${kind}_${offer.billingPeriod === ProBillingPeriod.YEARLY ? 'yearly' : 'monthly'}`;
+      const period = offer.billingPeriod === ProBillingPeriod.YEARLY ? 'yearly' : 'monthly';
+      const key = `${kind}_${period}`;
       return (
         <button
           key={offer.billingPeriod}
@@ -166,7 +182,13 @@ export function MrOneHookProContent({
                 : keepMrOneHookProAfterMembership(offer.billingPeriod)
             )
           }
-          {...trackProps(PRO, { targetId: key })}
+          {...trackProps(
+            kind === 'buy'
+              ? UiElement.MR_ONEHOOK_PRO_BUY
+              : UiElement.MR_ONEHOOK_PRO_KEEP_AFTER_MEMBERSHIP,
+            { value: period }
+          )}
+          data-testid={`pro-${key}`}
           className="flex-1 py-2.5 rounded-xl bg-accent text-bg text-xs font-semibold hover:opacity-90 disabled:opacity-40 cursor-pointer"
         >
           {busy === key ? 'Working…' : `${kind === 'buy' ? 'Buy' : 'Keep'} · ${offer.priceLabel}`}
@@ -248,8 +270,9 @@ export function MrOneHookProContent({
                 const next = !model.subscription!.autoRenew;
                 void run('auto_renew', () => setMrOneHookProAutoRenew(next));
               }}
-              {...trackProps(PRO, {
-                targetId: model.subscription.autoRenew ? 'auto_renew_off' : 'auto_renew_on',
+              {...trackProps(UiElement.MR_ONEHOOK_PRO_AUTO_RENEW_TOGGLE, {
+                action: 'toggle',
+                value: model.subscription.autoRenew ? 'off' : 'on',
               })}
               className="mt-1 w-full flex items-center justify-between rounded-lg border border-border px-3 py-2 cursor-pointer disabled:opacity-40"
             >
@@ -289,7 +312,7 @@ export function MrOneHookProContent({
             type="button"
             disabled={Boolean(busy)}
             onClick={() => void run('withdraw', withdrawMrOneHookProContinuation)}
-            {...trackProps(PRO, { targetId: 'withdraw' })}
+            {...trackProps(UiElement.MR_ONEHOOK_PRO_KEEP_WITHDRAW)}
             className="px-3 py-1.5 rounded-lg border border-border text-xs font-semibold cursor-pointer disabled:opacity-40"
           >
             {busy === 'withdraw' ? 'Withdrawing…' : 'Withdraw'}
@@ -332,7 +355,7 @@ export function MrOneHookProContent({
               <button
                 type="button"
                 onClick={() => void dismissMrOneHookProNotice(n.noticeId)}
-                {...trackProps(PRO, { action: 'dismiss', targetId: 'notice' })}
+                {...trackProps(UiElement.MR_ONEHOOK_PRO_NOTICE_DISMISS)}
                 aria-label="Dismiss"
                 className="w-6 h-6 rounded-full flex items-center justify-center text-text/50 hover:bg-black/5 cursor-pointer"
               >

@@ -123,7 +123,10 @@ export function MrOneHookConfirm({
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
-  /** E.g. "Get Mr OneHook Pro" next to Replace for a Free member. */
+  /**
+   * "Get Mr OneHook Pro" next to Replace for a Free member at the saved-chat cap (tracked as
+   * `chat.mr_onehook_get_pro` = `session_cap`).
+   */
   extra?: { label: string; onClick: () => void };
   /** Telemetry element for both buttons; the options tell Confirm and Cancel apart. */
   element: UiElementId;
@@ -157,7 +160,7 @@ export function MrOneHookConfirm({
             <button
               type="button"
               onClick={extra.onClick}
-              {...trackProps(UiElement.CHAT_MR_ONEHOOK_UPGRADE_OPEN, { targetId: 'session_limit' })}
+              {...trackProps(UiElement.CHAT_MR_ONEHOOK_GET_PRO, { value: 'session_cap' })}
               className="px-3 py-1.5 rounded-lg border border-accent/50 text-accent text-xs font-semibold cursor-pointer mr-auto"
             >
               {extra.label}

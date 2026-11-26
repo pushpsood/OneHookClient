@@ -76,8 +76,9 @@ import {
   type MrOneHookMessage,
   type MrOneHookScope,
   type PendingExcerptReview,
+  MESSAGE_HISTORY_NOT_ALLOWED_COPY,
 } from '../../lib/mr-onehook';
-import { MrOneHookPlan, type ExcerptSpeaker } from 'onehook-mr-onehook-client';
+import { MrOneHookPlan } from 'onehook-mr-onehook-client';
 import {
   composerAction,
   rejectionCopy,
@@ -87,7 +88,9 @@ import { attachmentProblemCopy, type AttachmentProblem } from '../../lib/mr-oneh
 import type { MrOneHookPlanContext } from '../../lib/mr-onehook-pro';
 import { notePlanFromChat, openMrOneHookPro, useMrOneHookPro } from '../../store/mr-onehook-pro-store';
 import {
+  AskingAboutBar,
   AskMrOneHookButton,
+  AskMrOneHookConfirm,
   composerSendLabel,
   MrOneHookAttachButton,
   PendingAttachmentChips,
@@ -97,7 +100,22 @@ import {
   selectEphemeralExcerpts,
   toSelectableMessages,
   type ExcerptSelectionRequest,
+  type SelectedExcerpt,
 } from '../../lib/mr-onehook-excerpts';
+import {
+  ASK_HISTORY_NOT_ALLOWED_COPY,
+  DEFAULT_ASK_LIMITS,
+  askCandidates,
+  askCountPhrase,
+  askSelectionTotals,
+  buildAskShare,
+  noteMessageHistoryNotAllowed,
+  toggleAskSelection,
+  useMessageHistoryNotAllowed,
+  type AskCandidate,
+  type AskLimits,
+  type AskShare,
+} from '../../lib/mr-onehook-ask';
 import { ChatSettingsSheet } from '../../components/chat/ChatSettingsSheet';
 import { AttachmentBubble } from '../../components/chat/AttachmentBubble';
 import {
@@ -126,7 +144,6 @@ import { AttachmentComposer } from '../../components/chat/AttachmentComposer';
 import {
   decodeMessagePlaintext,
   AttachmentDecodeError,
-  type AttachmentEnvelope,
   type AttachmentKind,
 } from '../../lib/chat-attachments';
 import { ReportFlowDialog } from '../../features/moderation/report/ReportFlowDialog';
@@ -150,6 +167,22 @@ const BLOCK_REASONS: { value: BlockReason; label: string }[] = [
 ];
 
 /** A current hook as chat shows it: State's hook plus the partner's chat profile once it loads. */
+/** "Ask Mr OneHook" from a match chat: the confirmed messages and the uploaded files for the next question. */
+export interface AskHandoff {
+  items: PendingAttachment[];
+  excerpts: SelectedExcerpt[];
+}
+
+/** The select-mode checkbox's accessible name: the file's name, or the start of the message. */
+function askCheckboxLabel(candidate: AskCandidate): string {
+  if (candidate.file || candidate.oversizedFile) {
+    return `Select ${(candidate.file ?? candidate.oversizedFile)!.name || 'this file'} for Mr OneHook`;
+  }
+  const text = candidate.text ?? '';
+  const snippet = text.length > 40 ? `${text.slice(0, 40)}…` : text;
+  return `Select the message “${snippet}” for Mr OneHook`;
+}
+
 interface HydratedMatch {
   matchId: string;
   /** Epoch ms the hook formed (for sorting by recency). */
@@ -200,8 +233,9 @@ export function ChatView({
   const [selection, setSelection] = useState<Selection>(activeMatchId || MR_ONEHOOK);
   // The member's Mr OneHook plan (Free / Pro) and whether Pro's entry points show.
   const pro = useMrOneHookPro(currentUser.id);
-  // "Ask Mr OneHook" from a match chat: files already uploaded, waiting for that match's Mr OneHook chat.
-  const [askHandoff, setAskHandoff] = useState<{ matchId: string; items: PendingAttachment[] } | null>(null);
+  // "Ask Mr OneHook" from a match chat: the confirmed messages and the files (already uploaded), waiting
+  // for that match's Mr OneHook chat.
+  const [askHandoff, setAskHandoff] = useState<({ matchId: string } & AskHandoff) | null>(null);
 
   // Overlay state
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -818,8 +852,8 @@ export function ChatView({
           onCloseReport={() => setChatReportOpen(false)}
           onRequestUnmatch={() => void runUnmatch()}
           pro={pro}
-          onAskMrOneHook={(items) => {
-            setAskHandoff({ matchId: activeMatch.matchId, items });
+          onAskMrOneHook={(handoff) => {
+            setAskHandoff({ matchId: activeMatch.matchId, ...handoff });
             selectConversation(MR_ONEHOOK);
           }}
         />
@@ -960,7 +994,7 @@ function Composer({
   above,
   sendLabel,
   sendEnabled,
-  sendIsUpsell,
+  sendUpsell,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -977,8 +1011,11 @@ function Composer({
   sendLabel?: string;
   /** Overrides when the send button is enabled (default: there is text and nothing disables it). */
   sendEnabled?: boolean;
-  /** The send button opens the Mr OneHook Pro screen instead of sending. */
-  sendIsUpsell?: boolean;
+  /**
+   * The send button opens the Mr OneHook Pro screen instead of sending; the value says why (Free with
+   * files selected, or out of today's free messages).
+   */
+  sendUpsell?: 'composer' | 'daily_limit';
 }) {
   const canSend = sendEnabled ?? (!disabled && !readOnlyReason && Boolean(value.trim()));
   return (
@@ -999,8 +1036,8 @@ function Composer({
         <button
           onClick={onSend}
           disabled={!canSend}
-          {...(sendIsUpsell
-            ? trackProps(UiElement.CHAT_MR_ONEHOOK_UPGRADE_OPEN, { targetId: 'composer' })
+          {...(sendUpsell
+            ? trackProps(UiElement.CHAT_MR_ONEHOOK_GET_PRO, { value: sendUpsell })
             : trackProps(UiElement.CHAT_SEND_BUTTON))}
           className="absolute right-0 bottom-3 text-xs font-semibold text-ig-blue hover:opacity-80 transition-opacity disabled:opacity-30 flex items-center gap-1 cursor-pointer"
         >
@@ -1182,7 +1219,8 @@ function MatchMessageBody({
   );
 }
 
-function MatchConversation({
+/** One conversation with a person. Exported for UI tests (the "Ask Mr OneHook" select mode). */
+export function MatchConversation({
   matchId,
   peerId,
   peerName,
@@ -1213,8 +1251,11 @@ function MatchConversation({
   onRequestUnmatch?: () => void;
   /** The member's Mr OneHook plan; "Ask Mr OneHook" shows only while Pro is on in this environment. */
   pro: MrOneHookPlanContext;
-  /** Pro: the selected files were uploaded; open this match's Mr OneHook chat with them attached. */
-  onAskMrOneHook: (items: PendingAttachment[]) => void;
+  /**
+   * The member confirmed the selected messages and files (the files are uploaded): open this match's Mr
+   * OneHook chat with them attached to the next question.
+   */
+  onAskMrOneHook: (handoff: AskHandoff) => void;
 }) {
   // A write refused as ARCHIVED (docs/archives.md) makes the chat read-only at once, before the state
   // refresh removes it: the archived match is no longer one of State's hooks.
@@ -1280,86 +1321,106 @@ function MatchConversation({
   const contactShare = useContactShare();
   const [input, setInput] = useState('');
 
-  // "Ask Mr OneHook": the member selects images/files of this conversation; on Pro they are uploaded
-  // (decrypted here, never by a server) and this match's Mr OneHook chat opens with them attached.
-  const attachmentEnvelopes = useMemo(() => {
-    const map = new Map<string, { envelope: AttachmentEnvelope; sender: ExcerptSpeaker }>();
-    for (const m of messages) {
-      if (m.undecryptable) continue;
-      try {
-        const decoded = decodeMessagePlaintext(m.ciphertext);
-        if (decoded.type === 'attachment') {
-          map.set(m.messageId, { envelope: decoded.envelope, sender: m.senderId === 'me' ? 'self' : 'match' });
-        }
-      } catch {
-        /* an unreadable envelope is not selectable */
-      }
-    }
-    return map;
-  }, [messages]);
+  // "Ask Mr OneHook about messages and files": the member selects text messages (any plan) and, with Mr
+  // OneHook Pro available, photos and files of this conversation, sees exactly what would be shared and
+  // confirms. Then (Pro) the files are uploaded, decrypted here, never by a server, and this match's Mr
+  // OneHook chat opens with the messages and files attached to the next question. Rules:
+  // lib/mr-onehook-ask.ts.
+  // An archived match is no longer active, so the server does not allow its history; a 403
+  // MESSAGE_CONTEXT_NOT_ALLOWED for this match is remembered too.
+  const historyDenied = useMessageHistoryNotAllowed(matchId);
+  const historyAllowed = !archived && !historyDenied;
+  const askLimits: AskLimits = useMemo(
+    () => ({
+      ...DEFAULT_ASK_LIMITS,
+      maxFiles: pro.limits.maxAttachmentsPerMessage,
+      maxFileBytes: pro.limits.maxAttachmentBytes,
+    }),
+    [pro.limits.maxAttachmentsPerMessage, pro.limits.maxAttachmentBytes]
+  );
+  const candidates = useMemo(
+    () =>
+      askCandidates(messages, {
+        historyAllowed,
+        filesAllowed: pro.proVisible,
+        limits: askLimits,
+      }),
+    [messages, historyAllowed, pro.proVisible, askLimits]
+  );
   const [askMode, setAskMode] = useState(false);
   const [askSelected, setAskSelected] = useState<string[]>([]);
   const [asking, setAsking] = useState(false);
   const [askNotice, setAskNotice] = useState<string | null>(null);
-  const maxAskFiles = pro.limits.maxAttachmentsPerMessage;
-  const toggleAskSelected = (messageId: string) => {
-    setAskNotice(null);
+  const [askConfirm, setAskConfirm] = useState<AskShare | null>(null);
+  // A selected message that is no longer selectable (deleted, or the history became unavailable) drops out.
+  useEffect(() => {
     setAskSelected((prev) => {
-      if (prev.includes(messageId)) return prev.filter((id) => id !== messageId);
-      const entry = attachmentEnvelopes.get(messageId);
-      if (entry && entry.envelope.size > pro.limits.maxAttachmentBytes) {
-        setAskNotice('Files over 5 MB can’t be shared with Mr OneHook.');
-        return prev;
-      }
-      if (prev.length >= maxAskFiles) {
-        setAskNotice(`You can share up to ${maxAskFiles} files at a time.`);
-        return prev;
-      }
-      return [...prev, messageId];
+      const kept = prev.filter((id) => candidates.has(id));
+      return kept.length === prev.length ? prev : kept;
     });
+  }, [candidates]);
+  const askTotals = askSelectionTotals(askSelected, candidates);
+  const toggleAskSelected = (messageId: string) => {
+    const result = toggleAskSelection(askSelected, messageId, candidates, askLimits);
+    setAskSelected(result.selected);
+    setAskNotice(result.outcome === 'refused' ? result.notice : null);
   };
   const exitAskMode = () => {
     setAskMode(false);
     setAskSelected([]);
     setAskNotice(null);
+    setAskConfirm(null);
   };
-  const askMrOneHook = async () => {
-    if (pro.plan !== MrOneHookPlan.PRO) {
+  /** "Ask Mr OneHook" in the bar: Free with files opens the Pro screen; otherwise the confirmation. */
+  const askMrOneHook = () => {
+    if (askTotals.files > 0 && pro.plan !== MrOneHookPlan.PRO) {
       // Free keeps the selection; the button reads "Get Mr OneHook Pro".
       openMrOneHookPro();
       return;
     }
     if (asking || askSelected.length === 0) return;
-    setAsking(true);
     setAskNotice(null);
+    setAskConfirm(buildAskShare(askSelected, candidates));
+  };
+  /** The member confirmed: upload the files (Pro), then hand everything to the Mr OneHook chat. */
+  const confirmAsk = async () => {
+    const share = askConfirm;
+    if (!share || asking) return;
+    setAskConfirm(null);
+    if (share.files.length === 0) {
+      exitAskMode();
+      onAskMrOneHook({ items: [], excerpts: share.excerpts });
+      return;
+    }
+    setAsking(true);
     try {
       const files = [];
-      for (const id of askSelected) {
-        const entry = attachmentEnvelopes.get(id);
-        if (!entry) continue;
-        const blob = await attachmentCache.resolveBlob(entry.envelope, matchId);
+      for (const file of share.files) {
+        const blob = await attachmentCache.resolveBlob(file.envelope, matchId);
         files.push({
-          name: entry.envelope.name || `${entry.envelope.kind}-${id}`,
+          name: file.envelope.name || `${file.envelope.kind}-${file.messageId}`,
           size: blob.size,
-          type: entry.envelope.mime,
+          type: file.envelope.mime,
           blob,
-          origin: { matchId, sender: entry.sender },
+          origin: { matchId, sender: file.sender },
         });
       }
       const result = await uploadMatchChatAttachments(files);
       if (result.ok === false) {
+        if (result.problem.kind === 'MESSAGE_CONTEXT_NOT_ALLOWED') noteMessageHistoryNotAllowed(matchId);
         setAskNotice(attachmentProblemCopy(result.problem));
         if (result.problem.kind === 'PRO_REQUIRED') openMrOneHookPro();
         return;
       }
       exitAskMode();
-      onAskMrOneHook(result.items);
+      onAskMrOneHook({ items: result.items, excerpts: share.excerpts });
     } catch {
       setAskNotice('Those files couldn’t be opened on this device. Try again.');
     } finally {
       setAsking(false);
     }
   };
+  const askFilesOffered = pro.proVisible;
 
   // Snapshot of decrypted messages for the optional evidence share. Text comes from the SAME local
   // decrypt the chat UI uses (the E2EE hook); attachments/undecryptable/system messages map to a
@@ -1653,14 +1714,15 @@ function MatchConversation({
         </div>
       )}
       <div className="shrink-0 h-10 px-4 flex items-center justify-end gap-3 border-b border-border/60 bg-surface-card/60">
-        {pro.proVisible && attachmentEnvelopes.size > 0 && !askMode && (
+        {(candidates.size > 0 || (!historyAllowed && timeline.length > 0)) && !askMode && (
           <button
             type="button"
             onClick={() => setAskMode(true)}
-            {...trackProps(UiElement.CHAT_MR_ONEHOOK_OPEN)}
+            {...trackProps(UiElement.CHAT_SELECT_OPEN, { value: 'header' })}
             className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-accent hover:opacity-80 cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" /> Ask Mr OneHook about files
+            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />{' '}
+            {askFilesOffered ? 'Ask Mr OneHook about messages and files' : 'Ask Mr OneHook about messages'}
           </button>
         )}
         {peerId && (
@@ -1738,19 +1800,19 @@ function MatchConversation({
                   <div
                     key={m.messageId}
                     className={`max-w-md relative ${m.senderId === 'me' ? 'ml-auto' : ''} ${
-                      askMode && attachmentEnvelopes.has(m.messageId) && askSelected.includes(m.messageId)
-                        ? 'ring-2 ring-accent rounded-2xl'
-                        : ''
+                      askMode && askSelected.includes(m.messageId) ? 'ring-2 ring-accent rounded-2xl' : ''
                     }`}
                   >
-                    {askMode && attachmentEnvelopes.has(m.messageId) && (
+                    {askMode && candidates.has(m.messageId) && (
                       <button
                         type="button"
                         role="checkbox"
                         aria-checked={askSelected.includes(m.messageId)}
-                        aria-label={`Select ${attachmentEnvelopes.get(m.messageId)?.envelope.name || 'this file'} for Mr OneHook`}
+                        aria-label={askCheckboxLabel(candidates.get(m.messageId)!)}
                         onClick={() => toggleAskSelected(m.messageId)}
-                        {...trackProps(UiElement.CHAT_MR_ONEHOOK_SCOPE_SELECT, { targetId: 'attachment' })}
+                        {...trackProps(UiElement.CHAT_SELECT_TOGGLE, {
+                          value: askSelected.includes(m.messageId) ? 'deselected' : 'selected',
+                        })}
                         className={`absolute top-6 z-10 w-6 h-6 rounded-full border-2 flex items-center justify-center cursor-pointer ${
                           m.senderId === 'me' ? '-left-8' : '-right-8'
                         } ${askSelected.includes(m.messageId) ? 'bg-accent border-accent text-bg' : 'bg-surface border-border'}`}
@@ -1807,18 +1869,27 @@ function MatchConversation({
         >
           <div className="flex-1 min-w-0 text-xs text-text">
             <p className="font-semibold">
-              {askSelected.length === 0
-                ? 'Select up to ' + maxAskFiles + ' photos or files'
-                : `${askSelected.length} selected`}
+              {askSelected.length > 0
+                ? `${askCountPhrase(askTotals.messages, askTotals.files) || `${askSelected.length}`} selected`
+                : historyAllowed
+                  ? askFilesOffered
+                    ? `Select messages, or up to ${askLimits.maxFiles} photos or files`
+                    : 'Select messages'
+                  : askFilesOffered
+                    ? `Select up to ${askLimits.maxFiles} photos or files`
+                    : 'Nothing to select'}
             </p>
-            <p className="text-text-secondary">
-              {askNotice ?? 'Mr OneHook reads them for one answer. They are not kept.'}
+            <p className="text-text-secondary" role={askNotice ? 'status' : undefined}>
+              {askNotice ??
+                (!historyAllowed
+                  ? `${ASK_HISTORY_NOT_ALLOWED_COPY}${askFilesOffered ? ' You can still select files.' : ''}`
+                  : 'Mr OneHook reads them for one answer. They are not kept.')}
             </p>
           </div>
           <button
             type="button"
             onClick={exitAskMode}
-            {...trackProps(UiElement.CHAT_MR_ONEHOOK_CONTEXT_SHARE, { action: 'dismiss' })}
+            {...trackProps(UiElement.CHAT_SELECT_CANCEL)}
             className="px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-text cursor-pointer"
           >
             Cancel
@@ -1826,10 +1897,20 @@ function MatchConversation({
           <AskMrOneHookButton
             plan={pro.plan}
             selectedCount={askSelected.length}
+            fileCount={askTotals.files}
             busy={asking}
-            onClick={() => void askMrOneHook()}
+            onClick={askMrOneHook}
           />
         </div>
+      )}
+      {askConfirm && (
+        <AskMrOneHookConfirm
+          share={askConfirm}
+          matchName={peerName}
+          maxMessageCharacters={askLimits.maxMessageCharacters}
+          onCancel={exitAskMode}
+          onConfirm={() => void confirmAsk()}
+        />
       )}
 
       <Composer
@@ -1902,7 +1983,8 @@ function MatchConversation({
 // and the user explicitly approves the excerpts.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function MrOneHookConversation({
+/** The Mr OneHook conversation with its scope header. Exported for UI tests (the header's Pro button). */
+export function MrOneHookConversation({
   currentUser,
   wallpaper,
   matches,
@@ -1914,8 +1996,8 @@ function MrOneHookConversation({
   wallpaper: ChatWallpaper;
   matches: HydratedMatch[];
   pro: MrOneHookPlanContext;
-  /** "Ask Mr OneHook" from a match chat: open that match's chat with these files attached. */
-  handoff: { matchId: string; items: PendingAttachment[] } | null;
+  /** "Ask Mr OneHook" from a match chat: open that match's chat with these messages and files attached. */
+  handoff: ({ matchId: string } & AskHandoff) | null;
   onHandoffTaken: () => void;
 }) {
   // Scope the conversation to product-only (default) or a single match the user picks here.
@@ -2024,7 +2106,7 @@ function MrOneHookConversation({
             <button
               type="button"
               onClick={openMrOneHookPro}
-              {...trackProps(UiElement.CHAT_MR_ONEHOOK_UPGRADE_OPEN, { targetId: 'chat_header' })}
+              {...trackProps(UiElement.CHAT_MR_ONEHOOK_GET_PRO, { value: 'header' })}
               className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-full border border-accent/40 text-xs font-semibold text-accent hover:bg-accent/5 cursor-pointer"
             >
               <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
@@ -2043,7 +2125,7 @@ function MrOneHookConversation({
           matchName={activeMatchName}
           pro={pro}
           onOpenScope={setScope}
-          handoff={handoff?.matchId === activeMatch.matchId ? handoff.items : undefined}
+          handoff={handoff?.matchId === activeMatch.matchId ? handoff : undefined}
           onHandoffTaken={onHandoffTaken}
         />
       ) : (
@@ -2096,7 +2178,7 @@ function MrOneHookMatchScope({
   matchName: string;
   pro: MrOneHookPlanContext;
   onOpenScope: (scope: MrOneHookScope) => void;
-  handoff?: PendingAttachment[];
+  handoff?: AskHandoff;
   onHandoffTaken: () => void;
 }) {
   const { messages } = useChatMessages(match.matchId, match.peerId || undefined);
@@ -2136,9 +2218,9 @@ function MrOneHookMatchScope({
  * Shared presentational body for both scopes: transcript, typing indicator, the inline excerpt
  * review panel (shown only when the model asked for more context AND the device found some), and the
  * composer with its files (Pro). The review panel is the explicit consent gate — nothing is shared
- * until the user approves.
+ * until the user approves. Exported for UI tests (the composer and its files).
  */
-function MrOneHookChatBody({
+export function MrOneHookChatBody({
   chat,
   wallpaper,
   matchName,
@@ -2152,7 +2234,8 @@ function MrOneHookChatBody({
   matchName?: string;
   pro: MrOneHookPlanContext;
   scopeType: 'product' | 'connection';
-  handoff?: PendingAttachment[];
+  /** "Ask Mr OneHook" from the match chat (connection scope): confirmed messages and uploaded files. */
+  handoff?: AskHandoff;
   onHandoffTaken?: () => void;
 }) {
   const { showToast } = useToast();
@@ -2183,15 +2266,19 @@ function MrOneHookChatBody({
   const unavailable = availability !== 'AVAILABLE';
   const attachments = useMrOneHookAttachments({ plan: pro.plan, limits: pro.limits });
 
-  // "Ask Mr OneHook" from the match chat: the files arrive uploaded; keep polling them here.
+  // "Ask Mr OneHook" from the match chat: the files arrive uploaded (keep polling them here), and the
+  // messages the member confirmed wait for the next question (memory only; sent once with it).
   const { adopt } = attachments;
-  const adoptedHandoff = useRef<PendingAttachment[] | undefined>(undefined);
+  const adoptedHandoff = useRef<AskHandoff | undefined>(undefined);
+  const [askExcerpts, setAskExcerpts] = useState<SelectedExcerpt[]>([]);
   useEffect(() => {
-    if (!handoff || handoff.length === 0 || adoptedHandoff.current === handoff) return;
+    if (!handoff || adoptedHandoff.current === handoff) return;
+    if (handoff.items.length === 0 && handoff.excerpts.length === 0) return;
     adoptedHandoff.current = handoff;
-    adopt(handoff);
+    if (handoff.items.length > 0) adopt(handoff.items);
+    if (scopeType === 'connection') setAskExcerpts(handoff.excerpts);
     onHandoffTaken?.();
-  }, [handoff, adopt, onHandoffTaken]);
+  }, [handoff, adopt, onHandoffTaken, scopeType]);
 
   // "Your oldest chat was replaced" fades after a few seconds.
   const { evictionNotice, dismissEvictionNotice } = chat;
@@ -2217,17 +2304,26 @@ function MrOneHookChatBody({
     if (action !== 'SEND' || loading || pendingReview || unavailable) return;
     const text = input;
     const turn = attachments.items.length > 0 ? attachments.turnAttachments() : undefined;
+    const shared = askExcerpts.length > 0 ? askExcerpts : undefined;
     setInput('');
     setComposerNotice(null);
-    const outcome = await send(text, turn);
+    // Confirmed messages are a few out of the conversation, so the context is partial (as on iOS).
+    const outcome = await send(text, turn, shared ? { excerpts: shared, historyTruncated: true } : undefined);
     if (outcome.status === 'sent') {
       if (turn) attachments.clear();
+      if (shared) setAskExcerpts([]);
       return;
     }
     if (outcome.status !== 'attachment_problem') return;
     // The turn was not sent: keep the text and the files.
     setInput(text);
     const problem: AttachmentProblem = outcome.problem;
+    if (problem.kind === 'MESSAGE_CONTEXT_NOT_ALLOWED' && shared) {
+      // The match does not allow its messages to be used: take them out; the files stay.
+      setAskExcerpts([]);
+      setComposerNotice(MESSAGE_HISTORY_NOT_ALLOWED_COPY);
+      return;
+    }
     switch (problem.kind) {
       case 'PRO_REQUIRED':
         openMrOneHookPro();
@@ -2410,6 +2506,7 @@ function MrOneHookChatBody({
         disabled={loading || pendingReview !== null || unavailable}
         above={
           <>
+            <AskingAboutBar excerpts={askExcerpts} matchName={matchName} onRemove={() => setAskExcerpts([])} />
             <PendingAttachmentChips items={attachments.items} onRemove={attachments.remove} />
             {composerNotice && (
               <p role="status" className="pb-2 text-[11px] text-orange-600 dark:text-orange-400">
@@ -2429,7 +2526,7 @@ function MrOneHookChatBody({
             />
           ) : undefined
         }
-        sendIsUpsell={limitUpsell || action === 'GET_PRO'}
+        sendUpsell={limitUpsell ? 'daily_limit' : action === 'GET_PRO' ? 'composer' : undefined}
         sendLabel={limitUpsell ? 'Get Mr OneHook Pro' : composerSendLabel(action)}
         sendEnabled={
           limitUpsell || action === 'GET_PRO'
@@ -2445,7 +2542,11 @@ function MrOneHookChatBody({
                 : 'Mr.OneHook is temporarily unavailable.'
             : pendingReview
               ? 'Review the excerpts above first…'
-              : scopeType === 'connection' && attachments.items.length > 0
+              : askExcerpts.length > 0
+                ? askExcerpts.length === 1
+                  ? 'Ask about this message…'
+                  : 'Ask about these messages…'
+                : scopeType === 'connection' && attachments.items.length > 0
                 ? `Ask about these files and ${matchName ?? 'your match'}…`
                 : 'Say something to Mr.OneHook…'
         }

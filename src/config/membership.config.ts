@@ -30,6 +30,8 @@
  */
 import { SubscriptionTier } from 'onehook-api-client';
 import {
+  includesMrOneHookPro,
+  MR_ONEHOOK_PRO_TIERS,
   PAID_SUBSCRIPTION_TIERS,
   SUBSCRIPTION_TIERS,
   subscriptionTierInfo,
@@ -71,6 +73,8 @@ export interface MembershipTier extends TierCopy {
   readonly archivePlanAllowance: number;
   /** Days an archive made on this tier lasts (from the SDK). */
   readonly archiveValidityDays: number;
+  /** The membership includes Mr OneHook Pro (from the SDK); such members are never sold Pro. */
+  readonly includesMrOneHookPro: boolean;
   /**
    * Display name of the tier this one builds on (the next-lower tier in SDK order). Cards render
    * "Everything in X, plus …" instead of repeating the lower tier's benefits.
@@ -83,14 +87,15 @@ const INFINITY_INFO = subscriptionTierInfo(SubscriptionTier.INFINITY);
 const INFINITY_ARCHIVES = `${INFINITY_INFO.archivePlanAllowance} archived chats, each kept ${INFINITY_INFO.archiveValidityDays} days`;
 
 /**
- * Mr OneHook Pro (unlimited messages, 3 saved chats, files) is a subscription of its own; the top tier
- * includes it. Every other tier gets Mr OneHook's Free plan.
+ * Mr OneHook Pro (unlimited messages, 3 saved chats, files) is a subscription of its own; the tiers in
+ * the SDK's `MR_ONEHOOK_PRO_TIERS` include it. Every other tier gets Mr OneHook's Free plan.
  */
 const MR_ONEHOOK_PRO_INCLUDED = 'Mr OneHook Pro included';
 const MR_ONEHOOK_FREE_PLAN = '10 msgs/day';
 
-/** The tier whose membership includes Mr OneHook Pro: the top tier, in SDK order. */
-export const MR_ONEHOOK_PRO_TIER: SubscriptionTier = SUBSCRIPTION_TIERS[SUBSCRIPTION_TIERS.length - 1].wire;
+/** The lowest tier whose membership includes Mr OneHook Pro (from the SDK's `MR_ONEHOOK_PRO_TIERS`). */
+export const MR_ONEHOOK_PRO_TIER: SubscriptionTier =
+  MR_ONEHOOK_PRO_TIERS[0] ?? SUBSCRIPTION_TIERS[SUBSCRIPTION_TIERS.length - 1].wire;
 
 /**
  * Prices (INR): free ₹0; middle ₹499/mo or ₹3,999/yr (~33% off vs 12 × ₹499 = ₹5,988);
@@ -156,6 +161,7 @@ export const MEMBERSHIP_TIERS: readonly MembershipTier[] = SUBSCRIPTION_TIERS.ma
   maxConnections: info.maxConnections,
   archivePlanAllowance: info.archivePlanAllowance,
   archiveValidityDays: info.archiveValidityDays,
+  includesMrOneHookPro: info.includesMrOneHookPro,
   inheritsFrom: i > 0 ? SUBSCRIPTION_TIERS[i - 1].displayName : undefined,
 }));
 
@@ -273,7 +279,7 @@ export const FEATURE_GROUPS: readonly FeatureGroup[] = [
       {
         label: 'Mr.OneHook AI',
         values: Object.fromEntries(
-          SUBSCRIPTION_TIERS.map((t) => [t.wire, t.wire === MR_ONEHOOK_PRO_TIER ? MR_ONEHOOK_PRO_INCLUDED : MR_ONEHOOK_FREE_PLAN]),
+          SUBSCRIPTION_TIERS.map((t) => [t.wire, includesMrOneHookPro(t.wire) ? MR_ONEHOOK_PRO_INCLUDED : MR_ONEHOOK_FREE_PLAN]),
         ) as Record<SubscriptionTier, FeatureValue>,
       },
       { label: 'Profile view insights', values: { [MUST]: false, [SUPER]: true, [INFINITY]: true } },

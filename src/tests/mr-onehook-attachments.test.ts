@@ -124,8 +124,17 @@ describe('Free vs Pro gating of the send button', () => {
     expect(composerAction('PRO', [{ ...base, status: 'failed' }], 'hi')).toBe('FIX');
     const ready = [{ ...base, status: 'ready' as const, attachmentId: 'a1' }];
     expect(composerAction('PRO', ready, 'hi')).toBe('SEND');
-    expect(composerAction('PRO', ready, '')).toBe('DISABLED');
     expect(readyAttachmentIds(ready)).toEqual(['a1']);
+  });
+
+  it('Pro with every file READY sends without text; with no files, empty text stays disabled', () => {
+    const ready = [{ ...selected(), status: 'ready' as const, attachmentId: 'a1' }];
+    expect(composerAction('PRO', ready, '')).toBe('SEND');
+    expect(composerAction('PRO', ready, '   ')).toBe('SEND');
+    expect(composerAction('PRO', [], '')).toBe('DISABLED');
+    expect(composerAction('PRO', [], '   ')).toBe('DISABLED');
+    // A file still being read keeps the button waiting, text or not.
+    expect(composerAction('PRO', [{ ...selected(), status: 'processing', attachmentId: 'a2' }], '')).toBe('WAIT');
   });
 });
 

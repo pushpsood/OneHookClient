@@ -1,16 +1,16 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 d1ac862c71d945816983d178e93226dbafdc87118a21bf4aa4fdcf8fb2c4d3c3
+// telemetry-integrity: sha256 9a1c51de116a5a128df5462f4c098b398a249bf6d4cf6c678ed4e92b0d3be1d9
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync.
 // iOS / Android copies: pulled from onehook-api-client (telemetry/) by OneHookPlatform scripts/sync-api-specs.mjs.
-// Catalog version 1.30.0, hash 760ed3ef2f40243f.
+// Catalog version 1.31.0, hash 6bbc080226fa04c5.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.30.0";
-export const TELEMETRY_CATALOG_HASH = "760ed3ef2f40243f";
+export const TELEMETRY_CATALOG_VERSION = "1.31.0";
+export const TELEMETRY_CATALOG_HASH = "6bbc080226fa04c5";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -68,6 +68,7 @@ export const Screen = {
   PREFERENCES: "PREFERENCES",
   SETTINGS: "SETTINGS",
   PAYWALL: "PAYWALL",
+  MR_ONEHOOK_PRO: "MR_ONEHOOK_PRO",
   LIVENESS: "LIVENESS",
   PHOTO_VIEWER: "PHOTO_VIEWER",
   SEARCH: "SEARCH",
@@ -99,6 +100,7 @@ export const ViewableScreen = {
   PREFERENCES: "PREFERENCES",
   SETTINGS: "SETTINGS",
   PAYWALL: "PAYWALL",
+  MR_ONEHOOK_PRO: "MR_ONEHOOK_PRO",
   LIVENESS: "LIVENESS",
   PHOTO_VIEWER: "PHOTO_VIEWER",
   SEARCH: "SEARCH",
@@ -496,6 +498,10 @@ export const UiElement = {
   CHAT_MR_ONEHOOK_SESSION_NEW: "chat.mr_onehook_session_new",
   CHAT_MR_ONEHOOK_SESSION_LIMIT: "chat.mr_onehook_session_limit",
   CHAT_MR_ONEHOOK_UPGRADE_OPEN: "chat.mr_onehook_upgrade_open",
+  CHAT_MR_ONEHOOK_ATTACH_OPEN: "chat.mr_onehook_attach_open",
+  CHAT_MR_ONEHOOK_ATTACHMENT_REMOVE: "chat.mr_onehook_attachment_remove",
+  CHAT_MR_ONEHOOK_ATTACHMENT_OPEN: "chat.mr_onehook_attachment_open",
+  CHAT_MR_ONEHOOK_GET_PRO: "chat.mr_onehook_get_pro",
   CHAT_INTRO_TOUR_OPEN: "chat.intro_tour_open",
   CHAT_INTRO_DISMISS: "chat.intro_dismiss",
   CHAT_INTRO_GET_STARTED: "chat.intro_get_started",
@@ -610,6 +616,13 @@ export const UiElement = {
   PAYWALL_ARCHIVE_BUY: "paywall.archive_buy",
   PAYWALL_WALLET_OPEN: "paywall.wallet_open",
   PAYWALL_WALLET_BUY: "paywall.wallet_buy",
+  MR_ONEHOOK_PRO_BUY: "mr_onehook_pro.buy",
+  MR_ONEHOOK_PRO_AUTO_RENEW_TOGGLE: "mr_onehook_pro.auto_renew_toggle",
+  MR_ONEHOOK_PRO_KEEP_AFTER_MEMBERSHIP: "mr_onehook_pro.keep_after_membership",
+  MR_ONEHOOK_PRO_KEEP_WITHDRAW: "mr_onehook_pro.keep_withdraw",
+  MR_ONEHOOK_PRO_NOTICE_DISMISS: "mr_onehook_pro.notice_dismiss",
+  MR_ONEHOOK_PRO_REFRESH: "mr_onehook_pro.refresh",
+  MR_ONEHOOK_PRO_CLOSE: "mr_onehook_pro.close",
   PHOTO_VIEWER_CLOSE: "photo_viewer.close",
   PHOTO_VIEWER_PREVIOUS: "photo_viewer.previous",
   PHOTO_VIEWER_NEXT: "photo_viewer.next",
@@ -774,10 +787,10 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.reaction_picker_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "chat.message_ask_mr_onehook": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.reaction_picker_category": { screen: "CHAT", kind: "tab", actions: ["select"], values: ["frequent", "smileys_people", "animals_nature", "food_drink", "activity", "travel_places", "objects", "symbols", "flags"], platforms: ["ios"] },
-  "chat.select_open": { screen: "CHAT", kind: "button", actions: ["tap"], values: ["header", "menu"], platforms: ["ios"] },
-  "chat.select_toggle": { screen: "CHAT", kind: "list_item", actions: ["tap"], values: ["selected", "deselected"], platforms: ["ios"] },
-  "chat.select_cancel": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
-  "chat.select_ask_mr_onehook": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.select_open": { screen: "CHAT", kind: "button", actions: ["tap"], values: ["header", "menu"], platforms: ["web", "ios", "android"] },
+  "chat.select_toggle": { screen: "CHAT", kind: "list_item", actions: ["tap"], values: ["selected", "deselected"], platforms: ["web", "ios", "android"] },
+  "chat.select_cancel": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.select_ask_mr_onehook": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.select_copy": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.search_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "chat.search_filter_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
@@ -873,7 +886,11 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.mr_onehook_session_delete": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.mr_onehook_session_new": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.mr_onehook_session_limit": { screen: "CHAT", kind: "dialog_button", actions: ["tap", "dismiss"], values: ["replace_least_recent", "manage", "cancel"], platforms: ["web", "ios", "android"] },
-  "chat.mr_onehook_upgrade_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_upgrade_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "chat.mr_onehook_attach_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_attachment_remove": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_attachment_open": { screen: "CHAT", kind: "list_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "chat.mr_onehook_get_pro": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: ["header", "composer", "ask_from_chat", "session_cap", "daily_limit"], platforms: ["web", "ios", "android"] },
   "chat.intro_tour_open": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.intro_dismiss": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "chat.intro_get_started": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
@@ -925,7 +942,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "profile.wallet_tile": { screen: "PROFILE", kind: "button", actions: ["tap"], values: ["archives", "boosts", "roses"], platforms: ["ios"] },
   "profile.invite_code_share": { screen: "PROFILE", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "profile.upgrade_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
-  "profile.mr_onehook_pro_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "profile.mr_onehook_pro_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "profile.unhook": { screen: "PROFILE", kind: "button", actions: ["tap"], values: null, platforms: ["android"] },
   "profile.unhook_confirm": { screen: "PROFILE", kind: "dialog_button", actions: ["tap", "dismiss"], values: null, platforms: ["android"] },
   "profile.tab_select": { screen: "PROFILE", kind: "segmented", actions: ["select", "tap"], values: null, platforms: ["ios"] },
@@ -988,6 +1005,13 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "paywall.archive_buy": { screen: "PAYWALL", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "paywall.wallet_open": { screen: "PAYWALL", kind: "button", actions: ["tap", "dismiss"], values: ["boost", "rose"], platforms: ["ios"] },
   "paywall.wallet_buy": { screen: "PAYWALL", kind: "button", actions: ["tap", "dismiss"], values: ["rose", "boost"], platforms: ["ios"] },
+  "mr_onehook_pro.buy": { screen: "MR_ONEHOOK_PRO", kind: "button", actions: ["tap", "dismiss"], values: ["monthly", "yearly"], platforms: ["web", "ios", "android"] },
+  "mr_onehook_pro.auto_renew_toggle": { screen: "MR_ONEHOOK_PRO", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["web", "ios", "android"] },
+  "mr_onehook_pro.keep_after_membership": { screen: "MR_ONEHOOK_PRO", kind: "button", actions: ["tap", "dismiss"], values: ["monthly", "yearly"], platforms: ["web", "ios", "android"] },
+  "mr_onehook_pro.keep_withdraw": { screen: "MR_ONEHOOK_PRO", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "mr_onehook_pro.notice_dismiss": { screen: "MR_ONEHOOK_PRO", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "mr_onehook_pro.refresh": { screen: "MR_ONEHOOK_PRO", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "mr_onehook_pro.close": { screen: "MR_ONEHOOK_PRO", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "photo_viewer.close": { screen: "PHOTO_VIEWER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "photo_viewer.previous": { screen: "PHOTO_VIEWER", kind: "button", actions: ["tap"], values: null, platforms: ["web"] },
   "photo_viewer.next": { screen: "PHOTO_VIEWER", kind: "button", actions: ["tap"], values: null, platforms: ["web"] },

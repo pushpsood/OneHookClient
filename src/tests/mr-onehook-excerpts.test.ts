@@ -39,6 +39,14 @@ describe('selectEphemeralExcerpts — eligibility', () => {
     expect(result.historyTruncated).toBe(false);
   });
 
+  it('excludes the "[Unable to decrypt]" placeholder the chat shows for a message it could not read', () => {
+    const result = selectEphemeralExcerpts(
+      [msg({ text: '[Unable to decrypt]', timestamp: minutes(1) }), msg({ text: 'real one', timestamp: minutes(2) })],
+      { maxMessages: 30 },
+    );
+    expect(result.excerpts.map((e) => e.text)).toEqual(['real one']);
+  });
+
   it('emits ONLY speaker, sentAt and text — never ids/status/keys', () => {
     const result = selectEphemeralExcerpts(
       [msg({ speaker: 'self', text: 'hello there', timestamp: minutes(1), status: 'READ' })],
