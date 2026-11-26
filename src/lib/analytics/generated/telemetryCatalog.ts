@@ -1,16 +1,16 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 9a1c51de116a5a128df5462f4c098b398a249bf6d4cf6c678ed4e92b0d3be1d9
+// telemetry-integrity: sha256 e3191c5887ebb640a008e1ed9b7aa943f66ae9e183f0e3663b5d04898ff44ef3
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync.
 // iOS / Android copies: pulled from onehook-api-client (telemetry/) by OneHookPlatform scripts/sync-api-specs.mjs.
-// Catalog version 1.31.0, hash 6bbc080226fa04c5.
+// Catalog version 1.32.0, hash b9c0629fc1d88691.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.31.0";
-export const TELEMETRY_CATALOG_HASH = "6bbc080226fa04c5";
+export const TELEMETRY_CATALOG_VERSION = "1.32.0";
+export const TELEMETRY_CATALOG_HASH = "b9c0629fc1d88691";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -440,6 +440,7 @@ export const UiElement = {
   CHAT_CONVERSATION_SWITCH: "chat.conversation_switch",
   CHAT_CONVERSATION_SORT: "chat.conversation_sort",
   CHAT_CONVERSATION_SORT_OPEN: "chat.conversation_sort_open",
+  CHAT_ARCHIVED_SORT_SELECT: "chat.archived_sort_select",
   CHAT_CONVERSATION_SWITCHER_OPEN: "chat.conversation_switcher_open",
   CHAT_PROFILE_OPEN: "chat.profile_open",
   CHAT_SAFETY_MENU_OPEN: "chat.safety_menu_open",
@@ -533,6 +534,7 @@ export const UiElement = {
   HOOK_REQUESTS_DECLINE: "hook_requests.decline",
   HOOK_REQUESTS_BLOCK: "hook_requests.block",
   HOOK_REQUESTS_CANCEL: "hook_requests.cancel",
+  HOOK_REQUESTS_SORT_SELECT: "hook_requests.sort_select",
   NOTIFICATIONS_ITEM_OPEN: "notifications.item_open",
   NOTIFICATIONS_ITEM_DISMISS: "notifications.item_dismiss",
   PROFILE_EDIT_OPEN: "profile.edit_open",
@@ -611,6 +613,7 @@ export const UiElement = {
   SETTINGS_RECOVERY_QR_SAVE: "settings.recovery_qr_save",
   SETTINGS_RECOVERY_QR_SHARE: "settings.recovery_qr_share",
   PAYWALL_PURCHASE: "paywall.purchase",
+  PAYWALL_BILLING_PERIOD_SELECT: "paywall.billing_period_select",
   PAYWALL_RESTORE: "paywall.restore",
   PAYWALL_FEATURES_EXPAND: "paywall.features_expand",
   PAYWALL_ARCHIVE_BUY: "paywall.archive_buy",
@@ -827,8 +830,9 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.message_retry": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.jump_to_latest": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.conversation_switch": { screen: "CHAT", kind: "list_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
-  "chat.conversation_sort": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios"] },
-  "chat.conversation_sort_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios"] },
+  "chat.conversation_sort": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web"] },
+  "chat.conversation_sort_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web"] },
+  "chat.archived_sort_select": { screen: "CHAT", kind: "segmented", actions: ["select", "tap", "dismiss"], values: ["recent", "oldest", "name_az", "name_za", "age_youngest", "age_oldest", "nearest"], platforms: ["ios"] },
   "chat.conversation_switcher_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios"] },
   "chat.profile_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "chat.safety_menu_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
@@ -922,6 +926,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "hook_requests.decline": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "hook_requests.block": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "hook_requests.cancel": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
+  "hook_requests.sort_select": { screen: "HOOK_REQUESTS", kind: "segmented", actions: ["select", "tap", "dismiss"], values: ["recent", "oldest", "expiring_soon", "name_az", "name_za", "age_youngest", "age_oldest", "nearest"], platforms: ["ios"] },
   "notifications.item_open": { screen: "NOTIFICATIONS", kind: "list_item", actions: ["tap"], values: null, platforms: ["ios"] },
   "notifications.item_dismiss": { screen: "NOTIFICATIONS", kind: "gesture", actions: ["dismiss"], values: null, platforms: ["ios"] },
   "profile.edit_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios", "android"] },
@@ -1000,6 +1005,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "settings.recovery_qr_save": { screen: "SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "settings.recovery_qr_share": { screen: "SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "paywall.purchase": { screen: "PAYWALL", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "paywall.billing_period_select": { screen: "PAYWALL", kind: "segmented", actions: ["select", "tap"], values: ["monthly", "yearly"], platforms: ["ios"] },
   "paywall.restore": { screen: "PAYWALL", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "paywall.features_expand": { screen: "PAYWALL", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "paywall.archive_buy": { screen: "PAYWALL", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
