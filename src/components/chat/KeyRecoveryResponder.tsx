@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Fingerprint, Loader, ShieldAlert, ShieldCheck, X, Download } from 'lucide-react';
+import { Fingerprint, Loader, ShieldAlert, ShieldCheck, X, Download, Share2 } from 'lucide-react';
 import { useRecoveryResponder } from '../../hooks/use-key-recovery';
 import { useAppStore } from '../../store/app-store';
 import { UiElement, trackProps, hostScreen } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * SOURCE-device side of history recovery.
@@ -39,44 +40,73 @@ export function KeyRecoveryResponder() {
     return () => clearInterval(timer);
   }, [incoming]);
 
-  const saveQrAsImage = () => {
+  const renderQrToPngBlob = (onBlob: (blob: Blob) => void) => {
     if (!qrPayload) return;
-    
-    // Create a canvas from the QR SVG to generate a downloadable PNG
+
+    // Create a canvas from the QR SVG to generate a downloadable/shareable PNG
     const svg = document.querySelector('.recovery-qr-code');
     if (!svg) return;
-    
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     const img = new Image();
     const svgBlob = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(svgBlob);
-    
+
     img.onload = () => {
       canvas.width = 240;
       canvas.height = 240;
       ctx.fillStyle = 'white';
       ctx.fillRect(0, 0, 240, 240);
       ctx.drawImage(img, 0, 0);
-      
+
       canvas.toBlob((blob) => {
-        if (!blob) return;
-        const downloadUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = `onehook-recovery-${Date.now()}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(downloadUrl);
+        if (blob) onBlob(blob);
       }, 'image/png');
-      
+
       URL.revokeObjectURL(url);
     };
-    
+
     img.src = url;
+  };
+
+  const downloadPngBlob = (blob: Blob) => {
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `onehook-recovery-${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
+  };
+
+  const saveQrAsImage = () => {
+    renderQrToPngBlob(downloadPngBlob);
+  };
+
+  const shareQrAsImage = () => {
+    renderQrToPngBlob(async (blob) => {
+      try {
+        const file = new File([blob], `onehook-recovery-${Date.now()}.png`, { type: 'image/png' });
+        if (
+          typeof navigator !== 'undefined' &&
+          typeof navigator.share === 'function' &&
+          (!navigator.canShare || navigator.canShare({ files: [file] }))
+        ) {
+          await navigator.share({
+            files: [file],
+            title: 'OneHook Recovery Code',
+          });
+          return;
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      }
+      downloadPngBlob(blob);
+    });
   };
 
   if (!userId) return null;
@@ -187,9 +217,9 @@ export function KeyRecoveryResponder() {
             onClick={() => void responder.decline()}
             aria-label="Dismiss"
             {...trackProps(UiElement.SETTINGS_RECOVERY_APPROVE, { action: 'dismiss' })}
-            className="p-1 opacity-40 hover:opacity-100 transition-opacity"
+            className={ICON_SECTION.modalHeader.button}
           >
-            <X className="w-4 h-4" />
+            <X className={ICON_SECTION.modalHeader.icon} />
           </button>
         </div>
 
@@ -232,6 +262,17 @@ export function KeyRecoveryResponder() {
                   >
                     <Download className="w-3 h-3" aria-hidden="true" />
                     Save QR
+                  </button>
+                  {/* TODO(telemetry-parity): promote settings.recovery_qr_share to include "web" in telemetry catalog */}
+                  <button
+                    type="button"
+                    onClick={shareQrAsImage}
+                    data-track-exempt="disabled: pending telemetry web parity enablement for settings.recovery_qr_share"
+                    className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
+                    title="Share the recovery code with another device"
+                  >
+                    <Share2 className="w-3 h-3" aria-hidden="true" />
+                    Share QR
                   </button>
                   {secondsLeft !== null && (
                     <p className="text-[10px] uppercase tracking-[0.2em] font-bold opacity-40">

@@ -176,6 +176,19 @@ class CognitoAuthService {
   }
 
   /**
+   * Sign in using a Cognito-managed WebAuthn passkey via USER_AUTH (`WEB_AUTHN` challenge).
+   */
+  async loginWithPasskey(identifier: string): Promise<any> {
+    return signIn({
+      username: identifier,
+      options: {
+        authFlowType: 'USER_AUTH',
+        preferredChallenge: 'WEB_AUTHN',
+      },
+    });
+  }
+
+  /**
    * Signs in with Google.
    *
    * The Cognito Hosted UI is intentionally not provisioned, so this does NOT use OAuth redirects.

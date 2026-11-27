@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { trackProps, UiElement, type UiElementId, type UiTrackOptions } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 export interface MrOneHookTab {
   /** The saved chat's id; undefined for the new, unsaved chat. */
@@ -86,7 +87,7 @@ export function MrOneHookTabs({
                   aria-label={`Delete ${tab.title}`}
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-text/40 hover:text-text/70 hover:bg-black/5 cursor-pointer"
                 >
-                  <X className="w-3 h-3" />
+                  <X className={ICON_SECTION.section.badgeIcon} />
                 </button>
               )}
             </div>
@@ -100,7 +101,7 @@ export function MrOneHookTabs({
         aria-label="New chat with Mr. OneHook"
         className={`shrink-0 w-11 h-11 flex items-center justify-center text-text cursor-pointer hover:bg-surface ${track}`}
       >
-        <Plus className="w-5 h-5" strokeWidth={1.75} />
+        <Plus className={ICON_SECTION.header.icon} />
       </button>
     </div>
   );

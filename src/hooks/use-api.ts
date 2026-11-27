@@ -17,13 +17,20 @@ import { PreferencesApi } from '../api/preferences';
 import { StateApi } from '../api/state';
 import { ProfileApi } from '../api/profile';
 import { MatchingApi, type DiscoveryCategory, type ProfileSection } from '../api/matching';
-import type { LikeTargetType, ReceivedLike } from '../api/rest';
-import { ChatMessagingApi } from '../api/chat';
+import { ChatSettingsApi, type LikeTargetType, type ReceivedLike } from '../api/rest';
+import type { ReceivedLikesSort } from 'onehook-api-client';
+import { ChatMessagingApi, type PresenceUpdate, type SendMessageOptions } from '../api/chat';
 import { toPartnerProfile, toUserProfile, type PartnerProfile } from '../lib/profile-model';
 import { dropHookPartners } from '../lib/app-mode';
 import { errorCode, errorMessage, errorStatus } from '../lib/api-errors';
 import { ChatEncryptionManager } from '../lib/chat-encryption';
 import { isUndecryptableMessageError } from '../lib/chat-wire-v2';
+import {
+  normalizeReactionSet,
+  parseReactionsMap,
+  recordReactionUsage,
+} from '../lib/chat-reactions';
+import { recordSentDisappearingSeconds } from '../lib/chat-timeline';
 import {
   AttachmentObjectUrlCache,
   putCiphertext,
@@ -423,14 +430,20 @@ export function useSwipe() {
 
 /**
  * Received likes ("Likes you"): who liked the caller, on which profile element, with what comment.
- * Newest first. Refetches on demand via {@link refresh}.
+ * Refetches on demand via {@link refresh} or `sort` changes.
  */
-export function useReceivedLikes(enabled = true) {
+export function useReceivedLikes(enabled = true, sort?: ReceivedLikesSort) {
   const [likes, setLikes] = useState<ReceivedLike[]>([]);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<ApiError | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const onUpdated = () => setRefreshKey((k) => k + 1);
+    window.addEventListener('onehook:likes-updated', onUpdated);
+    return () => window.removeEventListener('onehook:likes-updated', onUpdated);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -443,7 +456,7 @@ export function useReceivedLikes(enabled = true) {
     }
     setLoading(true);
     setError(null);
-    MatchingApi.getReceivedLikes()
+    MatchingApi.getReceivedLikes(sort)
       .then((res) => {
         if (!active) return;
         setLikes(Array.isArray(res?.likes) ? res.likes : []);
@@ -461,7 +474,7 @@ export function useReceivedLikes(enabled = true) {
     return () => {
       active = false;
     };
-  }, [refreshKey, enabled]);
+  }, [refreshKey, enabled, sort]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
@@ -508,6 +521,11 @@ interface PendingAttachmentUpload {
   ciphertext: Uint8Array;
   contentKey: string;
   nonce: string;
+  options?: {
+    replyToMessageId?: string;
+    replyToTimestamp?: number;
+    expireSeconds?: number;
+  };
 }
 
 /**
@@ -518,6 +536,22 @@ interface PendingAttachmentUpload {
 export function useChatMessages(matchId: string, recipientId?: string) {
   const { currentUser } = useAppStore();
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
+  const [reactionsByMessage, setReactionsByMessage] = useState<Record<string, Record<string, string>>>({});
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
+  const [peerTyping, setPeerTyping] = useState(false);
+  const [peerPresence, setPeerPresence] = useState<PresenceUpdate | null>(null);
+  const [peerScreenshotAt, setPeerScreenshotAt] = useState<number | null>(null);
+  const [chatPrivacy, setChatPrivacy] = useState<{
+    readReceipts: boolean;
+    typingIndicators: boolean;
+    lastSeenVisibility: string;
+    defaultDisappearingSeconds: number;
+  }>({
+    readReceipts: true,
+    typingIndicators: true,
+    lastSeenVisibility: 'EVERYONE',
+    defaultDisappearingSeconds: 0,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   /**
@@ -596,18 +630,46 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     [encryptionManager, matchId]
   );
 
+  const openReactionsMap = useCallback(
+    async (rawJson?: string | null): Promise<Record<string, string>> => {
+      const cipherMap = parseReactionsMap(rawJson);
+      const out: Record<string, string> = {};
+      await Promise.all(
+        Object.entries(cipherMap).map(async ([uid, ct]) => {
+          const dec = await decryptInbound(ct);
+          if (!dec.undecryptable) {
+            const normalized = normalizeReactionSet(dec.text);
+            if (normalized) out[uid] = normalized;
+          }
+        })
+      );
+      return out;
+    },
+    [decryptInbound]
+  );
+
+  const refreshChatSettings = useCallback(async () => {
+    try {
+      const s = await ChatSettingsApi.get();
+      setChatPrivacy({
+        readReceipts: Boolean(s.readReceipts),
+        typingIndicators: Boolean(s.typingIndicators),
+        lastSeenVisibility: s.lastSeenVisibility ?? 'EVERYONE',
+        defaultDisappearingSeconds: Number(s.defaultDisappearingSeconds ?? 0),
+      });
+    } catch {
+      /* keep defaults when unavailable */
+    }
+  }, []);
+
   const fetchMessages = useCallback(async () => {
     if (!matchId) return;
 
     try {
       setLoading(true);
       setError(null);
-      // Establish the E2E session BEFORE reading history. Reading the peer's device registry is what
-      // initializes the conversation server-side (the ChatTable TAIL marker), and getMessages is
-      // rejected outright when that marker is missing. Without this, a match with no messages yet
-      // could never be opened: getMessages failed, so the composer never rendered, so no message
-      // could be sent to lazily trigger initialization. Non-fatal on its own — if it fails we still
-      // try to read, so an existing conversation is not blocked by a transient registry error.
+      setPeerTyping(false);
+      setPeerPresence(null);
       if (encryptionManager && recipientId) {
         try {
           await encryptionManager.ensureSession(recipientId, matchId);
@@ -615,12 +677,23 @@ export function useChatMessages(matchId: string, recipientId?: string) {
           console.warn('Could not establish chat encryption session:', sessionErr);
         }
       }
-      const result = await ChatMessagingApi.getMessages(matchId);
+      const [result, starredRecords] = await Promise.all([
+        ChatMessagingApi.getMessages(matchId),
+        ChatMessagingApi.getStarredMessages(matchId).catch(() => []),
+      ]);
+      void refreshChatSettings();
 
+      const nextReactions: Record<string, Record<string, string>> = {};
       const processed = await Promise.all(
         result.map(async (message) => {
           const isMe = message.senderId === myId;
           const decrypted = await decryptInbound(message.ciphertext);
+          if (message.reactions) {
+            const opened = await openReactionsMap(message.reactions);
+            if (Object.keys(opened).length > 0) {
+              nextReactions[message.messageId] = opened;
+            }
+          }
           return {
             messageId: message.messageId,
             senderId: isMe ? 'me' : message.senderId,
@@ -630,17 +703,23 @@ export function useChatMessages(matchId: string, recipientId?: string) {
             status: message.status,
             deliveredAt: message.deliveredAt ?? undefined,
             readAt: message.readAt ?? undefined,
+            contentType: message.contentType ?? undefined,
+            replyToMessageId: message.replyToMessageId ?? undefined,
+            replyToTimestamp: message.replyToTimestamp ?? undefined,
+            reactions: message.reactions ?? undefined,
           } as ChatMessageView;
         })
       );
 
       setMessages(processed);
+      setReactionsByMessage(nextReactions);
+      setStarredIds(new Set(starredRecords.map((r) => r.messageId)));
     } catch (err) {
       setError(err as ApiError);
     } finally {
       setLoading(false);
     }
-  }, [matchId, myId, decryptInbound, encryptionManager, recipientId]);
+  }, [matchId, myId, decryptInbound, openReactionsMap, refreshChatSettings, encryptionManager, recipientId]);
 
   // Page the FULL evidence window (last 200 messages / 30 days — docs/MODERATION.md §2) for the
   // optional decrypted-chat share. `getMessages` returns one oldest-first DynamoDB page per call, so
@@ -686,13 +765,21 @@ export function useChatMessages(matchId: string, recipientId?: string) {
     void fetchMessages();
   }, [fetchMessages]);
 
-  // Live updates via the onNewMessage subscription.
+  // Live updates via AppSync subscriptions (messages, receipts, deletions, reactions, typing, presence, screenshots).
   useEffect(() => {
     if (!matchId) return;
-    const unsubscribe = ChatMessagingApi.subscribeToNewMessages(matchId, (m) => {
+    let typingTimeout: number | undefined;
+    const unsubMsg = ChatMessagingApi.subscribeToNewMessages(matchId, (m) => {
       void (async () => {
         const isMe = m.senderId === myId;
         const decrypted = await decryptInbound(m.ciphertext);
+        if (!isMe) setPeerTyping(false);
+        if (m.reactions) {
+          const opened = await openReactionsMap(m.reactions);
+          if (Object.keys(opened).length > 0) {
+            setReactionsByMessage((prev) => ({ ...prev, [m.messageId]: opened }));
+          }
+        }
         setMessages((prev) => {
           if (prev.some((p) => p.messageId === m.messageId)) return prev;
           return [
@@ -704,36 +791,132 @@ export function useChatMessages(matchId: string, recipientId?: string) {
               undecryptable: decrypted.undecryptable,
               timestamp: m.timestamp,
               status: m.status,
+              contentType: m.contentType ?? undefined,
+              replyToMessageId: m.replyToMessageId ?? undefined,
+              replyToTimestamp: m.replyToTimestamp ?? undefined,
+              reactions: m.reactions ?? undefined,
             } as ChatMessageView,
           ];
         });
       })();
     });
-    return unsubscribe;
-  }, [matchId, myId, decryptInbound]);
+    const unsubStatus = ChatMessagingApi.subscribeToStatusUpdates(matchId, (r) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.messageId === r.messageId
+            ? {
+                ...m,
+                status: r.status,
+                ...(r.status === MessageStatus.Delivered ? { deliveredAt: r.timestamp } : {}),
+                ...(r.status === MessageStatus.Read ? { readAt: r.timestamp } : {}),
+              }
+            : m
+        )
+      );
+    });
+    const unsubDelete = ChatMessagingApi.subscribeToDeletions(matchId, (d) => {
+      setMessages((prev) => prev.filter((m) => m.messageId !== d.messageId && m.timestamp !== d.timestamp));
+    });
+    const unsubReactions = ChatMessagingApi.subscribeToReactions(matchId, (r) => {
+      void (async () => {
+        if (!r.reaction) {
+          setReactionsByMessage((prev) => {
+            const current = { ...(prev[r.messageId] ?? {}) };
+            delete current[r.userId];
+            return { ...prev, [r.messageId]: current };
+          });
+          return;
+        }
+        const dec = await decryptInbound(r.reaction);
+        if (dec.undecryptable) return;
+        const setStr = normalizeReactionSet(dec.text);
+        setReactionsByMessage((prev) => {
+          const current = { ...(prev[r.messageId] ?? {}) };
+          if (setStr) current[r.userId] = setStr;
+          else delete current[r.userId];
+          return { ...prev, [r.messageId]: current };
+        });
+      })();
+    });
+    const unsubTyping = ChatMessagingApi.subscribeToTyping(matchId, (t) => {
+      if (t.userId === myId) return;
+      setPeerTyping(Boolean(t.isTyping));
+      if (typingTimeout) window.clearTimeout(typingTimeout);
+      if (t.isTyping) {
+        typingTimeout = window.setTimeout(() => setPeerTyping(false), 6000);
+      }
+    });
+    const unsubPresence = ChatMessagingApi.subscribeToPresence(matchId, (p) => {
+      if (p.userId === myId) return;
+      setPeerPresence(p);
+    });
+    const unsubScreenshots = ChatMessagingApi.subscribeToScreenshots(matchId, (s) => {
+      if (s.userId === myId) return;
+      setPeerScreenshotAt(s.timestamp || Date.now());
+    });
+    return () => {
+      if (typingTimeout) window.clearTimeout(typingTimeout);
+      unsubMsg();
+      unsubStatus();
+      unsubDelete();
+      unsubReactions();
+      unsubTyping();
+      unsubPresence();
+      unsubScreenshots();
+    };
+  }, [matchId, myId, decryptInbound, openReactionsMap]);
+
+  // Publish ephemeral presence when open (honoring lastSeenVisibility).
+  useEffect(() => {
+    if (!matchId || !myId || chatPrivacy.lastSeenVisibility === 'NOBODY') return;
+    void ChatMessagingApi.updatePresence(matchId, myId, 'ONLINE').catch(() => undefined);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        void ChatMessagingApi.updatePresence(matchId, myId, 'OFFLINE').catch(() => undefined);
+      } else {
+        void ChatMessagingApi.updatePresence(matchId, myId, 'ONLINE').catch(() => undefined);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      void ChatMessagingApi.updatePresence(matchId, myId, 'OFFLINE').catch(() => undefined);
+    };
+  }, [matchId, myId, chatPrivacy.lastSeenVisibility]);
 
   const sendMessage = useCallback(
-    async (plaintext: string) => {
+    async (plaintext: string, options: SendMessageOptions = {}) => {
       if (!encryptionManager || !recipientId || !matchId) return;
 
       const messageId = createMessageId();
       const timestamp = Date.now();
+      const expireSeconds =
+        options.expireSeconds ??
+        (chatPrivacy.defaultDisappearingSeconds > 0 ? chatPrivacy.defaultDisappearingSeconds : undefined);
 
       // Encrypt locally, optimistically render plaintext.
       const ciphertext = await encryptionManager.encryptMessage(recipientId, matchId, plaintext);
 
-      const tempMessage: ChatMessageDTO = {
+      const tempMessage: ChatMessageView = {
         messageId,
         matchId,
         senderId: 'me',
         ciphertext: plaintext,
         timestamp,
         status: MessageStatus.Sending,
+        replyToMessageId: options.replyToMessageId ?? null,
+        replyToTimestamp: options.replyToTimestamp ?? null,
       };
       setMessages((prev) => [...prev, tempMessage]);
 
       try {
-        const sent = await ChatMessagingApi.sendMessage(matchId, myId || 'me', ciphertext);
+        const sent = await ChatMessagingApi.sendMessage(matchId, myId || 'me', ciphertext, {
+          ...options,
+          ...(expireSeconds ? { expireSeconds } : {}),
+        });
+        if (expireSeconds) {
+          recordSentDisappearingSeconds(sent.messageId, expireSeconds);
+        }
         setMessages((prev) =>
           prev.map((m) =>
             m.messageId === messageId
@@ -755,7 +938,7 @@ export function useChatMessages(matchId: string, recipientId?: string) {
         throw err;
       }
     },
-    [createMessageId, myId, matchId, encryptionManager, recipientId]
+    [createMessageId, myId, matchId, encryptionManager, recipientId, chatPrivacy.defaultDisappearingSeconds]
   );
 
   const sealPayload = useCallback(
@@ -843,7 +1026,23 @@ export function useChatMessages(matchId: string, recipientId?: string) {
           matchId,
           framed
         );
-        const sent = await ChatMessagingApi.sendMessage(matchId, myId || 'me', messageCiphertext);
+        const expireSeconds =
+          pending.options?.expireSeconds ??
+          (chatPrivacy.defaultDisappearingSeconds > 0 ? chatPrivacy.defaultDisappearingSeconds : undefined);
+        const sent = await ChatMessagingApi.sendMessage(matchId, myId || 'me', messageCiphertext, {
+          contentType:
+            attachment.kind === 'image'
+              ? 'IMAGE'
+              : attachment.kind === 'audio'
+                ? 'VOICE'
+                : 'FILE',
+          replyToMessageId: pending.options?.replyToMessageId,
+          replyToTimestamp: pending.options?.replyToTimestamp,
+          ...(expireSeconds ? { expireSeconds } : {}),
+        });
+        if (expireSeconds) {
+          recordSentDisappearingSeconds(sent.messageId, expireSeconds);
+        }
 
         // Swap to the server message id so the onNewMessage echo of our own send dedupes against this
         // bubble instead of appending a duplicate — the same reason plain sendMessage swaps the id.
@@ -883,7 +1082,10 @@ export function useChatMessages(matchId: string, recipientId?: string) {
   );
 
   const sendAttachment = useCallback(
-    async (attachment: OutgoingAttachment): Promise<void> => {
+    async (
+      attachment: OutgoingAttachment,
+      options?: { replyToMessageId?: string; replyToTimestamp?: number; expireSeconds?: number }
+    ): Promise<void> => {
       if (!encryptionManager || !recipientId || !matchId) return;
 
       const bytes = new Uint8Array(await attachment.blob.arrayBuffer());
@@ -899,24 +1101,103 @@ export function useChatMessages(matchId: string, recipientId?: string) {
         ciphertext,
         contentKey: keyMaterial.contentKey,
         nonce: keyMaterial.nonce,
+        options,
       });
 
       // Optimistic bubble: an empty body until runAttachmentUpload swaps in the framed envelope once
       // the object key exists. The transfer state (set inside runAttachmentUpload) is what the bubble
       // shows in the meantime, so an empty body never renders as a blank text bubble.
-      const optimistic: ChatMessageDTO = {
+      const optimistic: ChatMessageView = {
         messageId,
         matchId,
         senderId: 'me',
         ciphertext: '',
         timestamp: Date.now(),
         status: MessageStatus.Sending,
+        replyToMessageId: options?.replyToMessageId ?? null,
+        replyToTimestamp: options?.replyToTimestamp ?? null,
       };
       setMessages((prev) => [...prev, optimistic]);
 
       await runAttachmentUpload(messageId);
     },
     [encryptionManager, recipientId, matchId, createMessageId, runAttachmentUpload]
+  );
+
+  const deleteOwnMessage = useCallback(
+    async (messageId: string, timestamp: number): Promise<void> => {
+      if (!matchId) return;
+      await ChatMessagingApi.deleteMessage(matchId, timestamp);
+      setMessages((prev) => prev.filter((m) => m.messageId !== messageId));
+    },
+    [matchId]
+  );
+
+  const reactToMessage = useCallback(
+    async (messageId: string, nextSet: string | null, chosenEmoji?: string): Promise<void> => {
+      if (!matchId || !myId || !encryptionManager || !recipientId) return;
+      const target = messages.find((m) => m.messageId === messageId);
+      if (!target) return;
+      const previous = reactionsByMessage[messageId]?.[myId] ?? null;
+      if (chosenEmoji) recordReactionUsage(myId, chosenEmoji);
+
+      setReactionsByMessage((prev) => {
+        const entry = { ...(prev[messageId] ?? {}) };
+        if (nextSet) entry[myId] = nextSet;
+        else delete entry[myId];
+        return { ...prev, [messageId]: entry };
+      });
+
+      try {
+        const cipher = nextSet
+          ? await encryptionManager.encryptMessage(recipientId, matchId, nextSet)
+          : null;
+        await ChatMessagingApi.reactToMessage(matchId, target.timestamp, messageId, myId, cipher);
+      } catch (err) {
+        setReactionsByMessage((prev) => {
+          const entry = { ...(prev[messageId] ?? {}) };
+          if (previous) entry[myId] = previous;
+          else delete entry[myId];
+          return { ...prev, [messageId]: entry };
+        });
+        throw err;
+      }
+    },
+    [matchId, myId, encryptionManager, recipientId, messages, reactionsByMessage]
+  );
+
+  const toggleStarred = useCallback(
+    async (messageId: string): Promise<boolean> => {
+      if (!matchId) return false;
+      const next = !starredIds.has(messageId);
+      setStarredIds((prev) => {
+        const copy = new Set(prev);
+        if (next) copy.add(messageId);
+        else copy.delete(messageId);
+        return copy;
+      });
+      try {
+        await ChatMessagingApi.setMessageStarred(matchId, messageId, next);
+        return next;
+      } catch (err) {
+        setStarredIds((prev) => {
+          const copy = new Set(prev);
+          if (next) copy.delete(messageId);
+          else copy.add(messageId);
+          return copy;
+        });
+        throw err;
+      }
+    },
+    [matchId, starredIds]
+  );
+
+  const sendTyping = useCallback(
+    (isTyping: boolean) => {
+      if (!matchId || !myId || !chatPrivacy.typingIndicators) return;
+      void ChatMessagingApi.sendTypingIndicator(matchId, myId, isTyping).catch(() => undefined);
+    },
+    [matchId, myId, chatPrivacy.typingIndicators]
   );
 
   /** Re-attempts a failed attachment send using its retained ciphertext + key material. */
@@ -968,11 +1249,23 @@ export function useChatMessages(matchId: string, recipientId?: string) {
 
   return {
     messages,
+    reactionsByMessage,
+    starredIds,
+    peerTyping,
+    peerPresence,
+    peerScreenshotAt,
+    defaultDisappearingSeconds: chatPrivacy.defaultDisappearingSeconds,
+    readReceiptsEnabled: chatPrivacy.readReceipts,
     loading,
     error,
     sendMessage,
     sendAttachment,
     retryAttachment,
+    deleteOwnMessage,
+    reactToMessage,
+    toggleStarred,
+    sendTyping,
+    refreshChatSettings,
     /** Per-message upload/send state for attachment bubbles (progress + retry affordance). */
     attachmentTransfers,
     /** Per-conversation cache resolving attachment envelopes to decrypted object URLs. */

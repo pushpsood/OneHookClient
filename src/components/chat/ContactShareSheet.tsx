@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Mail, Phone, Send, UserRound, X } from 'lucide-react';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 import {
   EMPTY_CONTACT_FORM,
   MAX_CONTACT_TEXT,
@@ -253,9 +254,9 @@ export function ContactShareSheetView({
             disabled={busy}
             aria-label="Close"
             {...trackProps(UiElement.CHAT_ATTACH_BUTTON, { action: 'dismiss' })}
-            className="p-2 border border-border hover:bg-surface-hover rounded-lg cursor-pointer disabled:opacity-40"
+            className={`${ICON_SECTION.modalHeader.button} disabled:opacity-40`}
           >
-            <X className="w-4 h-4" />
+            <X className={ICON_SECTION.modalHeader.icon} />
           </button>
         </div>
 

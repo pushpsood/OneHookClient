@@ -5,11 +5,7 @@ import { appSyncClient } from './chat';
  *
  * The backend publishes these (IAM-only mutation); clients only listen, and the subscription resolver
  * requires `userId` to be the caller's own subject. Bodies are server-authored copy and never message
- * content. Kinds added for chat-only profiles (docs/chat-only-profiles.md §8.5, §9.5):
- *
- *  - CONVERSATION_SUSPENDED / CONVERSATION_RESUMED: a hook went read-only / is active again.
- *  - HOOK_REQUESTED: someone sent a hook request. Never names the sender.
- *  - MATCHING_DRAFT_EXPIRING: the unfinished matching profile is erased in three days unless edited.
+ * content.
  */
 export type NotificationKind =
   | 'MUTUAL_MATCH'
@@ -19,7 +15,12 @@ export type NotificationKind =
   | 'CONVERSATION_SUSPENDED'
   | 'CONVERSATION_RESUMED'
   | 'HOOK_REQUESTED'
-  | 'MATCHING_DRAFT_EXPIRING';
+  | 'MATCHING_DRAFT_EXPIRING'
+  | 'UNARCHIVE_REQUESTED'
+  | 'UNARCHIVE_ACCEPTED'
+  | 'UNARCHIVE_DECLINED'
+  | 'ARCHIVE_REMOVED'
+  | 'DECISION_WINDOW_OPENED';
 
 export interface AppNotification {
   id: string;

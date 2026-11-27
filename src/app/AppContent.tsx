@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Lock } from 'lucide-react';
-import { UserState } from '../types';
+import { SubscriptionTier, UserState } from '../types';
 import { isPaidSubscriptionTier, subscriptionTierDisplayName } from 'onehook-api-client/membership';
 import { isPaidTier, useAppStore } from '../store/app-store';
+import { clearChatActivity, useChatActivityStore } from '../store/archive-store';
 import { setMatchingTabHiddenInStore, useCandidates, useProfile, useSwipe, useUserState } from '../hooks/use-api';
 import { useUserLocation } from '../hooks/use-user-location';
 import { useAppNotifications } from '../hooks/use-app-notifications';
+import type { AppNotificationDestination } from '../lib/notification-effects';
 import { useViewPassRefreshers } from '../hooks/use-view-pass-refreshers';
 import { ApiError } from '../lib/api-client';
 import { errorMessage } from '../lib/api-errors';
+import { MatchingApi } from '../api/matching';
 import { StateApi } from '../api/state';
 import { getCognitoAuth } from '../lib/cognito-auth';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -90,7 +93,78 @@ export function AppContent() {
 
   const { refetch: refetchUserState } = useUserState();
   useViewPassRefreshers(matchingOn);
-  useAppNotifications(currentUser?.id, refetchProfile);
+  const unreadChatCount = useChatActivityStore((s) =>
+    s.hasNewActivity ? Math.max(1, s.unreadMatchIds.size) : 0
+  );
+  const [openRequestsTrigger, setOpenRequestsTrigger] = useState(0);
+  const [openArchivesTrigger, setOpenArchivesTrigger] = useState(0);
+  const [pendingLikesCount, setPendingLikesCount] = useState(0);
+  const [notifBanner, setNotifBanner] = useState<{
+    message: string;
+    destination: AppNotificationDestination;
+  } | null>(null);
+
+  useAppNotifications(currentUser?.id, refetchProfile, (evt) => {
+    setNotifBanner(evt);
+  });
+
+  useEffect(() => {
+    if (appState === 'MATCHES') clearChatActivity();
+  }, [appState]);
+
+  useEffect(() => {
+    if (!matchingOn) {
+      setPendingLikesCount(0);
+      return;
+    }
+    let active = true;
+    const loadLikesCount = () => {
+      MatchingApi.pendingLikeCount()
+        .then((res) => {
+          if (active) setPendingLikesCount(res.received ?? 0);
+        })
+        .catch(() => undefined);
+    };
+    loadLikesCount();
+    window.addEventListener('onehook:likes-updated', loadLikesCount);
+    return () => {
+      active = false;
+      window.removeEventListener('onehook:likes-updated', loadLikesCount);
+    };
+  }, [matchingOn]);
+
+  useEffect(() => {
+    if (!notifBanner) return;
+    const t = setTimeout(() => setNotifBanner(null), 8000);
+    return () => clearTimeout(t);
+  }, [notifBanner]);
+
+  const routeNotificationDestination = (dest: AppNotificationDestination) => {
+    setNotifBanner(null);
+    switch (dest.kind) {
+      case 'conversation':
+        if (dest.matchId) setActiveMatchId(dest.matchId);
+        setAppState('MATCHES');
+        break;
+      case 'hookRequests':
+        setAppState('MATCHES');
+        setOpenRequestsTrigger((n) => n + 1);
+        break;
+      case 'archivedChats':
+        setAppState('MATCHES');
+        setOpenArchivesTrigger((n) => n + 1);
+        break;
+      case 'likesYou':
+        setAppState(resolveTab('LIKES', userState));
+        break;
+      case 'matchingSettings':
+        setAppState('SETTINGS');
+        break;
+      case 'none':
+      default:
+        break;
+    }
+  };
   const paid = useAppStore(isPaidTier);
   const paidTierName = userState?.subscriptionTier
     ? subscriptionTierDisplayName(userState.subscriptionTier)
@@ -352,6 +426,8 @@ export function AppContent() {
           tabs={tabs}
           onTabChange={setAppState}
           currentUser={currentUser}
+          likesCount={pendingLikesCount}
+          unreadCount={appState === 'MATCHES' ? 0 : unreadChatCount}
           onLogout={requestLogout}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenCreate={() => setIsCreateOpen(true)}
@@ -359,6 +435,33 @@ export function AppContent() {
 
         {/* Main Content Column */}
         <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+          {notifBanner && (
+            <div
+              role="status"
+              className="mx-4 mt-2 px-3 py-2 bg-surface-card border border-accent/40 rounded-xl shadow-sm flex items-center justify-between gap-3 text-xs text-text"
+            >
+              <span className="truncate">{notifBanner.message}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => routeNotificationDestination(notifBanner.destination)}
+                  data-track-exempt="disabled: notification banner quick route"
+                  className="px-2.5 py-1 rounded-lg bg-accent text-bg font-semibold text-[11px]"
+                >
+                  Open
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotifBanner(null)}
+                  data-track-exempt="disabled: notification banner dismiss"
+                  className="px-1.5 py-1 text-text-secondary hover:text-text"
+                  aria-label="Dismiss notification"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
           {/* Error banner */}
           {(profileError || candidatesError) && (
             <div className="px-4 py-2 bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-medium border-b border-red-500/20 shrink-0">
@@ -392,6 +495,20 @@ export function AppContent() {
                   onLike={handleLike}
                   onRetry={refreshCandidates}
                   onNavigateToProfile={() => setAppState('PROFILE')}
+                  onOpenPreferences={showMatchingBuilder}
+                  onOpenRequests={() => {
+                    setAppState('MATCHES');
+                    setOpenRequestsTrigger((n) => n + 1);
+                  }}
+                  onOpenArchives={() => {
+                    setAppState('MATCHES');
+                    setOpenArchivesTrigger((n) => n + 1);
+                  }}
+                  onMatched={async (matchId) => {
+                    if (matchId) setActiveMatchId(matchId);
+                    await refetchUserState();
+                    setAppState('MATCHES');
+                  }}
                 />
               </motion.div>
             )}
@@ -443,6 +560,8 @@ export function AppContent() {
                   }}
                   onNavigateToDiscovery={matchingOn ? () => setAppState('DISCOVERY') : undefined}
                   onOpenMatchingSettings={() => setAppState('SETTINGS')}
+                  openRequestsTrigger={openRequestsTrigger}
+                  openArchivesTrigger={openArchivesTrigger}
                 />
               </motion.div>
             )}
@@ -462,6 +581,11 @@ export function AppContent() {
                     onOpenSettings={() => setAppState('SETTINGS')}
                     openMatchingBuilder={openMatchingBuilder}
                     onMatchingBuilderOpened={() => setOpenMatchingBuilder(false)}
+                    onOpenMrOneHookChat={() => {
+                      setActiveMatchId(null);
+                      setAppState('MATCHES');
+                    }}
+                    onNavigateToDiscovery={() => setAppState(defaultTabFor(userState))}
                   />
                 </div>
               </motion.div>
@@ -498,6 +622,8 @@ export function AppContent() {
           activeTab={appState}
           tabs={tabs}
           onTabChange={setAppState}
+          likesCount={pendingLikesCount}
+          unreadCount={appState === 'MATCHES' ? 0 : unreadChatCount}
           userPhoto={userPhoto}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenCreate={() => setIsCreateOpen(true)}
@@ -542,24 +668,41 @@ export function AppContent() {
               </div>
               <div className="space-y-3">
                 <h2 id="discovery-paused-title" className="text-xl font-semibold text-text">
-                  You&rsquo;re Hooked
+                  {userState?.unarchiveReserved && (userState?.hooks?.length ?? 0) === 0
+                    ? 'Waiting to Unarchive'
+                    : 'You\u2019re Hooked'}
                 </h2>
                 <p className="text-sm text-text-secondary leading-relaxed">
-                  {capacity > 1
-                    ? `You have ${capacity} hooks, the most your plan allows. Discovery is paused until one of them ends, and nobody sees you in theirs.`
-                    : 'OneHook is about one connection at a time. Discovery is paused so you can focus on the person you’re already getting to know.'}
+                  {userState?.unarchiveReserved && (userState?.hooks?.length ?? 0) === 0
+                    ? 'Your unarchive request reserves your connection slot while we wait for their answer. Discovery is paused so your focus stays clear.'
+                    : capacity > 1
+                      ? `You have ${capacity} hooks, the most your plan allows. Discovery is paused until one of them ends, and nobody sees you in theirs.`
+                      : 'OneHook is about one connection at a time. Discovery is paused so you can focus on the person you’re already getting to know.'}
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  trackHookedStateView(HookedStateAction.GO_TO_CHAT);
-                  setAppState('MATCHES');
-                }}
-                {...trackProps(UiElement.NAV_HOOKED_GO_TO_CHAT)}
-                className="w-full py-3 bg-accent text-bg text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
-              >
-                Go to Messages
-              </button>
+              <div className="space-y-2.5">
+                <button
+                  onClick={() => {
+                    trackHookedStateView(HookedStateAction.GO_TO_CHAT);
+                    setAppState('MATCHES');
+                  }}
+                  {...trackProps(UiElement.NAV_HOOKED_GO_TO_CHAT)}
+                  className="w-full py-3 bg-accent text-bg text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+                >
+                  Go to Messages
+                </button>
+                {userState?.subscriptionTier !== SubscriptionTier.INFINITY && (
+                  <button
+                    type="button"
+                    disabled={upgrading}
+                    onClick={handleUpgrade}
+                    data-track-exempt="disabled: pending telemetry web parity for discovery hooked upgrade"
+                    className="w-full py-2.5 border border-border text-xs font-semibold rounded-lg text-text hover:bg-surface-hover transition-colors disabled:opacity-50"
+                  >
+                    {upgrading ? 'Upgrading…' : 'Get Infinity for more hooks'}
+                  </button>
+                )}
+              </div>
             </div>
           </motion.div>
         )}

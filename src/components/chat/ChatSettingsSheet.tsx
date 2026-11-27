@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X } from 'lucide-react';
+import { Download, ExternalLink, Trash2, X } from 'lucide-react';
 import {
   ChatSettingsApi,
   type ChatNotificationKey,
@@ -10,11 +10,18 @@ import {
 import { ApiError } from '../../lib/api-client';
 import { LoadingSpinner } from '../common/LoadingSpinner';
 import { useToast } from '../common/Toast';
-import type { ChatWallpaper } from '../../lib/chat-appearance';
+import {
+  CHAT_FONT_SIZES,
+  useChatFontSize,
+  type ChatFontSize,
+  type ChatWallpaper,
+} from '../../lib/chat-appearance';
+import { DISAPPEARING_PRESETS } from '../../lib/chat-timeline';
 import { WallpaperGrid } from './WallpaperGrid';
 import { UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
 import { useAppStore } from '../../store/app-store';
 import { isMatchingOn } from '../../lib/app-mode';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * The `targetId` each chat-settings toggle reports: the setting's snake_case key, the same string iOS
@@ -97,14 +104,21 @@ export function ChatSettingsSheet({
   onClose,
   wallpaper,
   onChooseWallpaper,
+  onExportChat,
+  exportBlockedReason,
+  onClearCache,
 }: {
   open: boolean;
   onClose: () => void;
   wallpaper: ChatWallpaper;
   onChooseWallpaper: (id: string) => void;
+  onExportChat?: () => void;
+  exportBlockedReason?: string | null;
+  onClearCache?: () => void;
 }) {
   const { showToast } = useToast();
   const matchingOn = useAppStore((s) => isMatchingOn(s.userState));
+  const [fontSize, setFontSize] = useChatFontSize();
   const [settings, setSettings] = useState<ChatSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,10 +196,10 @@ export function ChatSettingsSheet({
               <button
                 onClick={onClose}
                 {...trackProps(UiElement.CHAT_SETTINGS_OPEN, { action: 'dismiss' })}
-                className="p-2 border border-border hover:border-accent hover:bg-surface-hover transition-colors rounded-lg cursor-pointer"
+                className={ICON_SECTION.modalHeader.button}
                 aria-label="Close chat settings"
               >
-                <X className="w-4 h-4" />
+                <X className={ICON_SECTION.modalHeader.icon} />
               </button>
             </div>
 
@@ -279,28 +293,151 @@ export function ChatSettingsSheet({
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest font-bold opacity-60 block">
-                      Default disappearing messages (seconds, 0 = off)
+                    <label
+                      htmlFor="chat-settings-disappearing"
+                      className="text-[10px] uppercase tracking-widest font-bold opacity-60 block"
+                    >
+                      Default disappearing messages
                     </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={settings.defaultDisappearingSeconds}
-                      onChange={(e) =>
-                        setSettings({
-                          ...settings,
-                          defaultDisappearingSeconds: Number(e.target.value) || 0,
-                        })
-                      }
-                      onBlur={(e) => {
+                    <select
+                      id="chat-settings-disappearing"
+                      value={String(settings.defaultDisappearingSeconds)}
+                      onChange={(e) => {
                         trackUi(UiElement.CHAT_SETTINGS_DISAPPEARING_SELECT);
                         void patch({ defaultDisappearingSeconds: Number(e.target.value) || 0 });
                       }}
                       className="w-full p-3 border border-border text-xs bg-surface text-text rounded-xl outline-none focus:border-accent"
-                    />
+                    >
+                      {DISAPPEARING_PRESETS.map((p) => (
+                        <option key={p.seconds} value={String(p.seconds)}>
+                          {p.label}
+                        </option>
+                      ))}
+                      {!DISAPPEARING_PRESETS.some((p) => p.seconds === settings.defaultDisappearingSeconds) && (
+                        <option value={String(settings.defaultDisappearingSeconds)}>
+                          Custom ({settings.defaultDisappearingSeconds}s)
+                        </option>
+                      )}
+                    </select>
+                  </div>
+
+                  {/* Conversation restrictions enforced for all peers in your chats */}
+                  <div className="space-y-3 border-t border-border pt-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-[10px] uppercase tracking-widest font-bold opacity-60">
+                          Restrictions for your matches
+                        </h3>
+                        <p className="text-[11px] text-text-muted leading-tight mt-0.5">
+                          Control what your matches can save, export, or share with Mr.OneHook.
+                        </p>
+                      </div>
+                      <label
+                        // TODO(telemetry-parity): switch to UiElement.CHAT_SETTINGS_RESTRICTION_TOGGLE once enabled on web.
+                        data-track-exempt="disabled: pending telemetry web parity enablement for chat_settings.restriction_toggle"
+                        className="flex items-center gap-1.5 text-xs font-medium cursor-pointer shrink-0"
+                      >
+                        <span>All</span>
+                        <input
+                          type="checkbox"
+                          checked={
+                            Boolean(settings.restrictSaveMedia) &&
+                            Boolean(settings.restrictExport) &&
+                            Boolean(settings.restrictMrOneHook)
+                          }
+                          onChange={(e) =>
+                            void patch({
+                              restrictSaveMedia: e.target.checked,
+                              restrictExport: e.target.checked,
+                              restrictMrOneHook: e.target.checked,
+                            })
+                          }
+                          className="w-4 h-4 accent-accent"
+                        />
+                      </label>
+                    </div>
+
+                    <label
+                      // TODO(telemetry-parity): switch to UiElement.CHAT_SETTINGS_RESTRICTION_TOGGLE once enabled on web.
+                      data-track-exempt="disabled: pending telemetry web parity enablement for chat_settings.restriction_toggle"
+                      className="flex items-center justify-between gap-4 cursor-pointer"
+                    >
+                      <span className="flex flex-col">
+                        <span className="text-sm">Prevent saving photos &amp; videos</span>
+                        <span className="text-[11px] text-text-muted">Matches cannot download media you send.</span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(settings.restrictSaveMedia)}
+                        onChange={(e) => void patch({ restrictSaveMedia: e.target.checked })}
+                        className="w-5 h-5 accent-accent shrink-0"
+                      />
+                    </label>
+
+                    <label
+                      // TODO(telemetry-parity): switch to UiElement.CHAT_SETTINGS_RESTRICTION_TOGGLE once enabled on web.
+                      data-track-exempt="disabled: pending telemetry web parity enablement for chat_settings.restriction_toggle"
+                      className="flex items-center justify-between gap-4 cursor-pointer"
+                    >
+                      <span className="flex flex-col">
+                        <span className="text-sm">Prevent chat export</span>
+                        <span className="text-[11px] text-text-muted">Matches cannot export your conversation transcript.</span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(settings.restrictExport)}
+                        onChange={(e) => void patch({ restrictExport: e.target.checked })}
+                        className="w-5 h-5 accent-accent shrink-0"
+                      />
+                    </label>
+
+                    <label
+                      // TODO(telemetry-parity): switch to UiElement.CHAT_SETTINGS_RESTRICTION_TOGGLE once enabled on web.
+                      data-track-exempt="disabled: pending telemetry web parity enablement for chat_settings.restriction_toggle"
+                      className="flex items-center justify-between gap-4 cursor-pointer"
+                    >
+                      <span className="flex flex-col">
+                        <span className="text-sm">Prevent sharing with Mr.OneHook</span>
+                        <span className="text-[11px] text-text-muted">
+                          Matches cannot include your messages or files when asking Mr.OneHook.
+                        </span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(settings.restrictMrOneHook)}
+                        onChange={(e) => void patch({ restrictMrOneHook: e.target.checked })}
+                        className="w-5 h-5 accent-accent shrink-0"
+                      />
+                    </label>
                   </div>
                 </>
               ) : null}
+
+              {/* Font size — synced across conversation threads */}
+              <div className="space-y-2 border-t border-border pt-5">
+                <label className="text-[10px] uppercase tracking-widest font-bold opacity-60 block">
+                  Message text size
+                </label>
+                <div className="grid grid-cols-3 gap-2" role="group" aria-label="Message text size">
+                  {CHAT_FONT_SIZES.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setFontSize(opt.id as ChatFontSize)}
+                      aria-pressed={fontSize === opt.id}
+                      // TODO(telemetry-parity): switch to UiElement.CHAT_SETTINGS_FONT_SIZE_SELECT once enabled on web.
+                      data-track-exempt="disabled: pending telemetry web parity enablement for chat_settings.font_size_select"
+                      className={`py-2 px-3 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                        fontSize === opt.id
+                          ? 'border-accent bg-accent text-bg'
+                          : 'border-border bg-surface text-text hover:bg-surface-hover'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Appearance — same wallpaper store as the shield menu. */}
               <div className="space-y-3 border-t border-border pt-5">
@@ -308,6 +445,65 @@ export function ChatSettingsSheet({
                   Chat wallpaper
                 </label>
                 <WallpaperGrid current={wallpaper} onChoose={onChooseWallpaper} />
+              </div>
+
+              {/* Export & Local Cache */}
+              <div className="space-y-2.5 border-t border-border pt-5">
+                <h3 className="text-[10px] uppercase tracking-widest font-bold opacity-60 block">
+                  Data &amp; storage
+                </h3>
+                {onExportChat && (
+                  <button
+                    type="button"
+                    disabled={Boolean(exportBlockedReason)}
+                    onClick={onExportChat}
+                    // TODO(telemetry-parity): switch to UiElement.CHAT_SETTINGS_EXPORT_CHAT once enabled on web.
+                    data-track-exempt="disabled: pending telemetry web parity enablement for chat_settings.export_chat"
+                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-border bg-surface hover:bg-surface-hover disabled:opacity-50 text-xs font-medium text-text cursor-pointer"
+                  >
+                    <span>{exportBlockedReason || 'Export current chat (.txt)'}</span>
+                    <Download className={`${ICON_SECTION.section.rowIcon} text-text-secondary`} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearCache?.();
+                    showToast('Cleared temporary media cache.', 'success');
+                  }}
+                  // TODO(telemetry-parity): switch to UiElement.CHAT_SETTINGS_CLEAR_CACHE once enabled on web.
+                  data-track-exempt="disabled: pending telemetry web parity enablement for chat_settings.clear_cache"
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-border bg-surface hover:bg-surface-hover text-xs font-medium text-text cursor-pointer"
+                >
+                  <span>Clear decrypted media cache</span>
+                  <Trash2 className={`${ICON_SECTION.section.rowIcon} text-text-secondary`} />
+                </button>
+              </div>
+
+              {/* Help & Legal */}
+              <div className="border-t border-border pt-4 flex flex-wrap gap-3 text-xs text-text-secondary">
+                <a
+                  href="/contact"
+                  // TODO(telemetry-parity): switch to UiElement.SETTINGS_HELP_LINK once enabled on web.
+                  data-track-exempt="disabled: pending telemetry web parity enablement for settings.help_link"
+                  className="inline-flex items-center gap-1 hover:text-text underline"
+                >
+                  Help &amp; Support <ExternalLink className={ICON_SECTION.section.badgeIcon} />
+                </a>
+                <a
+                  href="/privacy"
+                  data-track-exempt="disabled: pending telemetry web parity enablement for settings.help_link"
+                  className="inline-flex items-center gap-1 hover:text-text underline"
+                >
+                  Privacy <ExternalLink className={ICON_SECTION.section.badgeIcon} />
+                </a>
+                <a
+                  href="/terms"
+                  data-track-exempt="disabled: pending telemetry web parity enablement for settings.help_link"
+                  className="inline-flex items-center gap-1 hover:text-text underline"
+                >
+                  Terms <ExternalLink className={ICON_SECTION.section.badgeIcon} />
+                </a>
               </div>
             </div>
           </motion.div>

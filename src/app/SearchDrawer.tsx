@@ -3,6 +3,7 @@ import { Search, X, CheckCircle2, MapPin, Sparkles, Volume2 } from 'lucide-react
 import { MediaImage } from '../components/common/MediaImage';
 import type { DiscoveryCandidate } from '../types';
 import { UiElement, trackProps } from '../lib/analytics/analytics';
+import { ICON_SECTION } from '../lib/icon-tokens';
 
 interface SearchDrawerProps {
   isOpen: boolean;
@@ -81,16 +82,16 @@ export function SearchDrawer({
               type="button"
               onClick={onClose}
               {...trackProps(UiElement.SEARCH_CLOSE, { action: 'dismiss' })}
-              className="p-1 rounded-full text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+              className="w-9 h-9 flex items-center justify-center rounded-full text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
               title="Close search"
             >
-              <X className="w-5 h-5" />
+              <X className={ICON_SECTION.modalHeader.largeIcon} />
             </button>
           </div>
 
           {/* Search Input */}
           <div className="relative flex items-center">
-            <Search className="absolute left-3.5 w-4 h-4 text-text-muted pointer-events-none" />
+            <Search className={`absolute left-3.5 ${ICON_SECTION.section.rowIcon} text-text-muted pointer-events-none`} />
             <input
               type="text"
               value={query}
@@ -128,7 +129,7 @@ export function SearchDrawer({
                       : 'bg-surface text-text-secondary hover:text-text hover:bg-surface-hover'
                   }`}
                 >
-                  {Icon && <Icon className="w-3 h-3" />}
+                  {Icon && <Icon className={ICON_SECTION.toolbar.pillIcon} />}
                   {item.label}
                 </button>
               );

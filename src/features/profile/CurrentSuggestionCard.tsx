@@ -3,6 +3,7 @@ import { Sparkles, UserRound } from 'lucide-react';
 import { SuggestionApi, type MemberSuggestions, type SuggestionView } from '../../api/rest';
 import { trackProps, UiElement, type UiElementId } from '../../lib/analytics/analytics';
 import { LockIcon, UpgradeDialog } from '../../components/common/LockedFeature';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 export type CurrentSuggestion = SuggestionView;
 
@@ -53,7 +54,7 @@ export function CurrentSuggestionCard({
   return (
     <div className="bg-surface border border-border rounded-xl p-4 space-y-2" data-testid={testId}>
       <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-        <Sparkles className="w-3.5 h-3.5" /> {title}
+        <Sparkles className={ICON_SECTION.section.headingIcon} /> {title}
       </div>
       <p className="text-sm text-text italic">{suggestion.reasoning}</p>
       <div className="flex items-center justify-between gap-3">
@@ -109,7 +110,7 @@ export function OwnSuggestionForm({ onSaved, replacing }: { onSaved: () => void;
   return (
     <div className="bg-surface border border-border rounded-xl p-4 space-y-2" data-testid="own-suggestion-form">
       <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-        <UserRound className="w-3.5 h-3.5" /> Tell OneHook who you&rsquo;re looking for
+        <UserRound className={ICON_SECTION.section.headingIcon} /> Tell OneHook who you&rsquo;re looking for
       </label>
       <textarea
         value={prompt}

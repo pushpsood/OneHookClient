@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Eye } from 'lucide-react';
 import { DiscoveryCard, type DiscoveryProfileData } from '../../features/discovery/DiscoveryCard';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 interface ProfilePreviewModalProps {
   isOpen: boolean;
@@ -63,7 +64,7 @@ export function ProfilePreviewModal({
             {/* Sleek integrated header */}
             <div className="bg-accent text-bg px-5 py-3 flex items-center justify-between shrink-0 select-none">
               <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-green-400" />
+                <Eye className={`${ICON_SECTION.modalHeader.icon} text-green-400`} />
                 <span className="text-[10px] uppercase font-black tracking-[0.25em]">
                   Discovery Feed Preview
                 </span>
@@ -75,10 +76,10 @@ export function ProfilePreviewModal({
                 type="button"
                 onClick={onClose}
                 {...trackProps(UiElement.PROFILE_PREVIEW_OPEN, { action: 'dismiss' })}
-                className="p-1 text-bg/70 hover:text-bg hover:bg-bg/10 rounded transition-colors cursor-pointer"
+                className="w-8 h-8 flex items-center justify-center text-bg/70 hover:text-bg hover:bg-bg/10 rounded-lg transition-colors cursor-pointer"
                 title="Close (Esc)"
               >
-                <X className="w-4 h-4" />
+                <X className={ICON_SECTION.modalHeader.icon} />
               </button>
             </div>
 

@@ -4,6 +4,7 @@ import { BrandWordmark } from '../components/common/BrandWordmark';
 import { useTheme } from '../lib/theme';
 import { UiElement, trackProps } from '../lib/analytics/analytics';
 import type { AppTab } from './BottomTabBar';
+import { ICON_SECTION } from '../lib/icon-tokens';
 
 interface TopBarProps {
   activeTab?: AppTab;
@@ -71,9 +72,9 @@ export function TopBar({
                 aria-label="Go back"
                 title="Go back"
                 {...trackProps(UiElement.NAV_BACK)}
-                className="w-9 h-9 flex items-center justify-center text-text hover:bg-surface-hover rounded-xl transition-colors cursor-pointer -ml-1"
+                className={`${ICON_SECTION.header.button} -ml-1`}
               >
-                <ArrowLeft className="w-5 h-5 stroke-[1.75]" />
+                <ArrowLeft className={ICON_SECTION.header.icon} />
               </button>
               <div className="pointer-events-none absolute left-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/back:opacity-100 transition-all duration-150 shadow-md z-50">
                 Go back
@@ -124,9 +125,9 @@ export function TopBar({
               aria-expanded={isThemeOpen}
               title={triggerTitle}
               {...trackProps(UiElement.SETTINGS_THEME_OPEN)}
-              className="w-9 h-9 flex items-center justify-center rounded-xl text-text hover:bg-surface-hover transition-colors cursor-pointer"
+              className={ICON_SECTION.header.button}
             >
-              <TriggerIcon className="w-5 h-5 stroke-[1.75]" />
+              <TriggerIcon className={ICON_SECTION.header.icon} />
             </button>
 
             {isThemeOpen && (
@@ -156,10 +157,10 @@ export function TopBar({
                       }`}
                     >
                       <span className="flex items-center gap-3">
-                        <OptionIcon className="w-4 h-4 shrink-0" />
+                        <OptionIcon className={ICON_SECTION.header.menuItem} />
                         {option.label}
                       </span>
-                      {isActive && <Check className="w-4 h-4 shrink-0 text-accent" />}
+                      {isActive && <Check className={`${ICON_SECTION.header.menuItem} text-accent`} />}
                     </button>
                   );
                 })}

@@ -10,6 +10,7 @@ import React, {
 import { motion, AnimatePresence } from 'motion/react';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { UiElement, trackProps, hostScreen } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -74,10 +75,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               aria-live="polite"
             >
               {toast.type === 'success' && (
-                <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+                <CheckCircle className={`${ICON_SECTION.header.icon} text-green-600`} />
               )}
-              {toast.type === 'error' && <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />}
-              {toast.type === 'info' && <Info className="w-5 h-5 text-accent shrink-0" />}
+              {toast.type === 'error' && <AlertCircle className={`${ICON_SECTION.header.icon} text-red-600`} />}
+              {toast.type === 'info' && <Info className={`${ICON_SECTION.header.icon} text-accent`} />}
 
               <p className="text-sm flex-1">{toast.message}</p>
 
@@ -86,7 +87,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 {...trackProps(UiElement.SHARED_ALERT_DISMISS, { context: hostScreen() })}
                 className="text-border hover:text-accent transition-colors"
               >
-                <X className="w-4 h-4" />
+                <X className={ICON_SECTION.modalHeader.icon} />
               </button>
             </motion.div>
           ))}
@@ -102,4 +103,10 @@ export function useToast() {
     throw new Error('useToast must be used within ToastProvider');
   }
   return context;
+}
+
+const NOOP_TOAST: ToastContextType = { showToast: () => {} };
+
+export function useOptionalToast() {
+  return useContext(ToastContext) ?? NOOP_TOAST;
 }

@@ -1,4 +1,5 @@
 import { trackConversationOpened, trackProfileRevisit, trackSafetyUiOpen, Screen, UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -8,6 +9,7 @@ import {
   Settings,
   Plus,
   ChevronDown,
+  ChevronUp,
   X,
   Check,
   ArrowLeftRight,
@@ -17,13 +19,32 @@ import {
   Inbox,
   PauseCircle,
   Radio,
+  Archive,
+  ArrowDown,
+  Clock,
+  Copy,
+  CornerUpLeft,
+  Info,
+  MoreHorizontal,
+  Search,
+  Smile,
+  Star,
+  Trash2,
+  UserMinus,
+  HelpCircle,
 } from 'lucide-react';
 import type { BlockReason } from 'onehook-api-client';
-import type { ChatMessageDTO, Hook, UserProfile, UserStateSnapshot } from '../../types';
+import type { ChatMessageDTO, ChatMessageView, Hook, UserProfile, UserStateSnapshot } from '../../types';
 import { HOOK_REQUEST_SENT_CONFIRMATION, StateApi } from '../../api/state';
-import { DistanceApi } from '../../api/rest';
+import { DistanceApi, PartnerRestrictionsApi, type PartnerChatRestrictions } from '../../api/rest';
 import { useChatMessages, useHookRequests, usePartnerProfiles } from '../../hooks/use-api';
 import { useAppStore } from '../../store/app-store';
+import {
+  clearChatActivity,
+  refreshArchives,
+  useArchiveStore,
+  useChatActivityStore,
+} from '../../store/archive-store';
 import { isMatchingOn } from '../../lib/app-mode';
 import {
   ARCHIVED_CALL_COPY,
@@ -53,10 +74,44 @@ import {
   LockedMessageNotice,
 } from '../../components/chat/LockedMessage';
 import {
+  getChatFontSizeOption,
+  useChatFontSize,
   useChatWallpaper,
   WALLPAPER_SCRIM_CLASS,
   type ChatWallpaper,
 } from '../../lib/chat-appearance';
+import { ChatContactInfoModal } from './ChatContactInfoModal';
+import { DecisionWindowBar, useDecisionWindowGate } from '../../components/chat/DecisionWindowBar';
+import { LetHookGoDialog } from './LetHookGoDialog';
+import { ArchivedChatsDialog } from './ArchivedChatsDialog';
+import {
+  ChatIntroStoriesDialog,
+  EmojiReactionPickerDialog,
+  MessageInfoDialog,
+  ReactionDetailsDialog,
+} from '../../components/chat/ChatOverlays';
+import { ModalDialog } from '../../components/common/ModalDialog';
+import { useMrOneHookPersistentUploads } from '../../store/mr-onehook-upload-store';
+import { useMrOneHookPrefs } from '../../lib/mr-onehook-prefs';
+import {
+  QUICK_REACTIONS,
+  buildReactionChips,
+  toggleReaction,
+} from '../../lib/chat-reactions';
+import {
+  DISAPPEARING_PRESETS,
+  EMPTY_PARTNER_RESTRICTIONS,
+  PartnerRestrictionGate,
+  computeBubblePositions,
+  formatDayLabel,
+  formatDisappearingShort,
+  formatMessageTime,
+  getSentDisappearingSeconds,
+  messagePreviewText,
+  sameLocalDay,
+  searchConversationMessages,
+  type ConversationSearchFilter,
+} from '../../lib/chat-timeline';
 import { WallpaperGrid } from '../../components/chat/WallpaperGrid';
 import {
   useConversationSort,
@@ -202,6 +257,8 @@ export function ChatView({
   onRefetchState,
   onNavigateToDiscovery,
   onOpenMatchingSettings,
+  openRequestsTrigger = 0,
+  openArchivesTrigger = 0,
 }: {
   key?: string;
   currentUser: UserProfile;
@@ -212,6 +269,8 @@ export function ChatView({
   /** Present only while matching is ON (a chat-only member has no discovery). */
   onNavigateToDiscovery?: () => void;
   onOpenMatchingSettings?: () => void;
+  openRequestsTrigger?: number;
+  openArchivesTrigger?: number;
 }) {
   const { showToast } = useToast();
   const [wallpaper, setWallpaper] = useChatWallpaper();
@@ -245,7 +304,24 @@ export function ChatView({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [contactInfoOpen, setContactInfoOpen] = useState(false);
+  const [archivedDialogOpen, setArchivedDialogOpen] = useState(false);
+  const [introOpen, setIntroOpen] = useState(false);
+  const [letGoTarget, setLetGoTarget] = useState<{ matchId: string; peerName: string } | null>(null);
   const [reportReason, setReportReason] = useState<BlockReason | null>(null);
+  const unreadMatchIds = useChatActivityStore((s) => s.unreadMatchIds);
+  const archiveCount = useArchiveStore((s) => s.list?.archives.length ?? 0);
+  useEffect(() => {
+    if (matchingOn) void refreshArchives();
+  }, [matchingOn]);
+
+  useEffect(() => {
+    if (openRequestsTrigger > 0) setRequestsOpen(true);
+  }, [openRequestsTrigger]);
+
+  useEffect(() => {
+    if (openArchivesTrigger > 0) setArchivedDialogOpen(true);
+  }, [openArchivesTrigger]);
   // Who the block confirmation is for: the open conversation's partner, or a request's sender.
   const [blockTarget, setBlockTarget] = useState<{ userId: string; name: string; fromRequest: boolean } | null>(null);
   const [reporting, setReporting] = useState(false);
@@ -278,6 +354,7 @@ export function ChatView({
   useEffect(() => {
     if (selection && selection !== MR_ONEHOOK) {
       trackConversationOpened(String(selection));
+      clearChatActivity(String(selection));
     }
   }, [selection]);
 
@@ -436,18 +513,20 @@ export function ChatView({
     [showToast, onRefetchState]
   );
 
-  // Rows for the conversation picker: Mr.OneHook pinned first, then matches.
+  // Rows for the conversation picker: active hooks + Mr.OneHook.
   const pickerRows: (SortableConversation & {
     photo?: string;
     transform?: string;
     subtitle: string;
     isMrOneHook?: boolean;
+    unread?: boolean;
   })[] = useMemo(() => {
     const mr = {
       id: MR_ONEHOOK,
       isMrOneHook: true as const,
       name: 'Mr.OneHook',
       subtitle: 'OneHook AI · always here',
+      unread: false,
     };
     const rows = matches.map((m) => {
       const p = m.peerProfile;
@@ -463,10 +542,11 @@ export function ChatView({
         lastActivity: m.createdAt,
         photo,
         subtitle,
+        unread: unreadMatchIds.has(m.matchId),
       };
     });
-    return [mr, ...rows];
-  }, [matches, distances]);
+    return [...rows, mr];
+  }, [matches, distances, unreadMatchIds]);
 
   // Position of the active conversation within the picker list (for CHAT_CONVERSATION_SWITCH index).
   const selectionIndex = pickerRows.findIndex((r) => r.id === selection);
@@ -511,7 +591,7 @@ export function ChatView({
                   <span className="text-sm font-semibold truncate text-text max-w-[80px] xs:max-w-[120px] sm:max-w-[160px]">
                     {isMrOneHook ? 'Mr.OneHook' : peerName}
                   </span>
-                  <ChevronDown className="w-3.5 h-3.5 stroke-[2] text-text/70 shrink-0" />
+                  <ChevronDown className={`${ICON_SECTION.header.caret} text-text/70`} />
                 </div>
               </button>
               <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/picker:opacity-100 transition-all duration-150 shadow-md z-50">
@@ -534,7 +614,7 @@ export function ChatView({
                   aria-label="Safety and report options"
                   {...trackProps(UiElement.CHAT_SAFETY_MENU_OPEN)}
                 >
-                  <Shield className="w-5 h-5 stroke-[1.75]" />
+                  <Shield className={ICON_SECTION.header.icon} />
                 </button>
                 {!shieldOpen && (
                   <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/shield:opacity-100 transition-all duration-150 shadow-md z-50">
@@ -566,6 +646,32 @@ export function ChatView({
                         </button>
                         {!isMrOneHook && (
                           <>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setShieldOpen(false);
+                                setContactInfoOpen(true);
+                              }}
+                              // TODO(telemetry-parity): switch to UiElement.CHAT_CONTACT_INFO_OPEN once enabled on web.
+                              data-track-exempt="disabled: pending telemetry web parity enablement for chat.contact_info_open"
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                            >
+                              Contact info &amp; media
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setShieldOpen(false);
+                                if (activeMatch) setLetGoTarget({ matchId: activeMatch.matchId, peerName });
+                              }}
+                              // TODO(telemetry-parity): switch to UiElement.CHAT_UNMATCH once enabled on web.
+                              data-track-exempt="disabled: pending telemetry web parity enablement for chat.unmatch"
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                            >
+                              Archive or unhook
+                            </button>
                             <button
                               type="button"
                               role="menuitem"
@@ -607,6 +713,19 @@ export function ChatView({
                         >
                           Choose wallpaper
                         </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setShieldOpen(false);
+                            setIntroOpen(true);
+                          }}
+                          // TODO(telemetry-parity): switch to UiElement.CHAT_INTRO_TOUR_OPEN once enabled on web.
+                          data-track-exempt="disabled: pending telemetry web parity enablement for chat.intro_tour_open"
+                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                        >
+                          How OneHook chat works
+                        </button>
                       </motion.div>
                     </>
                   )}
@@ -623,7 +742,7 @@ export function ChatView({
                   aria-label="Chat settings"
                   {...trackProps(UiElement.CHAT_SETTINGS_OPEN)}
                 >
-                  <Settings className="w-5 h-5 stroke-[1.75]" />
+                  <Settings className={ICON_SECTION.header.icon} />
                 </button>
                 <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/settings:opacity-100 transition-all duration-150 shadow-md z-50">
                   Chat settings
@@ -643,7 +762,7 @@ export function ChatView({
                   aria-label="Add someone by username"
                   {...trackProps(UiElement.CHAT_ADD_HOOK_OPEN)}
                 >
-                  <Plus className="w-5 h-5 stroke-[1.75]" />
+                  <Plus className={ICON_SECTION.header.icon} />
                 </button>
                 <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/add:opacity-100 transition-all duration-150 shadow-md z-50">
                   Add by username
@@ -685,7 +804,7 @@ export function ChatView({
                   <span className="text-sm font-semibold truncate text-text">
                     {isMrOneHook ? 'Mr.OneHook' : peerName}
                   </span>
-                  <ChevronDown className="w-3.5 h-3.5 stroke-[2] text-text/70 shrink-0" />
+                  <ChevronDown className={`${ICON_SECTION.header.caret} text-text/70`} />
                 </div>
               </button>
               <div className="pointer-events-none absolute left-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/picker:opacity-100 transition-all duration-150 shadow-md z-50">
@@ -706,7 +825,7 @@ export function ChatView({
                 aria-label="Safety and report options"
                 {...trackProps(UiElement.CHAT_SAFETY_MENU_OPEN)}
               >
-                <Shield className="w-5 h-5 stroke-[1.75]" />
+                <Shield className={ICON_SECTION.header.icon} />
               </button>
               {!shieldOpen && (
                 <div className="pointer-events-none absolute right-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/shield:opacity-100 transition-all duration-150 shadow-md z-50">
@@ -779,6 +898,46 @@ export function ChatView({
                       >
                         Choose wallpaper
                       </button>
+                      {!isMrOneHook && (
+                        <>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setShieldOpen(false);
+                              setContactInfoOpen(true);
+                            }}
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.contact_info_open"
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                          >
+                            Contact info &amp; media
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setShieldOpen(false);
+                              if (activeMatch) setLetGoTarget({ matchId: activeMatch.matchId, peerName });
+                            }}
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.unmatch"
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                          >
+                            Archive or unhook
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setShieldOpen(false);
+                          setIntroOpen(true);
+                        }}
+                        data-track-exempt="disabled: pending telemetry web parity enablement for chat.intro_tour_open"
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-surface-hover transition-colors text-text cursor-pointer"
+                      >
+                        How OneHook chat works
+                      </button>
                     </motion.div>
                   </>
                 )}
@@ -794,7 +953,7 @@ export function ChatView({
                 aria-label="Chat settings"
                 {...trackProps(UiElement.CHAT_SETTINGS_OPEN)}
               >
-                <Settings className="w-5 h-5 stroke-[1.75]" />
+                <Settings className={ICON_SECTION.header.icon} />
               </button>
               <div className="pointer-events-none absolute right-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/settings:opacity-100 transition-all duration-150 shadow-md z-50">
                 Chat settings
@@ -812,7 +971,7 @@ export function ChatView({
                 aria-label="Add someone by username"
                 {...trackProps(UiElement.CHAT_ADD_HOOK_OPEN)}
               >
-                <Plus className="w-5 h-5 stroke-[1.75]" />
+                <Plus className={ICON_SECTION.header.icon} />
               </button>
               <div className="pointer-events-none absolute right-0 top-full mt-1.5 px-2 py-0.5 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-[11px] font-medium rounded-md whitespace-nowrap opacity-0 group-hover/add:opacity-100 transition-all duration-150 shadow-md z-50">
                 Add by username
@@ -843,6 +1002,7 @@ export function ChatView({
           matchId={activeMatch.matchId}
           peerId={activeMatch.peerId || undefined}
           peerName={peerName}
+          peerPhoto={peerPhoto}
           currentUserId={currentUser.id}
           wallpaper={wallpaper}
           suspended={activeMatch.suspended}
@@ -851,6 +1011,16 @@ export function ChatView({
           reportOpen={chatReportOpen}
           onCloseReport={() => setChatReportOpen(false)}
           onRequestUnmatch={() => void runUnmatch()}
+          contactInfoOpen={contactInfoOpen}
+          onOpenContactInfo={() => setContactInfoOpen(true)}
+          onCloseContactInfo={() => setContactInfoOpen(false)}
+          onViewProfile={() => setProfileOpen(true)}
+          onOpenChatSettings={() => setSettingsOpen(true)}
+          onOpenLetGo={() => setLetGoTarget({ matchId: activeMatch.matchId, peerName })}
+          onOpenIntro={() => setIntroOpen(true)}
+          onArchived={async () => {
+            if (onRefetchState) await onRefetchState();
+          }}
           pro={pro}
           onAskMrOneHook={(handoff) => {
             setAskHandoff({ matchId: activeMatch.matchId, ...handoff });
@@ -872,6 +1042,19 @@ export function ChatView({
         rows={pickerRows}
         selection={selection}
         onSelect={selectConversation}
+        archiveCount={archiveCount}
+        onOpenArchived={() => {
+          setPickerOpen(false);
+          setArchivedDialogOpen(true);
+        }}
+        onOpenContactInfo={(matchId) => {
+          selectConversation(matchId);
+          setContactInfoOpen(true);
+        }}
+        onLetGo={(matchId, name) => {
+          setPickerOpen(false);
+          setLetGoTarget({ matchId, peerName: name });
+        }}
       />
 
       {/* ── ADD BY USERNAME ───────────────────────────────────────────────── */}
@@ -962,6 +1145,45 @@ export function ChatView({
           setBlockTarget(null);
         }}
         onConfirm={(reason) => void runBlock(reason)}
+      />
+
+      {/* ── ARCHIVED CHATS, LET HOOK GO & CHAT WALKTHROUGH ─────────────────── */}
+      <ArchivedChatsDialog
+        open={archivedDialogOpen}
+        onClose={() => setArchivedDialogOpen(false)}
+        onOpenedHook={(matchId) => {
+          setArchivedDialogOpen(false);
+          if (onRefetchState) void onRefetchState();
+          selectConversation(matchId);
+        }}
+      />
+
+      {letGoTarget && (
+        <LetHookGoDialog
+          open={Boolean(letGoTarget)}
+          onClose={() => setLetGoTarget(null)}
+          matchId={letGoTarget.matchId}
+          partnerName={letGoTarget.peerName}
+          onUnhooked={async () => {
+            const leftId = letGoTarget.matchId;
+            setLetGoTarget(null);
+            moveOffConversation(leftId);
+            if (onRefetchState) await onRefetchState();
+          }}
+          onArchived={async () => {
+            const leftId = letGoTarget.matchId;
+            setLetGoTarget(null);
+            moveOffConversation(leftId);
+            if (onRefetchState) await onRefetchState();
+          }}
+        />
+      )}
+
+      <ChatIntroStoriesDialog
+        open={introOpen}
+        onClose={() => setIntroOpen(false)}
+        onExploreDiscover={() => onNavigateToDiscovery?.()}
+        onAddByUsername={() => setAddOpen(true)}
       />
     </motion.div>
   );
@@ -1107,6 +1329,7 @@ function MatchMessageBody({
   onReportPeerMedia,
   onRetryText,
   live,
+  canSaveMedia = true,
 }: {
   message: ChatMessageDTO & { undecryptable?: boolean };
   mine: boolean;
@@ -1119,6 +1342,8 @@ function MatchMessageBody({
   onRetryText: (text: string) => void;
   /** Live-location shares of this conversation, for live-location bubbles. */
   live: LiveLocationContext;
+  /** Partner chat restriction check: false hides saving peer decrypted media. */
+  canSaveMedia?: boolean;
 }) {
   const decoded = useMemo(() => {
     try {
@@ -1179,6 +1404,7 @@ function MatchMessageBody({
           transfer={transfer}
           onRetry={onRetryAttachment}
           onReportPeerMedia={onReportPeerMedia}
+          canSaveMedia={canSaveMedia}
         />
       );
     }
@@ -1219,11 +1445,15 @@ function MatchMessageBody({
   );
 }
 
+const EMPTY_REACTIONS: Record<string, Record<string, string>> = {};
+const EMPTY_STARRED = new Set<string>();
+
 /** One conversation with a person. Exported for UI tests (the "Ask Mr OneHook" select mode). */
 export function MatchConversation({
   matchId,
   peerId,
   peerName,
+  peerPhoto,
   currentUserId,
   wallpaper,
   suspended: suspendedByState,
@@ -1232,6 +1462,14 @@ export function MatchConversation({
   reportOpen,
   onCloseReport,
   onRequestUnmatch,
+  contactInfoOpen,
+  onOpenContactInfo,
+  onCloseContactInfo,
+  onViewProfile,
+  onOpenChatSettings,
+  onOpenLetGo,
+  onOpenIntro,
+  onArchived,
   pro,
   onAskMrOneHook,
 }: {
@@ -1239,6 +1477,7 @@ export function MatchConversation({
   matchId: string;
   peerId?: string;
   peerName: string;
+  peerPhoto?: string;
   currentUserId: string;
   wallpaper: ChatWallpaper;
   /** Read-only: a member of this hook must choose which hooks to keep (R24, E23). */
@@ -1249,6 +1488,14 @@ export function MatchConversation({
   reportOpen?: boolean;
   onCloseReport?: () => void;
   onRequestUnmatch?: () => void;
+  contactInfoOpen?: boolean;
+  onOpenContactInfo?: () => void;
+  onCloseContactInfo?: () => void;
+  onViewProfile?: () => void;
+  onOpenChatSettings?: () => void;
+  onOpenLetGo?: () => void;
+  onOpenIntro?: () => void;
+  onArchived?: () => Promise<void> | void;
   /** The member's Mr OneHook plan; "Ask Mr OneHook" shows only while Pro is on in this environment. */
   pro: MrOneHookPlanContext;
   /**
@@ -1275,11 +1522,21 @@ export function MatchConversation({
   );
   const {
     messages,
+    reactionsByMessage = EMPTY_REACTIONS,
+    starredIds = EMPTY_STARRED,
+    peerTyping = false,
+    peerPresence = null,
+    peerScreenshotAt = null,
+    defaultDisappearingSeconds = 0,
     loading,
     error,
     sendMessage,
     sendAttachment,
     retryAttachment,
+    deleteOwnMessage,
+    reactToMessage,
+    toggleStarred,
+    sendTyping,
     attachmentTransfers,
     attachmentCache,
     markAsDelivered,
@@ -1291,6 +1548,32 @@ export function MatchConversation({
     decryptPayload,
     sealPayload,
   } = useChatMessages(matchId, peerId);
+
+  const [fontSizeId] = useChatFontSize();
+  const fontSizeOption = getChatFontSizeOption(fontSizeId);
+  const [mrOneHookPrefs] = useMrOneHookPrefs(currentUserId);
+  const [restrictions, setRestrictions] = useState<PartnerChatRestrictions>(EMPTY_PARTNER_RESTRICTIONS);
+  useEffect(() => {
+    if (!peerId || !matchId) return;
+    let active = true;
+    PartnerRestrictionsApi.get(peerId, matchId)
+      .then((res) => {
+        if (active) setRestrictions(res);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [peerId, matchId]);
+
+  const decisionWindow = useDecisionWindowGate(matchId, peerName);
+
+  // Disappearing timer override for outgoing messages in this thread.
+  const [disappearSeconds, setDisappearSeconds] = useState<number>(defaultDisappearingSeconds);
+  useEffect(() => {
+    setDisappearSeconds(defaultDisappearingSeconds);
+  }, [defaultDisappearingSeconds, matchId]);
+
   // Live-location shares: running shares on open, then onLiveLocation. Positions open on device.
   const liveLocations = useLiveLocations(matchId, decryptPayload);
   // This tab's own sharing (the tab-bound engine): the running share here, and shares it just ended so
@@ -1320,6 +1603,8 @@ export function MatchConversation({
   const [locationOpen, setLocationOpen] = useState(false);
   const contactShare = useContactShare();
   const [input, setInput] = useState('');
+  const [replyTo, setReplyTo] = useState<{ messageId: string; timestamp: number; senderLabel: string; preview: string } | null>(null);
+  const [localContactInfoOpen, setLocalContactInfoOpen] = useState(false);
 
   // "Ask Mr OneHook about messages and files": the member selects text messages (any plan) and, with Mr
   // OneHook Pro available, photos and files of this conversation, sees exactly what would be shared and
@@ -1338,14 +1623,18 @@ export function MatchConversation({
     }),
     [pro.limits.maxAttachmentsPerMessage, pro.limits.maxAttachmentBytes]
   );
+  const shareableMessages = useMemo(
+    () => PartnerRestrictionGate.shareableWithMrOneHook(messages, restrictions),
+    [messages, restrictions]
+  );
   const candidates = useMemo(
     () =>
-      askCandidates(messages, {
+      askCandidates(shareableMessages, {
         historyAllowed,
         filesAllowed: pro.proVisible,
         limits: askLimits,
       }),
-    [messages, historyAllowed, pro.proVisible, askLimits]
+    [shareableMessages, historyAllowed, pro.proVisible, askLimits]
   );
   const [askMode, setAskMode] = useState(false);
   const [askSelected, setAskSelected] = useState<string[]>([]);
@@ -1449,9 +1738,69 @@ export function MatchConversation({
     [messages]
   );
   const { showToast } = useToast();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+
+  // Interactive message UI state: action menus, reaction picker/details, info, delete confirm, search, jump
+  const [menuMessageId, setMenuMessageId] = useState<string | null>(null);
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
+  const [reactionDetailsFor, setReactionDetailsFor] = useState<{ messageId: string; emoji?: string } | null>(null);
+  const [infoMessage, setInfoMessage] = useState<ChatMessageView | null>(null);
+  const [deleteConfirmMsg, setDeleteConfirmMsg] = useState<ChatMessageView | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+
+  // In-conversation search
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFilter, setSearchFilter] = useState<ConversationSearchFilter>('all');
+  const [searchIdx, setSearchIdx] = useState(0);
+
+  // Unread divider & scroll-away Jump-to-latest pill
+  const initialUnreadIdRef = useRef<string | null>(null);
+  const [initialUnreadId, setInitialUnreadId] = useState<string | null>(null);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
+  const [unseenWhileAway, setUnseenWhileAway] = useState(0);
+  const prevLenRef = useRef(0);
+
+  const jumpToMessage = useCallback((messageId: string) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const escaped = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(messageId) : messageId;
+    const el = container.querySelector(`[data-message-id="${escaped}"]`);
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedId(messageId);
+      window.setTimeout(() => setHighlightedId((curr) => (curr === messageId ? null : curr)), 1800);
+    }
+  }, []);
+
+  const searchHits = useMemo(
+    () => (searchOpen ? searchConversationMessages(messages, searchQuery, searchFilter) : []),
+    [searchOpen, messages, searchQuery, searchFilter]
+  );
+
+  useEffect(() => {
+    if (searchHits.length > 0) {
+      const clamped = Math.min(searchIdx, searchHits.length - 1);
+      if (clamped !== searchIdx) setSearchIdx(clamped);
+    } else if (searchIdx !== 0) {
+      setSearchIdx(0);
+    }
+  }, [searchHits, searchIdx]);
+
+  // Capture initial unread inbound message once per conversation load.
+  useEffect(() => {
+    if (initialUnreadIdRef.current !== null || messages.length === 0) return;
+    const firstUnread = messages.find((m) => m.senderId !== 'me' && m.status !== MessageStatus.Read);
+    if (firstUnread) {
+      initialUnreadIdRef.current = firstUnread.messageId;
+      setInitialUnreadId(firstUnread.messageId);
+    } else {
+      initialUnreadIdRef.current = '';
+    }
+  }, [messages]);
 
   // When the report dialog opens, page + decrypt the COMPLETE evidence window (the live `messages`
   // snapshot is a single oldest-first page and can omit the most recent messages in a long chat).
@@ -1518,17 +1867,30 @@ export function MatchConversation({
   // Merge server call rows into the message timeline, ordered by time (§8 D5: server rows).
   const timeline = useMemo(() => {
     const items: Array<
-      | { kind: 'message'; ts: number; message: (typeof messages)[number] }
+      | { kind: 'message'; ts: number; message: ChatMessageView }
       | { kind: 'call'; ts: number; call: Call }
     > = [];
-    for (const m of messages) items.push({ kind: 'message', ts: m.timestamp, message: m });
+    for (const m of messages) items.push({ kind: 'message', ts: m.timestamp, message: m as ChatMessageView });
     for (const c of callHistory) items.push({ kind: 'call', ts: c.createdAt, call: c });
     return items.sort((a, b) => a.ts - b.ts);
   }, [messages, callHistory]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const bubblePositions = useMemo(() => computeBubblePositions(messages), [messages]);
+  const messageById = useMemo(() => {
+    const map = new Map<string, ChatMessageView>();
+    for (const m of messages) map.set(m.messageId, m as ChatMessageView);
+    return map;
   }, [messages]);
+
+  useEffect(() => {
+    if (!awayFromBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else if (messages.length > prevLenRef.current) {
+      const added = messages.slice(prevLenRef.current).filter((m) => m.senderId !== 'me').length;
+      if (added > 0) setUnseenWhileAway((n) => n + added);
+    }
+    prevLenRef.current = messages.length;
+  }, [messages, awayFromBottom]);
 
   useEffect(() => {
     messages
@@ -1545,35 +1907,71 @@ export function MatchConversation({
     return () => clearTimeout(timer);
   }, [messages, markAsRead]);
 
-  const handleSend = async () => {
-    if (!input.trim() || suspended) return;
-    try {
-      await sendMessage(input);
-      setInput('');
-      // The local user just sent — re-check whether that satisfied the "both messaged" gate.
-      eligibility.recheck();
-    } catch (err) {
-      if (refusedAsSuspended(err)) return;
-      if (err instanceof Error && err.message) showToast(err.message, 'error');
+  // Typing indicator emit (throttled true on edit, false on idle/clear/unmount)
+  const typingTimerRef = useRef<number | null>(null);
+  const handleInputChange = (val: string) => {
+    setInput(val);
+    if (!sendTyping || suspended) return;
+    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+    if (val.trim()) {
+      sendTyping(true);
+      typingTimerRef.current = window.setTimeout(() => sendTyping(false), 3500);
+    } else {
+      sendTyping(false);
     }
+  };
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+      sendTyping?.(false);
+    };
+  }, [sendTyping]);
+
+  const sendOptions = useMemo(
+    () => ({
+      ...(replyTo ? { replyToMessageId: replyTo.messageId, replyToTimestamp: replyTo.timestamp } : {}),
+      ...(disappearSeconds > 0 ? { expireSeconds: disappearSeconds } : {}),
+    }),
+    [replyTo, disappearSeconds]
+  );
+
+  const handleSend = () => {
+    if (!input.trim() || suspended) return;
+    const text = input;
+    const opts = sendOptions;
+    decisionWindow.gateSend(async () => {
+      try {
+        await sendMessage(text, opts);
+        setInput('');
+        setReplyTo(null);
+        sendTyping?.(false);
+        // The local user just sent — re-check whether that satisfied the "both messaged" gate.
+        eligibility.recheck();
+      } catch (err) {
+        if (refusedAsSuspended(err)) return;
+        if (err instanceof Error && err.message) showToast(err.message, 'error');
+      }
+    });
   };
 
   const dispatchAttachment = useCallback(
-    async (attachment: OutgoingAttachment) => {
-      try {
-        await sendAttachment(attachment);
-      } catch (err) {
-        if (refusedAsSuspended(err)) return;
-        showToast(err instanceof Error ? err.message : 'That attachment could not be sent.', 'error');
-      }
+    (attachment: OutgoingAttachment) => {
+      decisionWindow.gateSend(async () => {
+        try {
+          await sendAttachment(attachment);
+        } catch (err) {
+          if (refusedAsSuspended(err)) return;
+          showToast(err instanceof Error ? err.message : 'That attachment could not be sent.', 'error');
+        }
+      });
     },
-    [sendAttachment, showToast, refusedAsSuspended]
+    [sendAttachment, showToast, refusedAsSuspended, decisionWindow]
   );
 
   const handlePickFile = useCallback(
     async (file: File, kind: AttachmentKind) => {
       const attachment = await buildOutgoingAttachment(file, kind);
-      void dispatchAttachment(attachment);
+      dispatchAttachment(attachment);
     },
     [dispatchAttachment]
   );
@@ -1581,7 +1979,7 @@ export function MatchConversation({
   const handleVoiceNote = useCallback(
     (blob: Blob, mime: string, durationMs: number, waveform: number[]) => {
       const extension = mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm';
-      void dispatchAttachment({
+      dispatchAttachment({
         blob,
         kind: 'audio',
         mime,
@@ -1601,19 +1999,28 @@ export function MatchConversation({
    */
   const sendStructured = useCallback(
     async (payload: Record<string, unknown>) => {
-      let sent: Awaited<ReturnType<typeof sendMessage>>;
-      try {
-        sent = await sendMessage(frameStructuredContent(payload));
-      } catch (err) {
-        if (refusedAsSuspended(err)) {
-          throw new Error(`${readOnlyCopy(conversationSuspensionReason(err) ?? 'PAUSED').title}.`);
-        }
-        throw err;
-      }
-      if (!sent) throw new Error("This chat isn't ready yet. Try again in a moment.");
-      eligibility.recheck();
+      await new Promise<void>((resolve, reject) => {
+        decisionWindow.gateSend(async () => {
+          try {
+            const sent = await sendMessage(frameStructuredContent(payload), sendOptions);
+            if (!sent) {
+              reject(new Error("This chat isn't ready yet. Try again in a moment."));
+              return;
+            }
+            setReplyTo(null);
+            eligibility.recheck();
+            resolve();
+          } catch (err) {
+            if (refusedAsSuspended(err)) {
+              reject(new Error(`${readOnlyCopy(conversationSuspensionReason(err) ?? 'PAUSED').title}.`));
+              return;
+            }
+            reject(err);
+          }
+        });
+      });
     },
-    [sendMessage, refusedAsSuspended, eligibility.recheck]
+    [sendMessage, refusedAsSuspended, eligibility.recheck, decisionWindow, sendOptions]
   );
 
   const sendCurrentLocation = useCallback(
@@ -1677,6 +2084,71 @@ export function MatchConversation({
     }
   };
 
+  const handleTimelineScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - (el.scrollTop + el.clientHeight);
+    const away = distanceToBottom > 140;
+    setAwayFromBottom(away);
+    if (!away && unseenWhileAway > 0) setUnseenWhileAway(0);
+  };
+
+  const handleQuickReaction = async (messageId: string, emoji: string) => {
+    if (!reactToMessage || suspended) return;
+    const myCurrent = reactionsByMessage[messageId]?.[currentUserId] ?? null;
+    const next = toggleReaction(myCurrent, emoji);
+    try {
+      await reactToMessage(messageId, next, emoji);
+    } catch {
+      showToast('Could not update reaction.', 'error');
+    }
+  };
+
+  const handleCopyMessage = async (m: ChatMessageView) => {
+    const preview = messagePreviewText(m);
+    try {
+      await navigator.clipboard.writeText(preview);
+      showToast('Message copied.', 'success');
+    } catch {
+      showToast('Could not copy message.', 'error');
+    }
+  };
+
+  const handleReplyMessage = (m: ChatMessageView) => {
+    setReplyTo({
+      messageId: m.messageId,
+      timestamp: m.timestamp,
+      senderLabel: m.senderId === 'me' ? 'You' : peerName,
+      preview: messagePreviewText(m),
+    });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmMsg || !deleteOwnMessage) return;
+    const target = deleteConfirmMsg;
+    setDeleteConfirmMsg(null);
+    try {
+      await deleteOwnMessage(target.messageId, target.timestamp);
+      showToast('Message deleted for everyone.', 'success');
+    } catch {
+      showToast('Could not delete that message.', 'error');
+    }
+  };
+
+  const presenceText = peerPresence
+    ? peerPresence.status === 'ONLINE'
+      ? 'Online'
+      : peerPresence.lastSeenAt
+        ? `Last seen ${formatMessageTime(peerPresence.lastSeenAt)}`
+        : null
+    : null;
+
+  const isContactOpen = contactInfoOpen ?? localContactInfoOpen;
+  const closeContact = () => {
+    setLocalContactInfoOpen(false);
+    onCloseContactInfo?.();
+  };
+
   return (
     <>
       {suspended && (
@@ -1713,34 +2185,186 @@ export function MatchConversation({
           </button>
         </div>
       )}
-      <div className="shrink-0 h-10 px-4 flex items-center justify-end gap-3 border-b border-border/60 bg-surface-card/60">
-        {(candidates.size > 0 || (!historyAllowed && timeline.length > 0)) && !askMode && (
+
+      <div className="shrink-0 h-10 px-4 flex items-center justify-between gap-2 border-b border-border/60 bg-surface-card/60">
+        <div className="flex items-center gap-3 min-w-0">
+          {(candidates.size > 0 || (!historyAllowed && timeline.length > 0)) && !askMode && (
+            <button
+              type="button"
+              onClick={() => setAskMode(true)}
+              {...trackProps(UiElement.CHAT_SELECT_OPEN, { value: 'header' })}
+              className="flex items-center gap-1.5 text-xs font-semibold text-accent hover:opacity-80 cursor-pointer shrink-0"
+            >
+              <Sparkles className={ICON_SECTION.toolbar.pillIcon} aria-hidden="true" />{' '}
+              {askFilesOffered ? 'Ask Mr OneHook about messages and files' : 'Ask Mr OneHook about messages'}
+            </button>
+          )}
+          {presenceText && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] text-text-secondary truncate">
+              {peerPresence?.status === 'ONLINE' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+              )}
+              {presenceText}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 ml-auto">
           <button
             type="button"
-            onClick={() => setAskMode(true)}
-            {...trackProps(UiElement.CHAT_SELECT_OPEN, { value: 'header' })}
-            className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-accent hover:opacity-80 cursor-pointer"
+            onClick={() => setSearchOpen((v) => !v)}
+            aria-label="Search in conversation"
+            title="Search conversation"
+            // TODO(telemetry-parity): switch to UiElement.CHAT_SEARCH_OPEN once enabled on web.
+            data-track-exempt="disabled: pending telemetry web parity enablement for chat.search_open"
+            className={`${ICON_SECTION.toolbar.subHeaderButton} ${
+              searchOpen ? 'bg-accent text-bg' : 'text-text-secondary hover:bg-surface-hover hover:text-text'
+            }`}
           >
-            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />{' '}
-            {askFilesOffered ? 'Ask Mr OneHook about messages and files' : 'Ask Mr OneHook about messages'}
+            <Search className={ICON_SECTION.toolbar.subHeaderIcon} />
           </button>
-        )}
-        {peerId && (
-          <CallButtons
-            peerName={peerName}
-            disabled={call.active}
-            // A suspended hook refuses call signalling (CONVERSATION_SUSPENDED): explain instead of ringing.
-            locked={Boolean(suspended) || eligibility.locked}
-            lockMessage={suspended ? (archived ? ARCHIVED_CALL_COPY : SUSPENDED_CALL_COPY) : eligibility.lockMessage}
-            onAudio={() =>
-              peerId && void call.startCall({ matchId, peerId, peerName, media: 'AUDIO' })
-            }
-            onVideo={() =>
-              peerId && void call.startCall({ matchId, peerId, peerName, media: 'VIDEO' })
-            }
-          />
-        )}
+          <button
+            type="button"
+            onClick={() => (onOpenContactInfo ? onOpenContactInfo() : setLocalContactInfoOpen(true))}
+            aria-label="Contact info"
+            title="Contact info & shared media"
+            // TODO(telemetry-parity): switch to UiElement.CHAT_CONTACT_INFO_OPEN once enabled on web.
+            data-track-exempt="disabled: pending telemetry web parity enablement for chat.contact_info_open"
+            className={`${ICON_SECTION.toolbar.subHeaderButton} text-text-secondary hover:bg-surface-hover hover:text-text`}
+          >
+            <Info className={ICON_SECTION.toolbar.subHeaderIcon} />
+          </button>
+          {onOpenIntro && (
+            <button
+              type="button"
+              onClick={onOpenIntro}
+              aria-label="How OneHook chat works"
+              title="How OneHook chat works"
+              // TODO(telemetry-parity): switch to UiElement.CHAT_INTRO_TOUR_OPEN once enabled on web.
+              data-track-exempt="disabled: pending telemetry web parity enablement for chat.intro_tour_open"
+              className={`hidden sm:flex ${ICON_SECTION.toolbar.subHeaderButton} text-text-secondary hover:bg-surface-hover hover:text-text`}
+            >
+              <HelpCircle className={ICON_SECTION.toolbar.subHeaderIcon} />
+            </button>
+          )}
+          {peerId && (
+            <CallButtons
+              peerName={peerName}
+              disabled={call.active}
+              // A suspended hook refuses call signalling (CONVERSATION_SUSPENDED): explain instead of ringing.
+              locked={Boolean(suspended) || eligibility.locked}
+              lockMessage={suspended ? (archived ? ARCHIVED_CALL_COPY : SUSPENDED_CALL_COPY) : eligibility.lockMessage}
+              onAudio={() =>
+                peerId && void call.startCall({ matchId, peerId, peerName, media: 'AUDIO' })
+              }
+              onVideo={() =>
+                peerId && void call.startCall({ matchId, peerId, peerName, media: 'VIDEO' })
+              }
+            />
+          )}
+        </div>
       </div>
+
+      {/* In-conversation Search bar */}
+      {searchOpen && (
+        <div className="shrink-0 px-4 py-2.5 bg-surface-card border-b border-border space-y-2">
+          <search className="flex items-center gap-2">
+            <label htmlFor="chat-in-thread-search" className="sr-only">
+              Search messages
+            </label>
+            <input
+              id="chat-in-thread-search"
+              type="search"
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSearchIdx(0);
+              }}
+              placeholder="Search messages…"
+              className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-surface text-xs text-text outline-none focus:border-accent"
+            />
+            {searchHits.length > 0 && (
+              <span className="text-[11px] text-text-secondary tabular-nums shrink-0">
+                {searchIdx + 1} / {searchHits.length}
+              </span>
+            )}
+            <button
+              type="button"
+              disabled={searchHits.length === 0}
+              onClick={() => {
+                const next = searchIdx - 1 >= 0 ? searchIdx - 1 : searchHits.length - 1;
+                setSearchIdx(next);
+                if (searchHits[next]) jumpToMessage(searchHits[next]);
+              }}
+              aria-label="Older match"
+              // TODO(telemetry-parity): switch to UiElement.CHAT_SEARCH_STEP once enabled on web.
+              data-track-exempt="disabled: pending telemetry web parity enablement for chat.search_step"
+              className="w-7 h-7 flex items-center justify-center rounded-lg border border-border disabled:opacity-40 cursor-pointer"
+            >
+              <ChevronUp className={ICON_SECTION.composer.inlineActionIcon} />
+            </button>
+            <button
+              type="button"
+              disabled={searchHits.length === 0}
+              onClick={() => {
+                const next = (searchIdx + 1) % searchHits.length;
+                setSearchIdx(next);
+                if (searchHits[next]) jumpToMessage(searchHits[next]);
+              }}
+              aria-label="Newer match"
+              // TODO(telemetry-parity): switch to UiElement.CHAT_SEARCH_STEP once enabled on web.
+              data-track-exempt="disabled: pending telemetry web parity enablement for chat.search_step"
+              className="w-7 h-7 flex items-center justify-center rounded-lg border border-border disabled:opacity-40 cursor-pointer"
+            >
+              <ChevronDown className={ICON_SECTION.composer.inlineActionIcon} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchOpen(false);
+                setSearchQuery('');
+              }}
+              aria-label="Close search"
+              // TODO(telemetry-parity): switch to UiElement.CHAT_SEARCH_OPEN once enabled on web.
+              data-track-exempt="disabled: pending telemetry web parity enablement for chat.search_open"
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-hover cursor-pointer"
+            >
+              <X className={ICON_SECTION.composer.inlineActionIcon} />
+            </button>
+          </search>
+          <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label="Search filters">
+            {(
+              [
+                ['all', 'All'],
+                ['from_me', 'From me'],
+                ['from_them', 'From them'],
+                ['media', 'Media'],
+                ['links', 'Links'],
+              ] as const
+            ).map(([f, label]) => (
+              <button
+                key={f}
+                type="button"
+                aria-pressed={searchFilter === f}
+                onClick={() => {
+                  setSearchFilter(f);
+                  setSearchIdx(0);
+                }}
+                // TODO(telemetry-parity): switch to UiElement.CHAT_SEARCH_FILTER once enabled on web.
+                data-track-exempt="disabled: pending telemetry web parity enablement for chat.search_filter"
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium border cursor-pointer ${
+                  searchFilter === f
+                    ? 'bg-accent text-bg border-accent'
+                    : 'bg-surface border-border text-text-secondary'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div
         className="flex-1 relative min-h-0"
         onDragOver={(e) => {
@@ -1762,7 +2386,11 @@ export function MatchConversation({
             <p className="text-xs uppercase tracking-[0.3em] font-black text-accent">Drop to send</p>
           </div>
         )}
-        <div className="relative h-full p-6 md:p-8 space-y-6 overflow-y-auto min-h-0">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleTimelineScroll}
+          className="relative h-full p-6 md:p-8 space-y-2 overflow-y-auto min-h-0 z-[1]"
+        >
           {/*
             A horizon means the account was reset, so those messages can never be opened again and
             offering recovery would be a false promise. Otherwise fall back to the restore prompt.
@@ -1782,26 +2410,92 @@ export function MatchConversation({
               <p className="text-xs text-red-500 italic">{error.message}</p>
             </div>
           ) : timeline.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center space-y-2 opacity-50">
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-3 opacity-70">
               <p className="text-xs italic font-serif">
                 No messages yet. Say hello to {peerName} whenever you&rsquo;re ready.
               </p>
+              {onOpenIntro && (
+                <button
+                  type="button"
+                  onClick={onOpenIntro}
+                  // TODO(telemetry-parity): switch to UiElement.CHAT_INTRO_TOUR_OPEN once enabled on web.
+                  data-track-exempt="disabled: pending telemetry web parity enablement for chat.intro_tour_open"
+                  className="text-xs text-accent hover:underline cursor-pointer"
+                >
+                  How OneHook chat works
+                </button>
+              )}
             </div>
           ) : (
-            timeline.map((item) =>
-              item.kind === 'call' ? (
-                <CallHistoryItem
-                  key={`call-${item.call.callId}`}
-                  call={item.call}
-                  currentUserId={currentUserId}
-                />
-              ) : (
-                ((m) => (
+            timeline.map((item, idx) => {
+              const prevItem = idx > 0 ? timeline[idx - 1] : null;
+              const showDayHeader = !prevItem || !sameLocalDay(prevItem.ts, item.ts);
+
+              if (item.kind === 'call') {
+                return (
+                  <div key={`call-${item.call.callId}`} className="space-y-2 pt-2">
+                    {showDayHeader && (
+                      <div className="flex justify-center my-2">
+                        <span className="px-3 py-0.5 rounded-full bg-surface/80 border border-border/60 text-[10px] font-semibold text-text-secondary">
+                          {formatDayLabel(item.ts)}
+                        </span>
+                      </div>
+                    )}
+                    <CallHistoryItem call={item.call} currentUserId={currentUserId} />
+                  </div>
+                );
+              }
+
+              const m = item.message;
+              const mine = m.senderId === 'me';
+              const pos = bubblePositions.get(m.messageId) ?? 'single';
+              const isGroupedTop = pos === 'middle' || pos === 'last';
+              const isGroupEnd = pos === 'single' || pos === 'last';
+              const quoted = m.replyToMessageId ? messageById.get(m.replyToMessageId) : undefined;
+              const msgReactions = reactionsByMessage[m.messageId] ?? {};
+              const reactionChips = buildReactionChips(msgReactions, currentUserId);
+              const expiringSec = getSentDisappearingSeconds(m.messageId);
+              const isStarred = starredIds.has(m.messageId);
+              const showUnreadDivider = initialUnreadId && initialUnreadId === m.messageId;
+              const isSearchHit = highlightedId === m.messageId || (searchOpen && searchHits[searchIdx] === m.messageId);
+
+              const cornerClass = mine
+                ? isGroupEnd
+                  ? 'rounded-2xl rounded-br-sm'
+                  : 'rounded-2xl rounded-r-md'
+                : isGroupEnd
+                  ? 'rounded-2xl rounded-bl-sm'
+                  : 'rounded-2xl rounded-l-md';
+
+              return (
+                <div key={m.messageId} className={isGroupedTop ? 'pt-0.5' : 'pt-3'}>
+                  {showDayHeader && (
+                    <div className="flex justify-center my-3">
+                      <span className="px-3 py-0.5 rounded-full bg-surface/80 border border-border/60 text-[10px] font-semibold text-text-secondary">
+                        {formatDayLabel(m.timestamp)}
+                      </span>
+                    </div>
+                  )}
+                  {showUnreadDivider && (
+                    <div className="flex items-center gap-3 my-3" role="separator" aria-label="Unread messages">
+                      <div className="h-px flex-1 bg-accent/40" />
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-accent">
+                        Unread messages
+                      </span>
+                      <div className="h-px flex-1 bg-accent/40" />
+                    </div>
+                  )}
                   <div
-                    key={m.messageId}
-                    className={`max-w-md relative ${m.senderId === 'me' ? 'ml-auto' : ''} ${
+                    data-message-id={m.messageId}
+                    data-track-exempt="gesture: context menu opens tracked message action menu"
+                    onContextMenu={(e) => {
+                      if (askMode || m.undecryptable) return;
+                      e.preventDefault();
+                      setMenuMessageId((prev) => (prev === m.messageId ? null : m.messageId));
+                    }}
+                    className={`group/msg max-w-md relative transition-all ${mine ? 'ml-auto' : ''} ${
                       askMode && askSelected.includes(m.messageId) ? 'ring-2 ring-accent rounded-2xl' : ''
-                    }`}
+                    } ${isSearchHit ? 'ring-2 ring-amber-400 rounded-2xl' : ''}`}
                   >
                     {askMode && candidates.has(m.messageId) && (
                       <button
@@ -1814,52 +2508,344 @@ export function MatchConversation({
                           value: askSelected.includes(m.messageId) ? 'deselected' : 'selected',
                         })}
                         className={`absolute top-6 z-10 w-6 h-6 rounded-full border-2 flex items-center justify-center cursor-pointer ${
-                          m.senderId === 'me' ? '-left-8' : '-right-8'
+                          mine ? '-left-8' : '-right-8'
                         } ${askSelected.includes(m.messageId) ? 'bg-accent border-accent text-bg' : 'bg-surface border-border'}`}
                       >
                         {askSelected.includes(m.messageId) && <Check className="w-3.5 h-3.5" />}
                       </button>
                     )}
-                    <div
-                      className={`text-[9px] uppercase tracking-widest opacity-40 mb-1 flex items-center gap-2 ${
-                        m.senderId === 'me' ? 'justify-end' : ''
-                      }`}
-                    >
-                      <span>{m.senderId === 'me' ? 'You' : peerName}</span>
-                      {statusIcon(m)}
+
+                    {!isGroupedTop && (
+                      <div
+                        className={`text-[9px] uppercase tracking-widest opacity-45 mb-1 flex items-center gap-2 ${
+                          mine ? 'justify-end' : ''
+                        }`}
+                      >
+                        <span>{mine ? 'You' : peerName}</span>
+                      </div>
+                    )}
+
+                    <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : 'flex-row'}`}>
+                      <div
+                        className={`p-3.5 md:p-4 ${cornerClass} ${fontSizeOption.textClass} leading-relaxed flex-1 min-w-0 ${
+                          mine
+                            ? 'bg-ig-blue text-white shadow-sm'
+                            : 'bg-surface text-text border border-border/60'
+                        }`}
+                      >
+                        {/* Quoted Reply Preview */}
+                        {m.replyToMessageId && (
+                          <button
+                            type="button"
+                            onClick={() => jumpToMessage(m.replyToMessageId!)}
+                            // TODO(telemetry-parity): switch to UiElement.CHAT_REPLY_JUMP once enabled on web.
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.reply_jump"
+                            className={`w-full text-left mb-2 px-2.5 py-1.5 rounded-lg border-l-2 text-xs truncate cursor-pointer ${
+                              mine
+                                ? 'bg-black/15 border-white/70 text-white/90'
+                                : 'bg-bg/70 border-accent text-text-secondary'
+                            }`}
+                          >
+                            <span className="block text-[10px] font-bold">
+                              {quoted?.senderId === 'me' ? 'You' : peerName}
+                            </span>
+                            <span className="block truncate opacity-80">
+                              {quoted ? messagePreviewText(quoted) : 'Original message'}
+                            </span>
+                          </button>
+                        )}
+
+                        {/*
+                          MUST branch on `undecryptable`: an unreadable message carries an EMPTY body, so
+                          rendering `ciphertext` unconditionally produced a silent blank bubble. Attachment
+                          decoding, text, and both retry paths are handled inside MatchMessageBody.
+                        */}
+                        <MatchMessageBody
+                          message={m}
+                          mine={mine}
+                          cache={attachmentCache}
+                          matchId={matchId}
+                          transfer={attachmentTransfers[m.messageId]}
+                          onRetryAttachment={() => decisionWindow.gateSend(() => retryAttachment(m.messageId))}
+                          onRestore={() => setRecoveryOpen(true)}
+                          onReportPeerMedia={onReportPeer}
+                          onRetryText={(text) => decisionWindow.gateSend(() => sendMessage(text, sendOptions))}
+                          live={liveContext}
+                          canSaveMedia={PartnerRestrictionGate.canSaveMedia(mine, restrictions)}
+                        />
+
+                        <div
+                          className={`mt-1.5 flex items-center gap-1.5 text-[10px] opacity-65 ${
+                            mine ? 'justify-end text-white/80' : 'text-text-muted'
+                          }`}
+                        >
+                          {expiringSec && <Clock className="w-2.5 h-2.5" aria-label="Disappearing message" />}
+                          {isStarred && <Star className="w-2.5 h-2.5 fill-current text-amber-400" aria-label="Starred message" />}
+                          <span>{formatMessageTime(m.timestamp)}</span>
+                          {statusIcon(m)}
+                        </div>
+                      </div>
+
+                      {/* Accessible keyboard / hover message actions trigger */}
+                      {!askMode && !m.undecryptable && (
+                        <div className="relative opacity-0 group-hover/msg:opacity-100 focus-within:opacity-100 transition-opacity shrink-0 flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleReplyMessage(m)}
+                            aria-label="Reply to message"
+                            // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_REPLY once enabled on web.
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_reply"
+                            className="p-1 rounded-lg hover:bg-surface-hover text-text-muted hover:text-text cursor-pointer"
+                          >
+                            <CornerUpLeft className={ICON_SECTION.composer.inlineActionIcon} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMenuMessageId((prev) => (prev === m.messageId ? null : m.messageId))
+                            }
+                            aria-label="Message actions"
+                            aria-haspopup="menu"
+                            aria-expanded={menuMessageId === m.messageId}
+                            // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_MENU_OPEN once enabled on web.
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_menu_open"
+                            className="p-1 rounded-lg hover:bg-surface-hover text-text-muted hover:text-text cursor-pointer"
+                          >
+                            <MoreHorizontal className={ICON_SECTION.composer.inlineActionIcon} />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div
-                      className={`p-4 md:p-5 rounded-2xl text-sm leading-relaxed ${
-                        m.senderId === 'me'
-                          ? 'bg-ig-blue text-white shadow-sm rounded-br-sm'
-                          : 'bg-surface text-text border border-border/60 rounded-bl-sm'
-                      }`}
-                    >
-                      {/*
-                        MUST branch on `undecryptable`: an unreadable message carries an EMPTY body, so
-                        rendering `ciphertext` unconditionally produced a silent blank bubble. Attachment
-                        decoding, text, and both retry paths are handled inside MatchMessageBody.
-                      */}
-                      <MatchMessageBody
-                        message={m}
-                        mine={m.senderId === 'me'}
-                        cache={attachmentCache}
-                        matchId={matchId}
-                        transfer={attachmentTransfers[m.messageId]}
-                        onRetryAttachment={() => void retryAttachment(m.messageId)}
-                        onRestore={() => setRecoveryOpen(true)}
-                        onReportPeerMedia={onReportPeer}
-                        onRetryText={(text) => void sendMessage(text)}
-                        live={liveContext}
-                      />
-                    </div>
+
+                    {/* Message Context / Action Menu */}
+                    {menuMessageId === m.messageId && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-30"
+                          onClick={() => setMenuMessageId(null)}
+                          data-track-exempt="backdrop: click-away closing message menu"
+                        />
+                        <div
+                          role="menu"
+                          className={`absolute z-40 mt-1 w-52 rounded-2xl border border-border bg-surface-card shadow-xl p-1.5 space-y-1 ${
+                            mine ? 'right-0' : 'left-0'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between px-1.5 py-1 border-b border-border/60">
+                            {QUICK_REACTIONS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => {
+                                  setMenuMessageId(null);
+                                  void handleQuickReaction(m.messageId, emoji);
+                                }}
+                                // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_REACT once enabled on web.
+                                data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_react"
+                                className="w-7 h-7 rounded-lg hover:bg-surface-hover text-base flex items-center justify-center cursor-pointer"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              aria-label="More reactions"
+                              onClick={() => {
+                                setMenuMessageId(null);
+                                setReactionPickerFor(m.messageId);
+                              }}
+                              // TODO(telemetry-parity): switch to UiElement.CHAT_REACTION_PICKER_OPEN once enabled on web.
+                              data-track-exempt="disabled: pending telemetry web parity enablement for chat.reaction_picker_open"
+                              className="w-7 h-7 rounded-lg hover:bg-surface-hover flex items-center justify-center text-text-secondary cursor-pointer"
+                            >
+                              <Smile className={ICON_SECTION.composer.menuItemIcon} />
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setMenuMessageId(null);
+                              handleReplyMessage(m);
+                            }}
+                            // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_REPLY once enabled on web.
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_reply"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-text hover:bg-surface-hover rounded-lg cursor-pointer"
+                          >
+                            <CornerUpLeft className={ICON_SECTION.composer.inlineActionIcon} /> Reply
+                          </button>
+
+                          {mrOneHookPrefs.asksInMessageMenus && candidates.has(m.messageId) && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setMenuMessageId(null);
+                                setAskMode(true);
+                                toggleAskSelected(m.messageId);
+                              }}
+                              // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_ASK_MR_ONEHOOK once enabled on web.
+                              data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_ask_mr_onehook"
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-accent hover:bg-surface-hover rounded-lg cursor-pointer"
+                            >
+                              <Sparkles className={ICON_SECTION.composer.inlineActionIcon} /> Ask Mr.OneHook
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setMenuMessageId(null);
+                              void toggleStarred?.(m.messageId).catch(() =>
+                                showToast('Could not update star.', 'error')
+                              );
+                            }}
+                            // TODO(telemetry-parity): switch to UiElement.CHAT_MEDIA_STAR once enabled on web.
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.media_star"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-text hover:bg-surface-hover rounded-lg cursor-pointer"
+                          >
+                            <Star className={ICON_SECTION.composer.inlineActionIcon} /> {isStarred ? 'Unstar' : 'Star'}
+                          </button>
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setMenuMessageId(null);
+                              void handleCopyMessage(m);
+                            }}
+                            // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_COPY once enabled on web.
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_copy"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-text hover:bg-surface-hover rounded-lg cursor-pointer"
+                          >
+                            <Copy className={ICON_SECTION.composer.inlineActionIcon} /> Copy
+                          </button>
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setMenuMessageId(null);
+                              setInfoMessage(m);
+                            }}
+                            // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_INFO once enabled on web.
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_info"
+                            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-text hover:bg-surface-hover rounded-lg cursor-pointer"
+                          >
+                            <Info className={ICON_SECTION.composer.inlineActionIcon} /> Message info
+                          </button>
+
+                          {mine && deleteOwnMessage && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setMenuMessageId(null);
+                                setDeleteConfirmMsg(m);
+                              }}
+                              // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_DELETE once enabled on web.
+                              data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_delete"
+                              className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-red-500 hover:bg-surface-hover rounded-lg cursor-pointer"
+                            >
+                              <Trash2 className={ICON_SECTION.composer.inlineActionIcon} /> Delete for everyone
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Encrypted reaction chips */}
+                    {reactionChips.length > 0 && (
+                      <div className={`flex flex-wrap gap-1 mt-1 ${mine ? 'justify-end' : 'justify-start'}`}>
+                        {reactionChips.map((chip) => (
+                          <button
+                            key={chip.emoji}
+                            type="button"
+                            onClick={() => void handleQuickReaction(m.messageId, chip.emoji)}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setReactionDetailsFor({ messageId: m.messageId, emoji: chip.emoji });
+                            }}
+                            // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_REACT once enabled on web.
+                            data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_react"
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors cursor-pointer ${
+                              chip.includesMine
+                                ? 'bg-accent/15 border-accent text-text'
+                                : 'bg-surface border-border text-text-secondary hover:bg-surface-hover'
+                            }`}
+                          >
+                            <span>{chip.emoji}</span>
+                            {chip.count > 1 && <span className="text-[10px] font-semibold">{chip.count}</span>}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setReactionDetailsFor({ messageId: m.messageId })}
+                          aria-label="Who reacted"
+                          // TODO(telemetry-parity): switch to UiElement.CHAT_REACTION_DETAILS_OPEN once enabled on web.
+                          data-track-exempt="disabled: pending telemetry web parity enablement for chat.reaction_details_open"
+                          className="px-1.5 py-0.5 rounded-full text-[10px] border border-border bg-surface text-text-muted hover:text-text cursor-pointer"
+                        >
+                          Details
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))(item.message)
-              )
-            )
+                </div>
+              );
+            })
           )}
+
+          {/* Typing bubble */}
+          {peerTyping && (
+            <div className="max-w-xs pt-2" role="status" aria-live="polite">
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl rounded-bl-sm bg-surface border border-border/60 text-xs text-text-secondary">
+                <span>{peerName} is typing</span>
+                <span className="inline-flex gap-0.5">
+                  <span className="w-1 h-1 rounded-full bg-text-secondary animate-bounce [animation-delay:-0.2s]" />
+                  <span className="w-1 h-1 rounded-full bg-text-secondary animate-bounce [animation-delay:-0.1s]" />
+                  <span className="w-1 h-1 rounded-full bg-text-secondary animate-bounce" />
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Peer screenshot alert */}
+          {peerScreenshotAt && (
+            <div className="flex justify-center pt-2">
+              <span className="px-3 py-1 rounded-full bg-surface border border-border text-[11px] text-text-secondary">
+                {peerName} took a screenshot · {formatMessageTime(peerScreenshotAt)}
+              </span>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Floating Jump-to-latest pill with filled accent unread badge (feat/ui-round4 parity) */}
+        {awayFromBottom && (
+          <button
+            type="button"
+            onClick={() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              setUnseenWhileAway(0);
+              setAwayFromBottom(false);
+            }}
+            // TODO(telemetry-parity): switch to UiElement.CHAT_JUMP_TO_LATEST once enabled on web.
+            data-track-exempt="disabled: pending telemetry web parity enablement for chat.jump_to_latest"
+            className="absolute bottom-4 right-5 z-20 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-accent text-bg text-xs font-semibold shadow-lg hover:opacity-95 cursor-pointer"
+          >
+            <ArrowDown className={ICON_SECTION.composer.inlineActionIcon} aria-hidden="true" />
+            <span>Latest</span>
+            {unseenWhileAway > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-bg text-accent text-[10px] font-bold">
+                {unseenWhileAway}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {askMode && (
@@ -1883,7 +2869,9 @@ export function MatchConversation({
               {askNotice ??
                 (!historyAllowed
                   ? `${ASK_HISTORY_NOT_ALLOWED_COPY}${askFilesOffered ? ' You can still select files.' : ''}`
-                  : 'Mr OneHook reads them for one answer. They are not kept.')}
+                  : restrictions.mrOneHook
+                    ? PartnerRestrictionGate.mrOneHookLeftOutNotice(peerName)
+                    : 'Mr OneHook reads them for one answer. They are not kept.')}
             </p>
           </div>
           <button
@@ -1913,11 +2901,63 @@ export function MatchConversation({
         />
       )}
 
+      {/* Decision window bar above composer */}
+      {!suspended && (
+        <DecisionWindowBar
+          matchId={matchId}
+          peerName={peerName}
+          onLetGo={() => onOpenLetGo?.()}
+        />
+      )}
+
       <Composer
         value={input}
-        onChange={setInput}
+        onChange={handleInputChange}
         onSend={handleSend}
         readOnlyReason={suspended ? readOnly.composer : undefined}
+        above={
+          <>
+            {replyTo && (
+              <div className="flex items-start gap-2 mb-2 rounded-xl border border-accent/40 bg-accent/5 px-3 py-2 text-xs">
+                <CornerUpLeft className={`${ICON_SECTION.composer.inlineActionIcon} text-accent mt-0.5`} aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-text">Replying to {replyTo.senderLabel}</p>
+                  <p className="truncate text-text-secondary">{replyTo.preview}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReplyTo(null)}
+                  aria-label="Cancel reply"
+                  // TODO(telemetry-parity): switch to UiElement.CHAT_REPLY_CANCEL once enabled on web.
+                  data-track-exempt="disabled: pending telemetry web parity enablement for chat.reply_cancel"
+                  className="p-0.5 text-text-muted hover:text-text cursor-pointer"
+                >
+                  <X className={ICON_SECTION.composer.inlineActionIcon} />
+                </button>
+              </div>
+            )}
+            {!suspended && (
+              <div className="flex items-center justify-end mb-1.5">
+                <label className="inline-flex items-center gap-1.5 text-[11px] text-text-muted cursor-pointer">
+                  <Clock className={ICON_SECTION.section.badgeIcon} aria-hidden="true" />
+                  <span>Disappearing:</span>
+                  <select
+                    value={String(disappearSeconds)}
+                    onChange={(e) => setDisappearSeconds(Number(e.target.value) || 0)}
+                    aria-label="Disappearing messages timer"
+                    className="bg-transparent text-text font-medium outline-none cursor-pointer"
+                  >
+                    {DISAPPEARING_PRESETS.map((p) => (
+                      <option key={p.seconds} value={String(p.seconds)}>
+                        {p.seconds === 0 ? 'Off' : formatDisappearingShort(p.seconds)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+          </>
+        }
         leading={
           <AttachmentComposer
             disabled={loading || Boolean(suspended)}
@@ -1946,17 +2986,100 @@ export function MatchConversation({
         onSend={sendStructured}
       />
 
-      {/*
-        Recovery runs against the ACCOUNT, not this conversation: importing the history key unlocks
-        every match at once, so a successful transfer refetches this thread and any other open one
-        re-decrypts on its next read.
-      */}
       <HistoryRecoveryModal
         userId={currentUserId}
         open={recoveryOpen}
         onClose={() => setRecoveryOpen(false)}
         onRecovered={() => void refetch()}
       />
+
+      <ChatContactInfoModal
+        open={isContactOpen}
+        onClose={closeContact}
+        matchId={matchId}
+        peerName={peerName}
+        peerPhoto={peerPhoto}
+        presenceText={presenceText}
+        messages={messages}
+        starredIds={starredIds}
+        attachmentCache={attachmentCache}
+        restrictions={restrictions}
+        onToggleStar={(id) => void toggleStarred?.(id)}
+        onJumpToMessage={jumpToMessage}
+        onStartCall={
+          peerId && !suspended && !eligibility.locked
+            ? (media) => void call.startCall({ matchId, peerId, peerName, media })
+            : undefined
+        }
+        onOpenSearch={() => setSearchOpen(true)}
+        onViewProfile={() => onViewProfile?.()}
+        onOpenChatSettings={() => onOpenChatSettings?.()}
+        onUnhook={() => onOpenLetGo?.()}
+        onBlock={() => onReportPeer?.()}
+        onReport={() => onViewProfile?.()}
+        onArchived={onArchived}
+      />
+
+      <EmojiReactionPickerDialog
+        open={Boolean(reactionPickerFor)}
+        onClose={() => setReactionPickerFor(null)}
+        currentReactionSet={reactionPickerFor ? reactionsByMessage[reactionPickerFor]?.[currentUserId] : null}
+        onPick={(emoji) => {
+          if (reactionPickerFor) void handleQuickReaction(reactionPickerFor, emoji);
+        }}
+      />
+
+      <ReactionDetailsDialog
+        open={Boolean(reactionDetailsFor)}
+        onClose={() => setReactionDetailsFor(null)}
+        reactions={reactionDetailsFor ? reactionsByMessage[reactionDetailsFor.messageId] ?? {} : {}}
+        myUserId={currentUserId}
+        partnerName={peerName}
+        initialEmoji={reactionDetailsFor?.emoji}
+        onToggleMine={(emoji) => {
+          if (reactionDetailsFor) void handleQuickReaction(reactionDetailsFor.messageId, emoji);
+        }}
+      />
+
+      <MessageInfoDialog
+        message={infoMessage}
+        onClose={() => setInfoMessage(null)}
+        starred={infoMessage ? starredIds.has(infoMessage.messageId) : false}
+      />
+
+      <ModalDialog
+        open={Boolean(deleteConfirmMsg)}
+        onClose={() => setDeleteConfirmMsg(null)}
+        label="Delete message for everyone?"
+      >
+        <div className="p-5 space-y-4">
+          <h3 className="text-base font-serif italic font-bold text-text">Delete this message for everyone?</h3>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            This removes the message from both devices.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmMsg(null)}
+              {...trackProps(UiElement.SHARED_ALERT_DISMISS, { action: 'dismiss' })}
+              className="px-4 py-2 rounded-xl border border-border text-xs font-semibold text-text cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDeleteConfirm()}
+              // TODO(telemetry-parity): switch to UiElement.CHAT_MESSAGE_DELETE once enabled on web.
+              data-track-exempt="disabled: pending telemetry web parity enablement for chat.message_delete"
+              className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-semibold cursor-pointer"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </ModalDialog>
+
+      {decisionWindow.confirmDialog}
 
       {peerId && (
         <ReportFlowDialog
@@ -2039,11 +3162,11 @@ export function MrOneHookConversation({
               aria-haspopup="menu"
               aria-expanded={scopeMenuOpen}
             >
-              <Sparkles className="w-3.5 h-3.5 text-accent" />
+              <Sparkles className={`${ICON_SECTION.toolbar.pillIcon} text-accent`} />
               <span className="max-w-[160px] truncate">
                 {scope.type === 'product' ? 'OneHook (product only)' : activeMatchName}
               </span>
-              <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+              <ChevronDown className={`${ICON_SECTION.toolbar.pillIcon} opacity-70`} />
             </button>
             <AnimatePresence>
               {scopeMenuOpen && (
@@ -2109,7 +3232,7 @@ export function MrOneHookConversation({
               {...trackProps(UiElement.CHAT_MR_ONEHOOK_GET_PRO, { value: 'header' })}
               className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-full border border-accent/40 text-xs font-semibold text-accent hover:bg-accent/5 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+              <Sparkles className={ICON_SECTION.toolbar.pillIcon} aria-hidden="true" />
               {pro.plan === MrOneHookPlan.PRO ? 'Mr OneHook Pro' : 'Get Mr OneHook Pro'}
             </button>
           )}
@@ -2153,7 +3276,15 @@ function MrOneHookProductScope({
     onPlan: notePlanFromChat,
     onOpenScope,
   });
-  return <MrOneHookChatBody chat={chat} wallpaper={wallpaper} pro={pro} scopeType="product" />;
+  return (
+    <MrOneHookChatBody
+      chat={chat}
+      currentUserId={currentUser.id}
+      wallpaper={wallpaper}
+      pro={pro}
+      scopeType="product"
+    />
+  );
 }
 
 /**
@@ -2182,6 +3313,7 @@ function MrOneHookMatchScope({
   onHandoffTaken: () => void;
 }) {
   const { messages } = useChatMessages(match.matchId, match.peerId || undefined);
+  const [mrPrefs] = useMrOneHookPrefs(currentUser.id);
 
   // Stable snapshot of the decrypted turns for the pure selector; recomputed as history changes.
   const selectable = useMemo(() => toSelectableMessages(messages), [messages]);
@@ -2197,13 +3329,14 @@ function MrOneHookMatchScope({
     userId: currentUser.id,
     scope: { type: 'match', matchId: match.matchId },
     onPlan: notePlanFromChat,
-    resolveLocalExcerpts,
+    resolveLocalExcerpts: mrPrefs.answersContextRequests ? resolveLocalExcerpts : undefined,
     onOpenScope,
   });
 
   return (
     <MrOneHookChatBody
       chat={chat}
+      currentUserId={currentUser.id}
       wallpaper={wallpaper}
       matchName={matchName}
       pro={pro}
@@ -2222,6 +3355,7 @@ function MrOneHookMatchScope({
  */
 export function MrOneHookChatBody({
   chat,
+  currentUserId,
   wallpaper,
   matchName,
   pro,
@@ -2230,6 +3364,7 @@ export function MrOneHookChatBody({
   onHandoffTaken,
 }: {
   chat: ReturnType<typeof useMrOneHookChat>;
+  currentUserId?: string;
   wallpaper: ChatWallpaper;
   matchName?: string;
   pro: MrOneHookPlanContext;
@@ -2264,7 +3399,13 @@ export function MrOneHookChatBody({
   // Terminal availability (not entitled / signed out / not configured): block input entirely. The
   // reason is already surfaced as an assistant bubble by the hook, so the composer just locks.
   const unavailable = availability !== 'AVAILABLE';
-  const attachments = useMrOneHookAttachments({ plan: pro.plan, limits: pro.limits });
+  const ephemeralAttachments = useMrOneHookAttachments({ plan: pro.plan, limits: pro.limits });
+  const persistentAttachments = useMrOneHookPersistentUploads({
+    userId: currentUserId,
+    plan: pro.plan,
+    limits: pro.limits,
+  });
+  const attachments = currentUserId ? persistentAttachments : ephemeralAttachments;
 
   // "Ask Mr OneHook" from the match chat: the files arrive uploaded (keep polling them here), and the
   // messages the member confirmed wait for the next question (memory only; sent once with it).
@@ -2436,11 +3577,42 @@ export function MrOneHookChatBody({
         )}
         <div className="relative h-full px-6 md:px-8 pb-6 md:pb-8 pt-20 space-y-6 overflow-y-auto min-h-0">
           {messages.length === 0 && !loading ? (
-            <div className="flex flex-col items-center justify-center h-full text-center space-y-3 opacity-70">
-              <Mascot mood="Happy" className="w-16 h-16" />
-              <p className="text-xs italic font-serif max-w-xs">
-                Share what&rsquo;s on your mind, ask me anything about OneHook, or just say hi.
-              </p>
+            <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
+              <div className="space-y-2 opacity-80">
+                <Mascot mood="Happy" className="w-16 h-16 mx-auto" />
+                <p className="text-xs italic font-serif max-w-xs">
+                  {scopeType === 'connection' && matchName
+                    ? `Ask me for thoughtful ideas, conversation starters, or reflection around ${matchName}.`
+                    : 'Share what’s on your mind, ask me anything about OneHook, or just say hi.'}
+                </p>
+              </div>
+              {!unavailable && (
+                <div className="flex flex-wrap justify-center gap-2 max-w-md">
+                  {(scopeType === 'connection'
+                    ? [
+                        `Suggest a thoughtful reply to ${matchName ?? 'my match'}`,
+                        'Ideas for a first meetup',
+                        'Help me keep the conversation flowing',
+                      ]
+                    : [
+                        'How does OneHook matching work?',
+                        'Help me improve my prompts',
+                        'How do archives and unhooks work?',
+                      ]
+                  ).map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => void send(suggestion)}
+                      // TODO(telemetry-parity): switch to UiElement.CHAT_MR_ONEHOOK_OPEN once prompt cards have dedicated ID.
+                      data-track-exempt="disabled: pending telemetry web parity enablement for chat.mr_onehook_open"
+                      className="px-3 py-1.5 rounded-full border border-border bg-surface hover:bg-surface-hover text-xs text-text transition-colors cursor-pointer"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             messages.map((m: MrOneHookMessage, i) => (
@@ -2708,7 +3880,7 @@ function RequestsButton({
         aria-haspopup="dialog"
         {...trackProps(UiElement.CHAT_REQUESTS_OPEN)}
       >
-        <Inbox className="w-5 h-5 stroke-[1.75]" />
+        <Inbox className={ICON_SECTION.header.icon} />
         {count > 0 && (
           <span
             aria-hidden="true"
@@ -2740,6 +3912,10 @@ function ConversationPickerModal({
   rows,
   selection,
   onSelect,
+  archiveCount,
+  onOpenArchived,
+  onOpenContactInfo,
+  onLetGo,
 }: {
   open: boolean;
   onClose: () => void;
@@ -2748,13 +3924,24 @@ function ConversationPickerModal({
     transform?: string;
     subtitle: string;
     isMrOneHook?: boolean;
+    unread?: boolean;
   })[];
   selection: Selection;
   onSelect: (next: Selection) => void;
+  archiveCount: number;
+  onOpenArchived: () => void;
+  onOpenContactInfo: (matchId: string) => void;
+  onLetGo: (matchId: string, peerName: string) => void;
 }) {
   const [sort, setSort] = useConversationSort();
   const [sortOpen, setSortOpen] = useState(false);
-  const sorted = useMemo(() => sortConversations(rows, sort), [rows, sort]);
+  const sorted = useMemo(() => {
+    const all = sortConversations(rows, sort);
+    // iOS feat/ui-round4 parity: active hook conversations appear first, with Mr.OneHook below them.
+    const hooksOnly = all.filter((r) => !r.isMrOneHook);
+    const mrOnly = all.filter((r) => r.isMrOneHook);
+    return [...hooksOnly, ...mrOnly];
+  }, [rows, sort]);
   const activeSort = getSortOption(sort);
 
   return (
@@ -2781,17 +3968,17 @@ function ConversationPickerModal({
             {/* Header: title, sort control immediately LEFT of the ✕ */}
             <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
               <h2 className="text-lg font-bold text-text">Conversations</h2>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <div className="relative">
                   <button
                     onClick={() => setSortOpen((v) => !v)}
                     {...trackProps(UiElement.CHAT_CONVERSATION_SORT_OPEN)}
-                    className="p-2 border border-border hover:border-accent hover:bg-surface-hover transition-colors flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold rounded-lg cursor-pointer text-text"
+                    className={ICON_SECTION.modalHeader.button}
                     title="Sort conversations"
                     aria-haspopup="menu"
                     aria-expanded={sortOpen}
                   >
-                    <ArrowLeftRight className="w-3.5 h-3.5" />
+                    <ArrowLeftRight className={ICON_SECTION.modalHeader.icon} />
                   </button>
                   <AnimatePresence>
                     {sortOpen && (
@@ -2828,11 +4015,11 @@ function ConversationPickerModal({
                 <button
                   onClick={onClose}
                   {...trackProps(UiElement.CHAT_CONVERSATION_SWITCHER_OPEN, { action: 'dismiss' })}
-                  className="p-2 border border-border hover:border-accent hover:bg-bg transition-colors"
+                  className={ICON_SECTION.modalHeader.button}
                   title="Close"
                   aria-label="Close conversations"
                 >
-                  <X className="w-4 h-4" />
+                  <X className={ICON_SECTION.modalHeader.icon} />
                 </button>
               </div>
             </div>
@@ -2845,61 +4032,124 @@ function ConversationPickerModal({
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto px-3 pb-3 min-h-0">
+            <div className="flex-1 overflow-y-auto px-3 pb-3 min-h-0 space-y-1">
               {sorted.map((row, rowIndex) => {
                 const isActive =
                   row.id === selection || (row.isMrOneHook && selection === MR_ONEHOOK);
                 return (
-                  <button
+                  <div
                     key={row.id}
-                    onClick={() => onSelect(row.isMrOneHook ? MR_ONEHOOK : row.id)}
-                    {...(row.isMrOneHook
-                      ? trackProps(UiElement.CHAT_MR_ONEHOOK_OPEN)
-                      : trackProps(UiElement.CHAT_CONVERSATION_SWITCH, { index: rowIndex, targetId: row.id }))}
-                    className={`w-full flex items-center gap-3 p-3 text-left transition-colors relative cursor-pointer ${
-                      isActive ? 'bg-surface font-semibold text-text' : 'hover:bg-surface-hover text-text'
+                    className={`flex items-center gap-1 rounded-xl transition-colors ${
+                      isActive ? 'bg-surface' : 'hover:bg-surface-hover'
                     }`}
                   >
-                    {/* Avatar */}
-                    {row.isMrOneHook ? (
-                      <span className="w-12 h-12 rounded-full overflow-hidden shrink-0 bg-gradient-to-br from-rose-100 to-white ring-2 ring-accent/40 flex items-center justify-center">
-                        <Mascot mood="Happy" className="w-10 h-10" />
-                      </span>
-                    ) : (
-                      <span className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-border bg-border">
-                        <MediaImage
-                          src={row.photo}
-                          style={pictureTransformStyle(row.transform)}
-                          alt=""
-                          aria-hidden="true"
-                          className="w-full h-full object-cover"
-                        />
-                      </span>
-                    )}
-
-                    <span className="flex-1 min-w-0">
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-sm font-bold truncate">
-                          {row.name}
-                          {row.age != null && (
-                            <span className="font-normal opacity-70">, {row.age}</span>
+                    <button
+                      onClick={() => onSelect(row.isMrOneHook ? MR_ONEHOOK : row.id)}
+                      {...(row.isMrOneHook
+                        ? trackProps(UiElement.CHAT_MR_ONEHOOK_OPEN)
+                        : trackProps(UiElement.CHAT_CONVERSATION_SWITCH, { index: rowIndex, targetId: row.id }))}
+                      className={`flex-1 min-w-0 flex items-center gap-3 p-3 text-left relative cursor-pointer ${
+                        isActive ? 'font-semibold text-text' : 'text-text'
+                      }`}
+                    >
+                      {/* Avatar */}
+                      {row.isMrOneHook ? (
+                        <span className="w-12 h-12 rounded-full overflow-hidden shrink-0 bg-gradient-to-br from-rose-100 to-white ring-2 ring-accent/40 flex items-center justify-center">
+                          <Mascot mood="Happy" className="w-10 h-10" />
+                        </span>
+                      ) : (
+                        <span className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-border bg-border relative">
+                          <MediaImage
+                            src={row.photo}
+                            style={pictureTransformStyle(row.transform)}
+                            alt=""
+                            aria-hidden="true"
+                            className="w-full h-full object-cover"
+                          />
+                          {row.unread && (
+                            <span
+                              className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-surface-card absolute top-0.5 right-0.5"
+                              aria-label="New activity"
+                            />
                           )}
                         </span>
-                        {row.isMrOneHook && (
-                          <span className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-accent text-white rounded-full inline-flex items-center gap-0.5">
-                            <Sparkles className="w-2.5 h-2.5" /> AI
-                          </span>
-                        )}
-                      </span>
-                      <span className="block text-[11px] opacity-50 truncate mt-0.5">
-                        {row.subtitle || (row.isMrOneHook ? '' : 'Connected')}
-                      </span>
-                    </span>
+                      )}
 
-                    {isActive && <Check className="w-4 h-4 text-accent shrink-0" />}
-                  </button>
+                      <span className="flex-1 min-w-0">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-sm font-bold truncate">
+                            {row.name}
+                            {row.age != null && (
+                              <span className="font-normal opacity-70">, {row.age}</span>
+                            )}
+                          </span>
+                          {row.isMrOneHook && (
+                            <span className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-accent text-white rounded-full inline-flex items-center gap-0.5">
+                              <Sparkles className="w-2.5 h-2.5" /> AI
+                            </span>
+                          )}
+                        </span>
+                        <span className="block text-[11px] opacity-50 truncate mt-0.5">
+                          {row.subtitle || (row.isMrOneHook ? '' : 'Connected')}
+                        </span>
+                      </span>
+
+                      {isActive && <Check className={`${ICON_SECTION.section.rowIcon} text-accent`} />}
+                    </button>
+
+                    {!row.isMrOneHook && (
+                      <div className="flex items-center gap-0.5 pr-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onOpenContactInfo(row.id)}
+                          aria-label={`Contact info for ${row.name}`}
+                          // TODO(telemetry-parity): switch to UiElement.CHAT_CONTACT_INFO_OPEN once enabled on web.
+                          data-track-exempt="disabled: pending telemetry web parity enablement for chat.contact_info_open"
+                          className="p-2 rounded-lg text-text-muted hover:text-text hover:bg-bg/60 cursor-pointer"
+                        >
+                          <Info className={ICON_SECTION.section.rowIcon} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onLetGo(row.id, row.name)}
+                          aria-label={`Archive or unhook ${row.name}`}
+                          // TODO(telemetry-parity): switch to UiElement.CHAT_UNMATCH once enabled on web.
+                          data-track-exempt="disabled: pending telemetry web parity enablement for chat.unmatch"
+                          className="p-2 rounded-lg text-text-muted hover:text-text hover:bg-bg/60 cursor-pointer"
+                        >
+                          <UserMinus className={ICON_SECTION.section.rowIcon} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
+
+              {/* Archived chats row */}
+              <div className="pt-2 mt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={onOpenArchived}
+                  // TODO(telemetry-parity): switch to UiElement.CHAT_ARCHIVED_OPEN once enabled on web.
+                  data-track-exempt="disabled: pending telemetry web parity enablement for chat.archived_open"
+                  className="w-full flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-surface-hover text-left text-text transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center text-accent">
+                      <Archive className={ICON_SECTION.section.rowIcon} />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold">Archived chats</span>
+                      <span className="block text-[11px] text-text-muted">Read-only history &amp; continue requests</span>
+                    </span>
+                  </span>
+                  {archiveCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-surface border border-border text-xs font-semibold">
+                      {archiveCount}
+                    </span>
+                  )}
+                </button>
+              </div>
             </div>
           </motion.div>
         </motion.div>
@@ -2963,8 +4213,8 @@ function AddByUsernameModal({
           >
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-text">Add by username</h3>
-              <button onClick={onClose} {...trackProps(UiElement.CHAT_ADD_HOOK_OPEN, { action: 'dismiss' })} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
-                <X className="w-5 h-5" />
+              <button onClick={onClose} {...trackProps(UiElement.CHAT_ADD_HOOK_OPEN, { action: 'dismiss' })} className={ICON_SECTION.modalHeader.button} aria-label="Close">
+                <X className={ICON_SECTION.modalHeader.icon} />
               </button>
             </div>
             <p id="add-by-username-help" className="text-xs text-text-secondary leading-relaxed">
@@ -3044,8 +4294,8 @@ function WallpaperPickerModal({
           >
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-text">Choose wallpaper</h3>
-              <button onClick={onClose} {...trackProps(UiElement.CHAT_WALLPAPER_OPEN, { action: 'dismiss' })} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
-                <X className="w-5 h-5" />
+              <button onClick={onClose} {...trackProps(UiElement.CHAT_WALLPAPER_OPEN, { action: 'dismiss' })} className={ICON_SECTION.modalHeader.button} aria-label="Close">
+                <X className={ICON_SECTION.modalHeader.icon} />
               </button>
             </div>
             <WallpaperGrid current={current} onChoose={onChoose} />
@@ -3105,8 +4355,8 @@ function ProfileInspectorModal({
               <h3 className="text-xl font-bold text-text">
                 {isMrOneHook ? 'About Mr.OneHook' : 'Profile'}
               </h3>
-              <button onClick={onClose} {...trackProps(UiElement.CHAT_PROFILE_OPEN, { action: 'dismiss' })} className="p-1 text-text-secondary hover:text-text cursor-pointer" aria-label="Close">
-                <X className="w-5 h-5" />
+              <button onClick={onClose} {...trackProps(UiElement.CHAT_PROFILE_OPEN, { action: 'dismiss' })} className={ICON_SECTION.modalHeader.button} aria-label="Close">
+                <X className={ICON_SECTION.modalHeader.icon} />
               </button>
             </div>
 

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { MediaImage } from './MediaImage';
 import { trackMediaFullscreenOpen, UiElement, trackProps, type ViewableScreen } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 export interface PhotoLightboxProps {
   /** Photo values (private `media/…` keys or URLs), in display order. */
@@ -85,7 +86,7 @@ export function PhotoLightbox({ photos, startIndex, onClose, ownerName, styleFor
         {...trackProps(UiElement.PHOTO_VIEWER_CLOSE)}
         className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
       >
-        <X className="w-6 h-6" aria-hidden="true" />
+        <X className={`${ICON_SECTION.nav.icon} stroke-[1.75]`} aria-hidden="true" />
       </button>
 
       {photos.length > 1 && (
@@ -97,7 +98,7 @@ export function PhotoLightbox({ photos, startIndex, onClose, ownerName, styleFor
             {...trackProps(UiElement.PHOTO_VIEWER_PREVIOUS)}
             className="absolute left-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
           >
-            <ChevronLeft className="w-7 h-7" aria-hidden="true" />
+            <ChevronLeft className={`${ICON_SECTION.nav.icon} stroke-[1.75]`} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -106,7 +107,7 @@ export function PhotoLightbox({ photos, startIndex, onClose, ownerName, styleFor
             {...trackProps(UiElement.PHOTO_VIEWER_NEXT)}
             className="absolute right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
           >
-            <ChevronRight className="w-7 h-7" aria-hidden="true" />
+            <ChevronRight className={`${ICON_SECTION.nav.icon} stroke-[1.75]`} aria-hidden="true" />
           </button>
         </>
       )}

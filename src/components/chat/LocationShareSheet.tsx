@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Loader2, MapPin, Radio, Send, X } from 'lucide-react';
 import { UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 import type { LocationFix } from '../../lib/chat-structured';
 import { LOCATION_ERROR_COPY, LocationReadError, getCurrentFix, type LocationErrorKind } from '../../lib/browser-location';
 import { formatClockTime } from '../../lib/live-location';
@@ -180,9 +181,9 @@ export function LocationShareSheetView({
                 disabled={busy}
                 aria-label="Back"
                 data-track-exempt="duplicate: leaving the duration chooser emits chat.live_location_duration (dismiss) via trackUi."
-                className="p-1.5 rounded-lg hover:bg-surface-hover cursor-pointer disabled:opacity-40"
+                className={`${ICON_SECTION.modalHeader.button} disabled:opacity-40`}
               >
-                <ArrowLeft className="w-4 h-4" />
+                <ArrowLeft className={ICON_SECTION.modalHeader.icon} />
               </button>
             )}
             <h2 id="location-share-title" className="text-base font-bold">
@@ -195,9 +196,9 @@ export function LocationShareSheetView({
             disabled={busy}
             aria-label="Close"
             {...trackProps(UiElement.CHAT_ATTACH_BUTTON, { action: 'dismiss' })}
-            className="p-2 border border-border hover:bg-surface-hover rounded-lg cursor-pointer disabled:opacity-40"
+            className={`${ICON_SECTION.modalHeader.button} disabled:opacity-40`}
           >
-            <X className="w-4 h-4" />
+            <X className={ICON_SECTION.modalHeader.icon} />
           </button>
         </div>
 

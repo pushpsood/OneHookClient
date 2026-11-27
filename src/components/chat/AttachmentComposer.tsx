@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react';
-import { Film, ImageIcon, MapPin, Mic, Paperclip, Square, Trash2, UserRound } from 'lucide-react';
+import { Film, ImageIcon, MapPin, Mic, Paperclip, Pause, Play, RotateCcw, Send, Square, Trash2, UserRound } from 'lucide-react';
 import type { AttachmentKind } from '../../lib/chat-attachments';
 import { downsampleWaveform } from '../../lib/attachment-media';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * Composer controls for attachments: a picker (image / video / file, plus location and contact cards
@@ -63,9 +64,9 @@ export function AttachmentComposer({ disabled, onPickFile, onVoiceNote, onPickLo
           aria-expanded={menuOpen}
           aria-label="Add an attachment"
           {...trackProps(UiElement.CHAT_ATTACH_BUTTON)}
-          className="p-2 text-accent hover:opacity-60 transition-opacity disabled:opacity-30"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-accent hover:opacity-60 transition-opacity disabled:opacity-30 cursor-pointer"
         >
-          <Paperclip className="w-4 h-4" />
+          <Paperclip className={ICON_SECTION.composer.triggerIcon} />
         </button>
         {menuOpen && (
           <>
@@ -74,12 +75,12 @@ export function AttachmentComposer({ disabled, onPickFile, onVoiceNote, onPickLo
               role="menu"
               className="absolute bottom-full left-0 mb-2 w-44 bg-surface-card border border-border shadow-xl z-40 py-1 rounded-xl text-text overflow-hidden"
             >
-              <MenuItem icon={<ImageIcon className="w-4 h-4" />} label="Photo" onClick={() => pick(imageInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'photo_video' })} />
-              <MenuItem icon={<Film className="w-4 h-4" />} label="Video" onClick={() => pick(videoInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'photo_video' })} />
-              <MenuItem icon={<Paperclip className="w-4 h-4" />} label="File" onClick={() => pick(fileInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'file' })} />
+              <MenuItem icon={<ImageIcon className={ICON_SECTION.composer.menuItemIcon} />} label="Photo" onClick={() => pick(imageInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'photo_video' })} />
+              <MenuItem icon={<Film className={ICON_SECTION.composer.menuItemIcon} />} label="Video" onClick={() => pick(videoInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'photo_video' })} />
+              <MenuItem icon={<Paperclip className={ICON_SECTION.composer.menuItemIcon} />} label="File" onClick={() => pick(fileInputRef)} trackAttrs={trackProps(UiElement.CHAT_ATTACH_OPTION, { value: 'file' })} />
               {onPickLocation && (
                 <MenuItem
-                  icon={<MapPin className="w-4 h-4" />}
+                  icon={<MapPin className={ICON_SECTION.composer.menuItemIcon} />}
                   label="Location"
                   onClick={() => {
                     setMenuOpen(false);
@@ -90,7 +91,7 @@ export function AttachmentComposer({ disabled, onPickFile, onVoiceNote, onPickLo
               )}
               {onPickContact && (
                 <MenuItem
-                  icon={<UserRound className="w-4 h-4" />}
+                  icon={<UserRound className={ICON_SECTION.composer.menuItemIcon} />}
                   label="Contact"
                   onClick={() => {
                     setMenuOpen(false);
@@ -148,6 +149,16 @@ function VoiceRecorderButton({
 }) {
   const [recording, setRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [preview, setPreview] = useState<{
+    blob: Blob;
+    mime: string;
+    durationMs: number;
+    waveform: number[];
+    url: string;
+  } | null>(null);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+  const [previewPositionMs, setPreviewPositionMs] = useState(0);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -171,7 +182,17 @@ function VoiceRecorderButton({
 
   useEffect(() => teardown, [teardown]);
 
+  useEffect(() => {
+    const url = preview?.url;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [preview?.url]);
+
   const start = async () => {
+    setPreview(null);
+    setPreviewPlaying(false);
+    setPreviewPositionMs(0);
     cancelledRef.current = false;
     chunksRef.current = [];
     samplesRef.current = [];
@@ -200,7 +221,9 @@ function VoiceRecorderButton({
       teardown();
       setRecording(false);
       if (!cancelledRef.current && blob.size > 0) {
-        onVoiceNote(blob, blobType, durationMs, downsampleWaveform(samplesRef.current));
+        const waveform = downsampleWaveform(samplesRef.current);
+        const url = URL.createObjectURL(blob);
+        setPreview({ blob, mime: blobType, durationMs, waveform, url });
       }
     };
 
@@ -242,6 +265,110 @@ function VoiceRecorderButton({
     recorderRef.current?.stop();
   };
 
+  const discardPreview = () => {
+    previewAudioRef.current?.pause();
+    setPreviewPlaying(false);
+    setPreviewPositionMs(0);
+    setPreview(null);
+  };
+
+  const sendPreview = () => {
+    if (!preview) return;
+    const current = preview;
+    previewAudioRef.current?.pause();
+    setPreviewPlaying(false);
+    setPreviewPositionMs(0);
+    setPreview(null);
+    onVoiceNote(current.blob, current.mime, current.durationMs, current.waveform);
+  };
+
+  const togglePreviewPlayback = () => {
+    const el = previewAudioRef.current;
+    if (!el) return;
+    if (el.paused) void el.play();
+    else el.pause();
+  };
+
+  if (preview) {
+    const sec = Math.max(1, Math.round((previewPlaying || previewPositionMs > 0 ? previewPositionMs : preview.durationMs) / 1000));
+    const fraction = preview.durationMs > 0 ? Math.min(1, previewPositionMs / preview.durationMs) : 0;
+    const bars = preview.waveform.length ? preview.waveform : Array.from({ length: 24 }, () => 8);
+
+    return (
+      <div
+        className="flex items-center gap-2 rounded-full border border-border bg-surface px-2.5 py-1"
+        role="group"
+        aria-label="Preview recorded voice note"
+      >
+        <audio
+          ref={previewAudioRef}
+          src={preview.url}
+          preload="metadata"
+          onPlay={() => setPreviewPlaying(true)}
+          onPause={() => setPreviewPlaying(false)}
+          onEnded={() => {
+            setPreviewPlaying(false);
+            setPreviewPositionMs(0);
+          }}
+          onTimeUpdate={(e) => setPreviewPositionMs(e.currentTarget.currentTime * 1000)}
+        />
+        <button
+          type="button"
+          onClick={discardPreview}
+          aria-label="Discard recorded voice note"
+          {...trackProps(UiElement.CHAT_VOICE_RECORD_CANCEL)}
+          className="w-7 h-7 flex items-center justify-center rounded-full text-text-secondary hover:text-red-500 cursor-pointer"
+        >
+          <Trash2 className={ICON_SECTION.composer.inlineActionIcon} />
+        </button>
+        <button
+          type="button"
+          onClick={togglePreviewPlayback}
+          aria-label={previewPlaying ? 'Pause voice preview' : 'Play voice preview'}
+          // TODO(telemetry-parity): switch to UiElement.CHAT_VOICE_PREVIEW_PLAY once enabled on web.
+          data-track-exempt="disabled: pending telemetry web parity enablement for chat.voice_preview_play"
+          className="w-7 h-7 rounded-full border border-accent text-accent flex items-center justify-center hover:bg-accent/10 cursor-pointer"
+        >
+          {previewPlaying ? (
+            <Pause className={ICON_SECTION.composer.inlineActionIcon} />
+          ) : (
+            <Play className={ICON_SECTION.composer.inlineActionIcon} />
+          )}
+        </button>
+        <div className="flex items-end gap-0.5 h-5 w-20" aria-hidden="true">
+          {bars.slice(0, 24).map((amp, i) => (
+            <span
+              key={i}
+              className={`w-0.5 rounded-full ${i / Math.min(24, bars.length) <= fraction ? 'bg-accent' : 'bg-border'}`}
+              style={{ height: `${Math.max(15, (amp / 31) * 100)}%` }}
+            />
+          ))}
+        </div>
+        <span className="text-[10px] tabular-nums text-text-secondary">
+          {Math.floor(sec / 60)}:{(sec % 60).toString().padStart(2, '0')}
+        </span>
+        <button
+          type="button"
+          onClick={() => void start()}
+          aria-label="Re-record voice note"
+          {...trackProps(UiElement.CHAT_VOICE_RECORD_START)}
+          className="w-7 h-7 flex items-center justify-center rounded-full text-text-secondary hover:text-text cursor-pointer"
+        >
+          <RotateCcw className={ICON_SECTION.composer.inlineActionIcon} />
+        </button>
+        <button
+          type="button"
+          onClick={sendPreview}
+          aria-label="Send voice note"
+          {...trackProps(UiElement.CHAT_VOICE_SEND)}
+          className="w-7 h-7 rounded-full bg-accent text-bg flex items-center justify-center hover:opacity-90 cursor-pointer"
+        >
+          <Send className={ICON_SECTION.composer.inlineActionIcon} />
+        </button>
+      </div>
+    );
+  }
+
   if (!recording) {
     return (
       <button
@@ -250,24 +377,24 @@ function VoiceRecorderButton({
         disabled={disabled}
         aria-label="Record a voice note"
         {...trackProps(UiElement.CHAT_VOICE_RECORD_START)}
-        className="p-2 text-accent hover:opacity-60 transition-opacity disabled:opacity-30"
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-accent hover:opacity-60 transition-opacity disabled:opacity-30 cursor-pointer"
       >
-        <Mic className="w-4 h-4" />
+        <Mic className={ICON_SECTION.composer.triggerIcon} />
       </button>
     );
   }
 
   const seconds = Math.floor(elapsedMs / 1000);
   return (
-    <div className="flex items-center gap-2" role="group" aria-label="Recording a voice note">
+    <div className="flex items-center gap-1" role="group" aria-label="Recording a voice note">
       <button
         type="button"
         onClick={cancel}
         aria-label="Discard voice note"
         {...trackProps(UiElement.CHAT_VOICE_RECORD_CANCEL)}
-        className="p-2 text-accent hover:opacity-60 transition-opacity"
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-accent hover:opacity-60 transition-opacity cursor-pointer"
       >
-        <Trash2 className="w-4 h-4" />
+        <Trash2 className={ICON_SECTION.composer.triggerIcon} />
       </button>
       <span className="flex items-center gap-1 text-[10px] tabular-nums text-red-500" aria-live="polite">
         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
@@ -276,11 +403,12 @@ function VoiceRecorderButton({
       <button
         type="button"
         onClick={stop}
-        aria-label="Stop and send voice note"
-        {...trackProps(UiElement.CHAT_VOICE_SEND)}
-        className="p-2 text-accent hover:opacity-60 transition-opacity"
+        aria-label="Stop and preview voice note"
+        // TODO(telemetry-parity): switch to UiElement.CHAT_VOICE_RECORD_STOP once enabled on web.
+        data-track-exempt="disabled: pending telemetry web parity enablement for chat.voice_record_stop"
+        className="w-8 h-8 flex items-center justify-center rounded-lg text-accent hover:opacity-60 transition-opacity cursor-pointer"
       >
-        <Square className="w-4 h-4 fill-current" />
+        <Square className={`${ICON_SECTION.composer.triggerIcon} fill-current`} />
       </button>
     </div>
   );

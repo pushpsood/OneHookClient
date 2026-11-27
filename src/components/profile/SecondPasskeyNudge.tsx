@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { KeyRound, X } from 'lucide-react';
 import { ChatEncryptionManager } from '../../lib/chat-encryption';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * Dismissible nudge to add a second passkey.
@@ -79,7 +80,7 @@ export function SecondPasskeyNudge({ userId }: { userId?: string }) {
     <div className="border border-border p-6 bg-surface text-text space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 min-w-0">
-          <KeyRound className="w-4 h-4 mt-0.5 text-accent shrink-0" aria-hidden="true" />
+          <KeyRound className={`${ICON_SECTION.section.headingIcon} mt-0.5 text-accent`} aria-hidden="true" />
           <div className="space-y-1">
             <span className="text-[10px] uppercase tracking-[0.3em] font-black text-accent block">
               Add a backup passkey
@@ -95,9 +96,9 @@ export function SecondPasskeyNudge({ userId }: { userId?: string }) {
           onClick={dismiss}
           aria-label="Dismiss"
           {...trackProps(UiElement.SETTINGS_PASSKEY_ADD, { action: 'dismiss' })}
-          className="p-1 opacity-40 hover:opacity-100 transition-opacity shrink-0"
+          className={`${ICON_SECTION.modalHeader.button} shrink-0`}
         >
-          <X className="w-4 h-4" />
+          <X className={ICON_SECTION.modalHeader.icon} />
         </button>
       </div>
 

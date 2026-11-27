@@ -110,3 +110,60 @@ export function useChatWallpaper(): [ChatWallpaper, (id: string) => void] {
 
   return [getWallpaperById(id), update];
 }
+
+export type ChatFontSize = 'compact' | 'default' | 'large';
+
+export const CHAT_FONT_SIZES: ReadonlyArray<{ id: ChatFontSize; label: string; textClass: string }> = [
+  { id: 'compact', label: 'Small', textClass: 'text-xs leading-relaxed' },
+  { id: 'default', label: 'Default', textClass: 'text-sm leading-relaxed' },
+  { id: 'large', label: 'Large', textClass: 'text-base leading-relaxed' },
+];
+
+const FONT_SIZE_KEY = 'onehook.chat.fontSize';
+const FONT_SIZE_EVENT = 'onehook:chat-font-size-changed';
+
+export function readStoredChatFontSize(): ChatFontSize {
+  if (typeof window === 'undefined') return 'default';
+  try {
+    const raw = window.localStorage.getItem(FONT_SIZE_KEY);
+    return raw === 'compact' || raw === 'large' ? raw : 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+export function getChatFontSizeOption(size: ChatFontSize) {
+  return CHAT_FONT_SIZES.find((s) => s.id === size) ?? CHAT_FONT_SIZES[1];
+}
+
+/** Shared device-local chat font-size preference (synced across chat bubbles and settings). */
+export function useChatFontSize(): [ChatFontSize, (size: ChatFontSize) => void] {
+  const [size, setSize] = useState<ChatFontSize>(readStoredChatFontSize);
+
+  useEffect(() => {
+    const sync = () => setSize(readStoredChatFontSize());
+    const onCustom = (e: Event) => {
+      const next = (e as CustomEvent<ChatFontSize>).detail;
+      if (next === 'compact' || next === 'default' || next === 'large') setSize(next);
+      else sync();
+    };
+    window.addEventListener(FONT_SIZE_EVENT, onCustom as EventListener);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener(FONT_SIZE_EVENT, onCustom as EventListener);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
+  const update = (next: ChatFontSize) => {
+    setSize(next);
+    try {
+      window.localStorage.setItem(FONT_SIZE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new CustomEvent(FONT_SIZE_EVENT, { detail: next }));
+  };
+
+  return [size, update];
+}

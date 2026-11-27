@@ -1,10 +1,13 @@
 import { sdkClient } from './sdk-client';
+import type { ReceivedLikesSort } from 'onehook-api-client';
 import { RankedCandidate } from '../types';
 import {
   SwipeApi,
+  PendingLikeCountApi,
   ReceivedLikesApi,
   RosesApi,
   type LikeTargetType,
+  type PendingLikeCountResponse,
   type SwipeResult,
   type ReceivedLikesResponse,
   type RoseQuota,
@@ -112,10 +115,20 @@ export const MatchingApi = {
     return RosesApi.remaining();
   },
 
-  /** The caller's received likes, with a pass for the likers' matching profiles. */
-  getReceivedLikes: async (): Promise<ReceivedLikesResponse> => {
-    const res = await ReceivedLikesApi.list();
+  /** Counts of pending sent/received likes (`GET /matching/likes/pending-count`). */
+  pendingLikeCount: async (): Promise<PendingLikeCountResponse> => {
+    return PendingLikeCountApi.get();
+  },
+
+  /** The caller's received likes, optionally sorted, with a pass for the likers' matching profiles. */
+  getReceivedLikes: async (sort?: ReceivedLikesSort): Promise<ReceivedLikesResponse> => {
+    const res = await ReceivedLikesApi.list(sort);
     viewPasses.add(res?.viewPass);
     return res;
+  },
+
+  /** Deletes the caller's discovery location (`DELETE /matching/location`). */
+  removeLocation: async (): Promise<void> => {
+    await sdkClient.removeLocation({ lat: 0, lon: 0 });
   },
 };

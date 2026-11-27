@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Lock, Phone, Video } from 'lucide-react';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { callButtonLabel, handleCallTap } from '../../lib/call-eligibility';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * The audio / video call buttons shown in a conversation header.
@@ -42,7 +43,7 @@ export function CallButtons({
 
   const lockedClass = locked ? 'text-text-muted' : 'text-text hover:bg-surface-hover';
   const baseClass =
-    'relative w-9 h-9 flex items-center justify-center rounded-xl transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed';
+    `relative ${ICON_SECTION.toolbar.subHeaderButton} disabled:opacity-40 disabled:cursor-not-allowed`;
 
   const tap = (start: () => void) =>
     handleCallTap({ locked, start, explain: () => setExplain(true) });
@@ -59,10 +60,10 @@ export function CallButtons({
           title={locked ? lockMessage : `Audio call ${peerName}`}
           aria-label={audioLabel}
         >
-          <Phone className="w-5 h-5 stroke-[1.75]" />
+          <Phone className={ICON_SECTION.toolbar.subHeaderIcon} />
           {locked && (
             <Lock
-              className="absolute -bottom-0.5 -right-0.5 w-3 h-3 stroke-[2.5] text-text-muted bg-surface-card rounded-full p-[1px]"
+              className={ICON_SECTION.toolbar.lockBadge}
               aria-hidden="true"
             />
           )}
@@ -76,10 +77,10 @@ export function CallButtons({
           title={locked ? lockMessage : `Video call ${peerName}`}
           aria-label={videoLabel}
         >
-          <Video className="w-5 h-5 stroke-[1.75]" />
+          <Video className={ICON_SECTION.toolbar.subHeaderIcon} />
           {locked && (
             <Lock
-              className="absolute -bottom-0.5 -right-0.5 w-3 h-3 stroke-[2.5] text-text-muted bg-surface-card rounded-full p-[1px]"
+              className={ICON_SECTION.toolbar.lockBadge}
               aria-hidden="true"
             />
           )}

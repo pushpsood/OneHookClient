@@ -295,18 +295,22 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ isVisible = true }
                 <button
                   onClick={() => setIsFullScreen(!isFullScreen)}
                   {...trackProps(UiElement.LANDING_CHATBOT_WIDGET, { value: 'fullscreen' })}
-                  className="text-white hover:text-gray-200 transition-colors"
+                  className="text-white hover:text-gray-200 transition-colors flex items-center justify-center"
                   title={isFullScreen ? 'Minimize' : 'Full screen'}
                 >
-                  {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                  {isFullScreen ? (
+                    <Minimize2 className="w-5 h-5 shrink-0 stroke-[1.75]" />
+                  ) : (
+                    <Maximize2 className="w-5 h-5 shrink-0 stroke-[1.75]" />
+                  )}
                 </button>
                 <button
                   onClick={() => setIsOpen(false)}
                   {...trackProps(UiElement.LANDING_CHATBOT_WIDGET, { value: 'close' })}
-                  className="text-white hover:text-gray-200 transition-colors"
+                  className="text-white hover:text-gray-200 transition-colors flex items-center justify-center"
                   title="Close"
                 >
-                  <X size={20} />
+                  <X className="w-5 h-5 shrink-0 stroke-[1.75]" />
                 </button>
               </div>
             </div>

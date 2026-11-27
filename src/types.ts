@@ -16,8 +16,29 @@ export type {
   HookSummary,
   HookRequestItem,
   ListHookRequestsResponse,
+  PendingCounts,
+  DecisionWindowView,
+  ArchiveAllowance,
+  ArchiveItem,
+  ListArchivesResponse,
+  ActiveBoost,
+  WalletProduct,
+  WalletResponse,
+  BlockView,
+  ChatRestrictions,
+  CompleteLivenessSessionResponse,
 } from 'onehook-api-client';
-export { MatchingMode, HookOrigin, MatchingProfileStatus, MediaPurpose, HookRequestDirection } from 'onehook-api-client';
+export {
+  MatchingMode,
+  HookOrigin,
+  MatchingProfileStatus,
+  MediaPurpose,
+  HookRequestDirection,
+  UnarchiveRequestState,
+  CurrentHookAction,
+  WalletProductKind,
+  ReceivedLikesSort,
+} from 'onehook-api-client';
 
 import type {
   MatchingProfile,
@@ -28,6 +49,8 @@ import type {
   MatchingMode,
   HookOrigin,
   MatchingProfileStatus,
+  PendingCounts,
+  DecisionWindowView,
 } from 'onehook-api-client';
 
 /** State's `current_state` (docs/chat-only-profiles.md §6.2). */
@@ -102,6 +125,12 @@ export type UserStateSnapshot = {
    * "Activating your membership".
    */
   pendingSubscriptionTier?: SubscriptionTier;
+  /** Pending items a new hook would clear (hook requests + unarchive requests). */
+  pending?: PendingCounts;
+  /** Present while a decision window is open on the caller's new hook (docs/archives.md §4.10). */
+  decisionWindow?: DecisionWindowView;
+  /** True while the caller's outgoing unarchive request engages their hook slot. */
+  unarchiveReserved?: boolean;
 };
 
 /**
@@ -200,7 +229,13 @@ export type ChatMessageDTO = Message;
  * fixes, so the flag is what lets the UI offer "restore from another device" instead of a dead end.
  * Transport and parse failures are NOT flagged; they render as a plain error and a retry is pointless.
  */
-export type ChatMessageView = ChatMessageDTO & { undecryptable?: boolean };
+export type ChatMessageView = ChatMessageDTO & {
+  undecryptable?: boolean;
+  contentType?: string | null;
+  replyToMessageId?: string | null;
+  replyToTimestamp?: number | null;
+  reactions?: string | null;
+};
 
 export interface Invite {
   code: string;

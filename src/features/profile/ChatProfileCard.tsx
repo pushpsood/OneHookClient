@@ -10,6 +10,7 @@ import { ModerationBadge } from '../../components/ui/ModerationBadge';
 import { DateOfBirthField, LockedDateOfBirth } from '../../components/onboarding/DateOfBirthField';
 import { DOB_LOCKED_HINT, DOB_PROVISIONAL_HINT, ageOn, validateDob } from '../../utils/dob';
 import { Screen, UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * The chat profile (docs/chat-only-profiles.md R1): display name, date of birth (18+, immutable) and an
@@ -117,7 +118,7 @@ export function ChatProfileCard({ user, onSaved }: { user: UserProfile; onSaved?
       />
       <div>
         <h2 id="chat-profile-title" className="text-[10px] uppercase tracking-[0.3em] font-black text-accent flex items-center gap-2">
-          <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" /> Your chat profile
+          <MessageCircle className={ICON_SECTION.section.headingIcon} aria-hidden="true" /> Your chat profile
         </h2>
         <p className="mt-1 text-xs opacity-60 leading-relaxed">
           Your name, age and photo. Only the people you are hooked with see it, and people whose
@@ -158,7 +159,7 @@ export function ChatProfileCard({ user, onSaved }: { user: UserProfile; onSaved?
               {...trackProps(UiElement.PROFILE_EDIT_PHOTO_REMOVE, { context: Screen.PROFILE_EDIT })}
               className="py-1.5 px-3 border border-border text-xs font-semibold rounded-lg hover:bg-surface-hover transition-colors flex items-center gap-1.5 cursor-pointer"
             >
-              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Remove
+              <Trash2 className={ICON_SECTION.section.actionIcon} aria-hidden="true" /> Remove
             </button>
           )}
           <ModerationBadge status={fieldStatus.avatarKey} showLabel className="text-[10px]" />

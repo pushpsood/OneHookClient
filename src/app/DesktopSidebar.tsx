@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Compass, MessageCircle, Heart, Settings, LogOut } from 'lucide-react';
+import { Compass, MessageCircle, Heart, Settings, LogOut, User } from 'lucide-react';
 import { MediaImage } from '../components/common/MediaImage';
 import type { AppTab } from '../lib/app-mode';
 import type { UserProfile } from '../types';
 import { UiElement, APP_TAB_SCREEN, trackProps } from '../lib/analytics/analytics';
 import { ownAvatar } from '../lib/profile-model';
+import { ICON_SECTION } from '../lib/icon-tokens';
 
 interface DesktopSidebarProps {
   activeTab: AppTab;
@@ -121,7 +122,7 @@ export function DesktopSidebar({
                     {item.isProfile ? (
                       <div
                         className={`w-6 h-6 rounded-full overflow-hidden border ${
-                          isActive ? 'ring-2 ring-accent' : 'border-border'
+                          isActive ? 'ring-2 ring-accent border-transparent' : 'border-border'
                         }`}
                       >
                         {userPhoto ? (
@@ -131,16 +132,20 @@ export function DesktopSidebar({
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full bg-surface flex items-center justify-center text-[10px]">
-                            👤
+                          <div className="w-full h-full bg-surface flex items-center justify-center">
+                            <User className={ICON_SECTION.nav.fallbackUserIcon} aria-hidden="true" />
                           </div>
                         )}
                       </div>
                     ) : (
                       <Icon
-                        className="w-6 h-6 transition-transform group-hover:scale-105"
-                        strokeWidth={isActive ? 2.5 : 1.75}
-                        fill={isActive && (item.id === 'LIKES' || item.id === 'DISCOVERY' || item.id === 'MATCHING_INTRO') ? 'currentColor' : 'none'}
+                        className={`${ICON_SECTION.nav.icon} transition-transform group-hover:scale-105`}
+                        strokeWidth={
+                          isActive
+                            ? ICON_SECTION.nav.activeStrokeWidth
+                            : ICON_SECTION.nav.inactiveStrokeWidth
+                        }
+                        fill="none"
                       />
                     )}
 
@@ -179,7 +184,9 @@ export function DesktopSidebar({
             } py-3 rounded-xl transition-all text-red-500 hover:bg-surface-hover font-normal cursor-pointer`}
             title={!isHovered ? 'Log out' : undefined}
           >
-            <LogOut className="w-6 h-6 shrink-0" strokeWidth={1.75} />
+            <div className="relative flex items-center justify-center shrink-0">
+              <LogOut className={ICON_SECTION.nav.icon} strokeWidth={ICON_SECTION.nav.inactiveStrokeWidth} />
+            </div>
             {isHovered && (
               <span className="ml-4 text-sm tracking-tight animate-in fade-in duration-150">Log out</span>
             )}

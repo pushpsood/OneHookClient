@@ -4,6 +4,7 @@ import { Smartphone, X } from 'lucide-react';
 import { BrandWordmark } from './BrandWordmark';
 import { GetAppLink } from './GetAppLink';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 function isMobileDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -132,7 +133,7 @@ export function SiteHeader({
             <GetAppLink
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-accent text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-full hover:opacity-90 transition-opacity"
             >
-              <Smartphone className="w-3.5 h-3.5" /> <span className="max-[359px]:hidden">Open in app</span><span className="hidden max-[359px]:inline">App</span>
+              <Smartphone className={ICON_SECTION.header.pillIcon} /> <span className="max-[359px]:hidden">Open in app</span><span className="hidden max-[359px]:inline">App</span>
             </GetAppLink>
             {/* once the name has collapsed to the logo, also offer a plain way back home */}
             {compact && (
@@ -143,7 +144,7 @@ export function SiteHeader({
                 {...trackProps(UiElement.LANDING_HOME_LINK)}
                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border opacity-60 transition-all hover:bg-black/5 hover:opacity-100"
               >
-                <X className="h-5 w-5" />
+                <X className={ICON_SECTION.header.icon} />
               </button>
             )}
           </div>
@@ -167,7 +168,7 @@ export function SiteHeader({
               {...trackProps(UiElement.LANDING_HOME_LINK)}
               className="inline-flex items-center justify-center w-9 h-9 rounded-full border border-border opacity-60 hover:opacity-100 hover:bg-black/5 transition-all"
             >
-              <X className="w-5 h-5" />
+              <X className={ICON_SECTION.header.icon} />
             </button>
           </div>
         )}

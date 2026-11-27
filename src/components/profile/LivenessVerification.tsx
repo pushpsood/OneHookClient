@@ -4,13 +4,14 @@ import { LivenessApi, type LivenessStatus } from '../../api/liveness';
 import { cognitoRegion } from '../../utils/env.config';
 import { useToast } from '../common/Toast';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 // The Rekognition detector (and the Amplify UI / liveness SDK + CSS it pulls in)
 // live in a separate chunk that is ONLY downloaded when this dynamic import runs
 // — i.e. when a signed-in member actually starts a verification on this screen.
 const FaceLivenessInner = lazy(() => import('./FaceLivenessInner'));
 
-type Phase = 'idle' | 'preparing' | 'streaming' | 'error';
+type Phase = 'idle' | 'preparing' | 'streaming' | 'submitting' | 'error';
 
 /**
  * Face Liveness identity verification.
@@ -143,12 +144,44 @@ export function LivenessVerification({
     fail(rawMsg || 'Could not start verification.');
   };
 
-  // Video submitted — optimistically reflect PENDING; the backend status confirms via polling.
-  const onSubmitted = () => {
-    setPhase('idle');
+  // Video submitted — notify backend to evaluate the Rekognition session, then update status/poll.
+  const onSubmitted = async (completedSessionId: string) => {
+    setPhase('submitting');
     setSessionId(null);
-    setStatus('PENDING');
-    showToast('Verification submitted — we\u2019ll review it shortly.', 'success');
+    try {
+      const res = await LivenessApi.completeSession(completedSessionId);
+      if (!mounted.current) return;
+      const nextStatus = (res?.status as LivenessStatus | undefined) ?? 'PENDING';
+      setPhase('idle');
+      setStatus(nextStatus);
+      if (nextStatus === 'APPROVED') {
+        showToast('Identity verified!', 'success');
+        try {
+          await onVerified?.();
+        } catch {
+          /* ignore */
+        }
+      } else if (
+        nextStatus === 'REJECTED' ||
+        nextStatus === 'LIVENESS_FAILED' ||
+        nextStatus === 'FACE_MATCH_FAILED'
+      ) {
+        showToast('Verification did not pass — see details below.', 'error');
+      } else {
+        showToast('Verification submitted — we\u2019ll review it shortly.', 'success');
+      }
+    } catch (err) {
+      if (!mounted.current) return;
+      const info = err as { error?: string; message?: string };
+      const rawMsg = info?.error || info?.message || '';
+      if (/cooldown/i.test(rawMsg)) {
+        setPhase('idle');
+        setStatus('PENDING');
+        showToast('Your verification is still under review — hang tight.', 'info');
+        return;
+      }
+      fail(rawMsg || 'Could not submit verification. Please try again.');
+    }
   };
 
   const handleDetectorError = (livenessError: { error?: { message?: string }; state?: string }) => {
@@ -190,7 +223,7 @@ export function LivenessVerification({
     <div className="border border-border p-8 space-y-5 bg-surface-card text-text">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <ShieldCheck className="w-4 h-4 text-accent" />
+          <ShieldCheck className={`${ICON_SECTION.section.headingIcon} text-accent`} />
           <div>
             <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent">
               Identity Verification
@@ -227,7 +260,7 @@ export function LivenessVerification({
       )}
 
       {/* Under review — authoritative from the backend; polls until APPROVED/REJECTED */}
-      {underReview && phase !== 'streaming' && phase !== 'preparing' && (
+      {underReview && phase !== 'streaming' && phase !== 'preparing' && phase !== 'submitting' && (
         <div className="text-center py-6 space-y-4">
           <Clock className="w-10 h-10 text-accent mx-auto" />
           <p className="text-2xl font-serif italic">Verification under review</p>
@@ -263,6 +296,9 @@ export function LivenessVerification({
       {/* Preparing (camera / session) */}
       {phase === 'preparing' && busySpinner('Preparing camera…')}
 
+      {/* Completing session with backend */}
+      {phase === 'submitting' && busySpinner('Submitting verification…')}
+
       {/* Live detector (real streaming) — lazily loaded */}
       {phase === 'streaming' && sessionId && (
         <Suspense fallback={busySpinner('Loading camera…')}>
@@ -270,7 +306,7 @@ export function LivenessVerification({
             sessionId={sessionId}
             region={cognitoRegion}
             onAnalysisComplete={async () => {
-              onSubmitted();
+              await onSubmitted(sessionId);
             }}
             onError={handleDetectorError}
             onUserCancel={reset}

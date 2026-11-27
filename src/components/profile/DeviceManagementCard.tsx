@@ -5,7 +5,9 @@ import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
 import { HistoryRecoveryModal } from '../chat/HistoryRecoveryModal';
 import { SecondPasskeyNudge } from './SecondPasskeyNudge';
+import { ModalDialog } from '../common/ModalDialog';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * Shows the devices registered for end-to-end encrypted chat (wire v2), the account-history key
@@ -26,6 +28,7 @@ export function DeviceManagementCard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [confirmRevoke, setConfirmRevoke] = useState<{ deviceId: string; label: string } | null>(null);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -94,7 +97,7 @@ export function DeviceManagementCard() {
   return (
     <div className="border border-border p-8 space-y-8 bg-surface-card text-text">
       <div className="flex items-center gap-3">
-        <MonitorSmartphone className="w-4 h-4 text-accent" />
+        <MonitorSmartphone className={`${ICON_SECTION.section.headingIcon} text-accent`} />
         <div>
           <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent">
             Chat Devices
@@ -107,7 +110,7 @@ export function DeviceManagementCard() {
 
       {/* History key status */}
       <div className="flex items-start gap-3 pt-4 border-t border-border">
-        <History className="w-4 h-4 mt-0.5 text-text-muted shrink-0" />
+        <History className={`${ICON_SECTION.section.rowIcon} mt-0.5 text-text-muted`} />
         <div className="space-y-2">
           <span className="text-[9px] uppercase tracking-[0.25em] font-black opacity-60 block">
             History Recovery Key
@@ -125,7 +128,7 @@ export function DeviceManagementCard() {
               {...trackProps(UiElement.SETTINGS_RECOVERY_SETUP)}
               className="mt-1 py-2 px-4 border border-border text-text hover:bg-surface-hover text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent hover:text-accent transition-colors inline-flex items-center gap-2"
             >
-              <History className="w-3 h-3" aria-hidden="true" />
+              <History className={ICON_SECTION.section.actionIcon} aria-hidden="true" />
               Restore earlier messages
             </button>
           )}
@@ -178,15 +181,20 @@ export function DeviceManagementCard() {
                 </div>
                 {!device.isCurrentDevice && !device.revoked && (
                   <button
-                    onClick={() => handleRevoke(device.deviceId)}
+                    onClick={() =>
+                      setConfirmRevoke({
+                        deviceId: device.deviceId,
+                        label: device.displayName || `${device.platform} device`,
+                      })
+                    }
                     disabled={revoking === device.deviceId}
                     {...trackProps(UiElement.SETTINGS_DEVICE_REVOKE, { targetId: device.deviceId })}
                     className="py-2 px-4 border border-border text-text hover:bg-surface-hover text-[10px] uppercase tracking-[0.2em] font-bold hover:border-red-500 hover:text-red-500 transition-colors disabled:opacity-50 inline-flex items-center gap-2 shrink-0"
                   >
                     {revoking === device.deviceId ? (
-                      <Loader className="w-3 h-3 animate-spin" />
+                      <Loader className={`${ICON_SECTION.section.actionIcon} animate-spin`} />
                     ) : (
-                      <Trash2 className="w-3 h-3" />
+                      <Trash2 className={ICON_SECTION.section.actionIcon} />
                     )}
                     Revoke
                   </button>
@@ -204,6 +212,46 @@ export function DeviceManagementCard() {
         // Re-read the registry so the status flips to "holding" straight away.
         onRecovered={() => void load()}
       />
+
+      <ModalDialog
+        open={Boolean(confirmRevoke)}
+        onClose={() => setConfirmRevoke(null)}
+        labelledBy="revoke-device-title"
+        className="w-full max-w-sm rounded-2xl bg-surface-card border border-border p-6 space-y-4 shadow-2xl"
+      >
+        <h3 id="revoke-device-title" className="text-sm font-semibold text-text">
+          Revoke {confirmRevoke?.label ?? 'device'}?
+        </h3>
+        <p className="text-xs text-text-secondary leading-relaxed">
+          This removes the device&rsquo;s key from your encrypted chat registry. It won&rsquo;t be
+          able to open new messages until it&rsquo;s re-verified.
+        </p>
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => setConfirmRevoke(null)}
+            data-track-exempt="duplicate: cancel dismisses device revoke dialog"
+            className="px-4 py-2 border border-border rounded-lg text-xs font-medium text-text hover:bg-surface-hover"
+          >
+            Cancel
+          </button>
+          {/* TODO(telemetry-parity): promote settings.device_revoke_confirm to include "web" in telemetry catalog */}
+          <button
+            type="button"
+            disabled={!confirmRevoke || revoking === confirmRevoke.deviceId}
+            onClick={async () => {
+              if (!confirmRevoke) return;
+              const id = confirmRevoke.deviceId;
+              setConfirmRevoke(null);
+              await handleRevoke(id);
+            }}
+            data-track-exempt="disabled: pending telemetry web parity enablement for settings.device_revoke_confirm"
+            className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+          >
+            Revoke device
+          </button>
+        </div>
+      </ModalDialog>
     </div>
   );
 }

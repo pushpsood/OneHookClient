@@ -4,6 +4,7 @@ import { AccountRecoveryDialog } from '../../components/profile/AccountRecoveryD
 import { readRecoveryStatus, type RecoveryStatus } from '../../lib/account-recovery';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { MATCHING_INTRO_COPY } from '../matching/MatchingIntroView';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * The rows right under the profile editor: Turn on matching (only while matching is not ON; it opens
@@ -52,13 +53,13 @@ export function ProfileAccountRows({
           className={rowClass}
         >
           <span className="flex items-center gap-3 min-w-0">
-            <Heart className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+            <Heart className={`${ICON_SECTION.section.rowIcon} text-accent`} aria-hidden="true" />
             <span className="min-w-0">
               <span className="block text-sm font-semibold">{MATCHING_INTRO_COPY.turnOn}</span>
               {erasing && <span className="block text-xs text-text-secondary">{MATCHING_INTRO_COPY.erasing}</span>}
             </span>
           </span>
-          <ChevronRight className="w-4 h-4 opacity-40 shrink-0" aria-hidden="true" />
+          <ChevronRight className={`${ICON_SECTION.section.rowIcon} opacity-40`} aria-hidden="true" />
         </button>
       )}
       <button
@@ -68,7 +69,7 @@ export function ProfileAccountRows({
         className={rowClass}
       >
         <span className="flex items-center gap-3 min-w-0">
-          <ShieldCheck className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
+          <ShieldCheck className={`${ICON_SECTION.section.rowIcon} text-accent`} aria-hidden="true" />
           <span className="min-w-0">
             <span className="block text-sm font-semibold">Account recovery</span>
             {recoveryStatus && (
@@ -78,7 +79,7 @@ export function ProfileAccountRows({
             )}
           </span>
         </span>
-        <ChevronRight className="w-4 h-4 opacity-40 shrink-0" aria-hidden="true" />
+        <ChevronRight className={`${ICON_SECTION.section.rowIcon} opacity-40`} aria-hidden="true" />
       </button>
     </div>
     <AccountRecoveryDialog

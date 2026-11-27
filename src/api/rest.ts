@@ -13,6 +13,7 @@
  */
 import { ApiError } from '../lib/api-client';
 import { callSdk, sdkClient } from './sdk-client';
+import type { ReceivedLikesSort } from 'onehook-api-client';
 
 /**
  * The SDK output without its `$metadata`, typed as the app's shape. The app types mirror the Smithy
@@ -128,6 +129,12 @@ export interface ChatSettings {
   connectionNotifications: boolean;
   /** Pushes when someone likes the member. Only matters while matching is ON. Default on. */
   likeNotifications: boolean;
+  /** Restriction: peers may not save the caller's photos/videos to their device. Default false. */
+  restrictSaveMedia?: boolean;
+  /** Restriction: peers may not export the conversation transcript. Default false. */
+  restrictExport?: boolean;
+  /** Restriction: peers may not share the caller's messages/photos/files with Mr.OneHook. Default false. */
+  restrictMrOneHook?: boolean;
 }
 
 /** The settings keys that are push-notification switches (each reports a snake_case `targetId`). */
@@ -144,6 +151,9 @@ function unwrapSettings(out: { settings?: unknown }): ChatSettings {
     ...(s as ChatSettings),
     connectionNotifications: s.connectionNotifications ?? true,
     likeNotifications: s.likeNotifications ?? true,
+    ...(s.restrictSaveMedia !== undefined ? { restrictSaveMedia: Boolean(s.restrictSaveMedia) } : {}),
+    ...(s.restrictExport !== undefined ? { restrictExport: Boolean(s.restrictExport) } : {}),
+    ...(s.restrictMrOneHook !== undefined ? { restrictMrOneHook: Boolean(s.restrictMrOneHook) } : {}),
   };
 }
 
@@ -157,6 +167,25 @@ export const ChatSettingsApi = {
   /** Partial update: send only the fields that changed. */
   update: (patch: Partial<ChatSettings>): Promise<ChatSettings> =>
     callSdk(async () => unwrapSettings(await sdkClient.updateChatSettings(patch))),
+};
+
+export interface PartnerChatRestrictions {
+  saveMedia: boolean;
+  export: boolean;
+  mrOneHook: boolean;
+}
+
+export const PartnerRestrictionsApi = {
+  /** Reads what `userId` restricts in the shared `matchId` conversation. */
+  get: (userId: string, matchId: string): Promise<PartnerChatRestrictions> =>
+    callSdk(async () => {
+      const res = await sdkClient.getPartnerChatRestrictions({ userId, matchId });
+      return {
+        saveMedia: Boolean(res?.restrictions?.saveMedia),
+        export: Boolean(res?.restrictions?.export),
+        mrOneHook: Boolean(res?.restrictions?.mrOneHook),
+      };
+    }),
 };
 
 // ── Swipe (Hinge-style comment-to-like) & received likes ──────────────────────
@@ -180,14 +209,17 @@ export interface SwipeResult {
 export interface ReceivedLike {
   fromUserId: string;
   /**
-   * Nullable in the model, which still documents the removed `SwipeByUsername` like. Every like now
-   * carries a comment and a target; null is rendered as no comment.
+   * Absent when a Super or Infinity sender liked without a comment.
    */
   comment: string | null;
   likeTargetType: string | null;
   likeTargetRef: string | null;
   /** ISO-8601 UTC. */
   createdAt: string;
+  /** Coarsened distance in km when both users have an indexed location. */
+  distanceKm?: number | null;
+  /** 'LIKE' or 'ROSE' (defaults to 'LIKE' when absent). */
+  likeKind?: string | null;
 }
 
 export interface ReceivedLikesResponse {
@@ -248,13 +280,25 @@ export const RosesApi = {
     callSdk(async () => body<RoseQuota>(await sdkClient.getRoses({}))),
 };
 
+export interface PendingLikeCountResponse {
+  sent: number;
+  received: number;
+}
+
+export const PendingLikeCountApi = {
+  /** Counts of pending sent and received likes (`GET /matching/likes/pending-count`). */
+  get: (): Promise<PendingLikeCountResponse> =>
+    callSdk(async () => body<PendingLikeCountResponse>(await sdkClient.getPendingLikeCount({}))),
+};
+
 export const ReceivedLikesApi = {
   /**
-   * The caller's still-pending received likes (RIGHT/SUPER not yet reciprocated or passed on),
-   * newest first. No input — identity is the injected `X-User-Id`.
+   * The caller's still-pending received likes (not yet reciprocated or passed on).
    */
-  list: (): Promise<ReceivedLikesResponse> =>
-    callSdk(async () => body<ReceivedLikesResponse>(await sdkClient.getReceivedLikes({}))),
+  list: (sort?: ReceivedLikesSort): Promise<ReceivedLikesResponse> =>
+    callSdk(async () =>
+      body<ReceivedLikesResponse>(await sdkClient.getReceivedLikes(sort ? { sort } : {}))
+    ),
 };
 
 // ── Member reports (POST /state/reports) ───────────────────────────────────────

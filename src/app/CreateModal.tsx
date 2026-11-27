@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Image, Sparkles, Mic, Upload, ArrowRight } from 'lucide-react';
 import { UiElement, trackProps } from '../lib/analytics/analytics';
+import { ICON_SECTION } from '../lib/icon-tokens';
 
 interface CreateModalProps {
   isOpen: boolean;
@@ -32,9 +33,9 @@ export function CreateModal({
             type="button"
             onClick={onClose}
             {...trackProps(UiElement.CREATE_CLOSE, { action: 'dismiss' })}
-            className="p-1 rounded-full text-text-secondary hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
+            className={ICON_SECTION.modalHeader.button}
           >
-            <X className="w-5 h-5" />
+            <X className={ICON_SECTION.modalHeader.icon} />
           </button>
         </div>
 
