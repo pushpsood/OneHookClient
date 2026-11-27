@@ -1,4 +1,5 @@
 import { sdkClient } from './sdk-client';
+import type { CompleteLivenessSessionResponse } from 'onehook-api-client';
 
 export type LivenessStatus =
   | 'NONE'
@@ -11,17 +12,20 @@ export type LivenessStatus =
 /**
  * Face Liveness verification (client side).
  *
- * The client creates the streaming session and lets the FaceLivenessDetector stream video to
- * Rekognition. Analysis is handled ASYNCHRONOUSLY by the backend, which records an authoritative
- * status (NONE | PENDING | APPROVED | REJECTED) and sets the profile's `verified` flag on success.
- * The client reads that status (rather than guessing from `verified`) so it can show an accurate,
- * reload-safe state. Routed through the Smithy-generated SDK — the single source of truth.
+ * The client creates the streaming session, lets the FaceLivenessDetector stream video to
+ * Rekognition, and calls `completeSession(sessionId)` once streaming finishes so the backend
+ * runs the asynchronous analysis (Rekognition + face match) and updates status / `verified`.
  */
 export const LivenessApi = {
   /** Create a Rekognition streaming liveness session. */
   createSession: async (): Promise<{ sessionId: string }> => {
     const res = await sdkClient.createLivenessSession({});
     return { sessionId: res.sessionId };
+  },
+
+  /** Signal that streaming is done so the backend evaluates the session asynchronously. */
+  completeSession: async (sessionId: string): Promise<CompleteLivenessSessionResponse> => {
+    return sdkClient.completeLivenessSession({ sessionId });
   },
 
   /** Read the authoritative liveness verification status for the caller. */

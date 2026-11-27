@@ -1,10 +1,15 @@
 import { sdkClient } from './sdk-client';
 import {
   UserState,
+  type ArchiveItem,
+  type BlockView,
+  type CurrentHookAction,
   type Hook,
   type HookRequestItem,
+  type ListArchivesResponse,
   type UserStateResponse,
   type UserStateSnapshot,
+  type WalletResponse,
 } from '../types';
 import type { BlockReason, ReportCategory, ReportMemberResponse, SubscriptionTier } from 'onehook-api-client';
 import { DEFAULT_SUBSCRIPTION_TIER } from 'onehook-api-client/membership';
@@ -92,6 +97,9 @@ export function toUserStateSnapshot(res: UserStateResponse): UserStateSnapshot {
     matchingTabHidden: Boolean((res as UserStateResponse & { matchingTabHidden?: boolean }).matchingTabHidden),
     ...(typeof res.membershipEndsAt === 'number' ? { membershipEndsAt: Number(res.membershipEndsAt) } : {}),
     ...(res.pendingSubscriptionTier ? { pendingSubscriptionTier: res.pendingSubscriptionTier as SubscriptionTier } : {}),
+    ...(res.pending ? { pending: res.pending } : {}),
+    ...(res.decisionWindow ? { decisionWindow: res.decisionWindow } : {}),
+    ...(res.unarchiveReserved !== undefined ? { unarchiveReserved: Boolean(res.unarchiveReserved) } : {}),
   };
 }
 
@@ -242,5 +250,99 @@ export const StateApi = {
    */
   setMatchingTabHidden: async (hidden: boolean): Promise<boolean> => {
     return (await MatchingTabApi.setHidden(hidden)).hidden;
+  },
+
+  // ── Archived conversations & unarchive requests (docs/archives.md) ────────
+
+  /** Lists the caller's archived chats + allowance, recording their chat view pass. */
+  listArchives: async (): Promise<ListArchivesResponse> => {
+    const res = await withViewPassRetry(() => sdkClient.listArchives({}));
+    viewPasses.add(res.chatViewPass);
+    return {
+      archives: (res.archives ?? []) as ArchiveItem[],
+      allowance: res.allowance,
+      chatViewPass: res.chatViewPass,
+    };
+  },
+
+  /** Archives a current hook instead of deleting it; returns updated user state. */
+  archiveHook: async (matchId: string): Promise<UserStateSnapshot> => {
+    const snapshot = toUserStateSnapshot(await sdkClient.archiveHook({ matchId }));
+    viewPasses.add(snapshot.chatViewPass);
+    return snapshot;
+  },
+
+  /** Asks the other member to continue an archived chat (`currentHook` needed while hooked). */
+  sendUnarchiveRequest: async (
+    matchId: string,
+    currentHook?: CurrentHookAction
+  ): Promise<UserStateSnapshot> => {
+    const snapshot = toUserStateSnapshot(
+      await sdkClient.sendUnarchiveRequest({
+        matchId,
+        ...(currentHook ? { currentHook } : {}),
+      })
+    );
+    viewPasses.add(snapshot.chatViewPass);
+    return snapshot;
+  },
+
+  /** Accepts or declines an incoming request to continue an archived conversation. */
+  respondUnarchiveRequest: async (
+    matchId: string,
+    accept: boolean,
+    currentHook?: CurrentHookAction
+  ): Promise<UserStateSnapshot> => {
+    const snapshot = toUserStateSnapshot(
+      await sdkClient.respondUnarchiveRequest({
+        matchId,
+        accept,
+        ...(currentHook ? { currentHook } : {}),
+      })
+    );
+    viewPasses.add(snapshot.chatViewPass);
+    return snapshot;
+  },
+
+  /** Withdraws the caller's outgoing unarchive request. */
+  withdrawUnarchiveRequest: async (matchId: string): Promise<UserStateSnapshot> => {
+    const snapshot = toUserStateSnapshot(await sdkClient.withdrawUnarchiveRequest({ matchId }));
+    viewPasses.add(snapshot.chatViewPass);
+    return snapshot;
+  },
+
+  /** Marks an incoming unarchive request seen so a mutual like opens a decision window if needed. */
+  markUnarchiveRequestSeen: async (matchId: string): Promise<void> => {
+    await sdkClient.markUnarchiveRequestSeen({ matchId });
+  },
+
+  /** Deletes an archived conversation for both members. */
+  deleteArchive: async (matchId: string): Promise<void> => {
+    await sdkClient.deleteArchive({ matchId });
+  },
+
+  // ── Safety blocked list ────────────────────────────────────────────────────
+
+  /** Lists everyone the caller has blocked, newest first. */
+  listBlocks: async (): Promise<BlockView[]> => {
+    const res = await sdkClient.listBlocks({});
+    return (res.blocks ?? []) as BlockView[];
+  },
+
+  /** Removes a block (does not restore prior connections). */
+  unblockUser: async (blockedUserId: string): Promise<void> => {
+    await sdkClient.unblockUser({ blockedUserId });
+  },
+
+  // ── Wallet & boosts ───────────────────────────────────────────────────────
+
+  /** Reads boosts, roses, and archives balances plus available products and active boost run. */
+  getWallet: async (): Promise<WalletResponse> => {
+    return sdkClient.getWallet({});
+  },
+
+  /** Starts a 30-minute boost run from purchased balance (`count` defaults to 1). */
+  startBoost: async (count = 1): Promise<WalletResponse> => {
+    return sdkClient.startBoost({ count });
   },
 };

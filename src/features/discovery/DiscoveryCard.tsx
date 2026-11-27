@@ -7,6 +7,7 @@ import { pictureTransformStyle } from '../../utils/photo-transform';
 import { mediaLikeType, type LikeTarget } from './like-target';
 import { trackMediaView, trackSectionView, trackPromptView, Screen, CardVariant, UiElement, trackProps } from '../../lib/analytics/analytics';
 import { usePhotoLightbox } from '../../components/common/PhotoLightbox';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * DiscoveryCard — the canonical profile surface, matched to the iOS app (the UI source of truth,
@@ -664,10 +665,10 @@ export function DiscoveryCard({
             {age && age > 0 ? <span>{age}</span> : null}
             {location && (
               <span className="flex items-center gap-1 truncate">
-                <MapPin className="w-3 h-3 shrink-0" /> {location}
+                <MapPin className={ICON_SECTION.section.badgeIcon} /> {location}
               </span>
             )}
-            {candidate.verified && <CheckCircle2 className="w-3.5 h-3.5 text-ig-blue shrink-0" />}
+            {candidate.verified && <CheckCircle2 className={`${ICON_SECTION.section.actionIcon} text-ig-blue`} />}
           </div>
         </div>
         {onRose && (
@@ -681,7 +682,7 @@ export function DiscoveryCard({
             aria-label={rosesRemaining == null ? 'Send a rose' : `Send a rose, ${rosesRemaining} left today`}
             title={rosesRemaining == null ? 'Send a rose' : `Send a rose · ${rosesRemaining} left today`}
             {...trackProps(UiElement.DISCOVER_ROSE_BUTTON)}
-            className="relative shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="relative shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ring-2 ring-rose-400/50 bg-gradient-to-br from-rose-100/80 via-amber-100/70 to-rose-200/80 dark:from-rose-950/60 dark:via-amber-900/40 dark:to-rose-900/60"
           >
             <RoseIcon spent={rosesRemaining === 0} size={40} />
             {rosesRemaining != null && rosesRemaining > 0 && (

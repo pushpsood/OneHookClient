@@ -2,8 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Send, Image as ImageIcon, Video, Volume2, MessageSquareQuote, Sparkles, Tag } from 'lucide-react';
 import { LIKE_COMMENT_MAX_CHARS } from '../../api/rest';
+import { SubscriptionTier } from '../../types';
+import { useAppStore } from '../../store/app-store';
 import type { LikeTarget, LikeTargetType } from './like-target';
 import { trackLikeComposerOpen, trackLikeCommentAbandoned, UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
+
+const MUST_MIN_WORDS = 10;
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
 
 const TYPE_META: Record<LikeTargetType, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   PHOTO: { label: 'Photo', icon: ImageIcon },
@@ -25,16 +34,32 @@ export interface CommentComposerProps {
   onCancel: () => void;
   /** 'rose' shows the super-like framing (a daily-limited rose on the whole profile). */
   kind?: 'like' | 'rose';
+  /** Optional tier override (defaults to signed-in user's SubscriptionTier). */
+  tier?: SubscriptionTier;
+  /** Optional handler to open the membership upgrade comparison sheet. */
+  onOpenUpgrade?: () => void;
 }
 
 /**
- * Hinge-style like composer. A like is ONLY sent from here: it shows what is being commented on,
- * enforces the backend's character cap client-side (with a live remaining count), and disables
- * submit while empty or in flight. On failure it shows the error and does not close, so the caller
- * never advances the deck for a rejected like.
+ * Hinge-style like composer matching iOS `LikeComposerViewController.swift`:
+ *  - On Must tier: requires at least 10 words + displays word counter and upgrade tease.
+ *  - On Super / Infinity: comment is optional ("Send without a comment" available for regular likes;
+ *    roses still carry a short note).
  */
-export function CommentComposer({ targetName, target, onSubmit, onCancel, kind = 'like' }: CommentComposerProps) {
+export function CommentComposer({
+  targetName,
+  target,
+  onSubmit,
+  onCancel,
+  kind = 'like',
+  tier: tierProp,
+  onOpenUpgrade,
+}: CommentComposerProps) {
+  const storeTier = useAppStore((s) => s.userState?.subscriptionTier);
+  const tier = tierProp ?? storeTier;
   const isRose = kind === 'rose';
+  const mustWordRule = tier === SubscriptionTier.MUST;
+  const optionalPaidRule = tier != null && tier !== SubscriptionTier.MUST;
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,23 +105,33 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel, kind =
   const meta = TYPE_META[target.type];
   const Icon = meta.icon;
   const trimmedLength = comment.trim().length;
+  const words = countWords(comment);
   const remaining = LIKE_COMMENT_MAX_CHARS - comment.length;
-  const canSubmit = trimmedLength > 0 && comment.length <= LIKE_COMMENT_MAX_CHARS && !submitting;
+  const meetsPolicy = mustWordRule
+    ? words >= MUST_MIN_WORDS && comment.length <= LIKE_COMMENT_MAX_CHARS
+    : optionalPaidRule
+      ? comment.length <= LIKE_COMMENT_MAX_CHARS && (!isRose || trimmedLength > 0)
+      : trimmedLength > 0 && comment.length <= LIKE_COMMENT_MAX_CHARS;
+  const canSubmit = meetsPolicy && !submitting;
 
-  const handleSubmit = async () => {
-    if (!canSubmit) return;
+  const submitValue = async (value: string) => {
     setSubmitting(true);
     setError(null);
     // Committing a like — not an abandon. Reset if it fails (composer stays open on error).
     submittedRef.current = true;
     try {
-      await onSubmit(comment.trim());
+      await onSubmit(value);
       // Parent closes the composer and advances on success.
     } catch (err: any) {
       submittedRef.current = false;
       setError(err?.message || 'We couldn’t send that just now. Please try again.');
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    await submitValue(comment.trim());
   };
 
   return (
@@ -142,9 +177,9 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel, kind =
             disabled={submitting}
             aria-label="Cancel"
             {...trackProps(UiElement.LIKE_COMPOSER_CANCEL)}
-            className="shrink-0 w-8 h-8 rounded-full border border-border flex items-center justify-center hover:bg-bg transition-colors disabled:opacity-40 cursor-pointer"
+            className={`shrink-0 ${ICON_SECTION.modalHeader.button} disabled:opacity-40`}
           >
-            <X className="w-4 h-4" />
+            <X className={ICON_SECTION.modalHeader.icon} />
           </button>
         </div>
 
@@ -161,7 +196,24 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel, kind =
             className="w-full resize-none border border-border bg-[#FAFAFA] p-3 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-60"
           />
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
+            {mustWordRule ? (
+              <span
+                className={`text-[10px] font-mono uppercase tracking-widest ${
+                  words >= MUST_MIN_WORDS ? 'text-accent' : 'opacity-60'
+                }`}
+              >
+                {words} / {MUST_MIN_WORDS} words
+              </span>
+            ) : (
+              <span className="text-[11px] text-text-secondary">
+                {optionalPaidRule
+                  ? isRose
+                    ? 'Add a short note with your rose.'
+                    : 'A comment is optional — send with or without one.'
+                  : ''}
+              </span>
+            )}
             <span
               className={`text-[10px] font-mono uppercase tracking-widest ${
                 remaining < 0 ? 'text-red-600' : 'opacity-50'
@@ -171,10 +223,42 @@ export function CommentComposer({ targetName, target, onSubmit, onCancel, kind =
             </span>
           </div>
 
+          {mustWordRule && (
+            <div className="p-3 rounded-xl bg-accent/5 border border-accent/20 text-xs space-y-1">
+              <p className="text-text-secondary font-medium">
+                On Super and Infinity you can comment only if you want to — no {MUST_MIN_WORDS}-word minimum.
+              </p>
+              {onOpenUpgrade && (
+                <button
+                  type="button"
+                  onClick={onOpenUpgrade}
+                  // TODO(telemetry-parity): switch to UiElement.LIKE_COMPOSER_UPGRADE once enabled on web.
+                  data-track-exempt="disabled: pending telemetry web parity enablement for like_composer.upgrade"
+                  className="text-accent font-bold hover:underline cursor-pointer"
+                >
+                  See what upgrading unlocks
+                </button>
+              )}
+            </div>
+          )}
+
           {error && (
             <p className="text-xs text-red-600 leading-relaxed" role="alert">
               {error}
             </p>
+          )}
+
+          {optionalPaidRule && !isRose && (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => void submitValue('')}
+              // TODO(telemetry-parity): switch to UiElement.LIKE_COMPOSER_SEND_WITHOUT_COMMENT once enabled on web.
+              data-track-exempt="disabled: pending telemetry web parity enablement for like_composer.send_without_comment"
+              className="w-full py-2.5 border border-border text-[10px] font-bold uppercase tracking-[0.25em] hover:bg-bg transition-colors disabled:opacity-40 cursor-pointer"
+            >
+              Send without a comment
+            </button>
           )}
 
           <div className="flex gap-3 pt-1">

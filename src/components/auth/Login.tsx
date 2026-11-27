@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { AlertCircle, Loader } from 'lucide-react';
+import { AlertCircle, Fingerprint, Loader } from 'lucide-react';
 import { getCognitoAuth } from '../../lib/cognito-auth';
 import { useToast } from '../common/Toast';
 import { AppleIcon, GoogleIcon } from '../common/BrandIcons';
@@ -282,6 +282,40 @@ export function Login() {
     }
   };
 
+  const handlePasskeySignIn = async () => {
+    setError(null);
+    const target = resolveIdentifier();
+    if (!target) {
+      showToast(
+        'Enter the phone number, email, or username tied to your account first, then use Passkey.',
+        'info'
+      );
+      return;
+    }
+    setSubmittedIdentifier(target);
+    setLoading(true);
+    try {
+      const response = await getCognitoAuth().loginWithPasskey(target);
+      if (isSignedInStep(response)) {
+        setAuthenticated(true);
+        navigate('/auth/setup', { replace: true });
+      } else {
+        throw new Error(
+          'This account cannot sign in with a passkey yet. Enroll a passkey from Settings first, or use another sign-in method.'
+        );
+      }
+    } catch (err: any) {
+      if (err?.name === 'NotAllowedError' || err?.name === 'AbortError') {
+        return;
+      }
+      const message = err instanceof Error ? err.message : 'Passkey sign-in failed.';
+      setError(message);
+      showToast(message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleResendOtp = async () => {
     if (resendCooldown > 0 || resendLoading || !submittedIdentifier) return;
     setError(null);
@@ -391,7 +425,7 @@ export function Login() {
                     <input
                       id="identifier"
                       type="text"
-                      autoComplete="username"
+                      autoComplete="username webauthn"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
@@ -414,7 +448,7 @@ export function Login() {
                       id="identifier"
                       type="email"
                       inputMode="email"
-                      autoComplete="username"
+                      autoComplete="username webauthn"
                       placeholder="you@example.com"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
@@ -548,6 +582,17 @@ export function Login() {
                   className="w-full py-3 border border-black text-black text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
                 >
                   <AppleIcon className="w-4 h-4" /> Sign in with Apple
+                </button>
+
+                {/* TODO(telemetry-parity): promote login.passkey to include "web" in telemetry catalog */}
+                <button
+                  type="button"
+                  onClick={handlePasskeySignIn}
+                  disabled={loading}
+                  data-track-exempt="disabled: pending telemetry web parity enablement for login.passkey"
+                  className="w-full py-3 border border-border text-text text-xs font-bold uppercase tracking-[0.3em] rounded hover:bg-surface-hover transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Fingerprint className="w-4 h-4 text-accent" /> Use a Passkey
                 </button>
               </>
             ) : step === 'OTP' ? (

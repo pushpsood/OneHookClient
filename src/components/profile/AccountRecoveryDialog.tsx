@@ -8,6 +8,7 @@ import {
   type RecoveryStatus,
 } from '../../lib/account-recovery';
 import { Screen, UiElement, trackProps, trackUi } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * Profile > Account recovery. Shows whether recovery is on, offers to set it up (a passkey that can
@@ -93,9 +94,9 @@ export function AccountRecoveryDialog({
             onClick={onClose}
             aria-label="Close"
             {...trackProps(UiElement.PROFILE_RECOVERY_OPEN, { action: 'dismiss' })}
-            className="p-1 opacity-50 hover:opacity-100 transition-opacity cursor-pointer"
+            className={ICON_SECTION.modalHeader.button}
           >
-            <X className="w-5 h-5" />
+            <X className={ICON_SECTION.modalHeader.icon} />
           </button>
         </div>
 

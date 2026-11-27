@@ -1,13 +1,26 @@
-import React, { useEffect, useState } from 'react';
-import { Mail, Fingerprint, Loader, Apple, Chrome, Settings, Trash2, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Mail,
+  Phone,
+  Fingerprint,
+  Loader,
+  Apple,
+  Chrome,
+  Settings,
+  Trash2,
+  AlertTriangle,
+} from 'lucide-react';
 import { getCognitoAuth } from '../../lib/cognito-auth';
 import { IdentityApi } from '../../api/identity';
 import { ProfileApi } from '../../api/profile';
 import { ChatEncryptionManager } from '../../lib/chat-encryption';
 import { useAppStore } from '../../store/app-store';
 import { useToast } from '../common/Toast';
+import { PhoneNumberInput } from '../common/PhoneNumberInput';
+import { ModalDialog } from '../common/ModalDialog';
 import { linkGoogleAccount } from '../../lib/social-link';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 export function AccountSettingsCard() {
   const { showToast } = useToast();
@@ -20,19 +33,86 @@ export function AccountSettingsCard() {
   const [emailStep, setEmailStep] = useState<'input' | 'verify'>('input');
   const [emailOtp, setEmailOtp] = useState('');
 
+  const [currentPhone, setCurrentPhone] = useState<string | null>(null);
+  const [phoneEditing, setPhoneEditing] = useState(false);
+  const [phoneStep, setPhoneStep] = useState<'input' | 'verify'>('input');
+  const [phoneDraft, setPhoneDraft] = useState<{ e164: string; isValid: boolean }>({
+    e164: '',
+    isValid: false,
+  });
+  const [phoneOtp, setPhoneOtp] = useState('');
+  const phoneOtpAbortRef = useRef<AbortController | null>(null);
+  const phoneOtpFormRef = useRef<HTMLFormElement | null>(null);
+
+  const [socialState, setSocialState] = useState<{
+    googleId?: string;
+    googleEmail?: string;
+    appleId?: string;
+    appleEmail?: string;
+  }>({});
+  const [pendingUnlink, setPendingUnlink] = useState<'GOOGLE' | 'APPLE' | null>(null);
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const user = await getCognitoAuth().getCurrentUser();
-        if (user?.email) setCurrentEmail(user.email);
+        if (!cancelled && user?.email) setCurrentEmail(user.email);
       } catch {
         // Ignore
       }
+      if (!currentUser?.id) return;
+      try {
+        const identityUser = await IdentityApi.getUser(currentUser.id);
+        if (cancelled) return;
+        if (identityUser?.email) setCurrentEmail(identityUser.email);
+        if (identityUser?.phoneNumber) setCurrentPhone(identityUser.phoneNumber);
+        setSocialState({
+          googleId: identityUser?.googleId,
+          googleEmail: identityUser?.googleEmail,
+          appleId: identityUser?.appleId,
+          appleEmail: identityUser?.appleEmail,
+        });
+      } catch {
+        // Identity lookup is best-effort enrichment
+      }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id]);
+
+  // WebOTP auto-extraction lifecycle when the phone verification step is active
+  useEffect(() => {
+    if (phoneStep !== 'verify' || !phoneEditing) {
+      phoneOtpAbortRef.current?.abort();
+      phoneOtpAbortRef.current = null;
+      return;
+    }
+    if (typeof window === 'undefined' || !('OTPCredential' in window)) return;
+    const ac = new AbortController();
+    phoneOtpAbortRef.current = ac;
+    void (navigator.credentials as unknown as {
+      get: (opts: { otp: { transport: string[] }; signal: AbortSignal }) => Promise<{ code?: string } | null>;
+    })
+      .get({ otp: { transport: ['sms'] }, signal: ac.signal })
+      .then((cred) => {
+        if (cred?.code) {
+          setPhoneOtp(cred.code);
+          phoneOtpFormRef.current?.requestSubmit();
+        }
+      })
+      .catch(() => {
+        /* Ignore AbortError or unsupported browser cancel */
+      });
+    return () => {
+      ac.abort();
+      phoneOtpAbortRef.current = null;
+    };
+  }, [phoneStep, phoneEditing]);
 
   const handleAddEmailRequest = async () => {
     if (!email.trim() || !email.includes('@')) {
@@ -69,10 +149,29 @@ export function AccountSettingsCard() {
     }
   };
 
+  const googleLinked = Boolean(socialState.googleId);
+  const appleLinked = Boolean(socialState.appleId);
+
   const handleLinkGoogle = async () => {
+    if (googleLinked) {
+      setPendingUnlink('GOOGLE');
+      return;
+    }
     try {
       setLoading('google');
       await linkGoogleAccount();
+      if (currentUser?.id) {
+        const refreshed = await IdentityApi.getUser(currentUser.id).catch(() => null);
+        if (refreshed) {
+          setSocialState((s) => ({
+            ...s,
+            googleId: refreshed.googleId ?? 'linked',
+            googleEmail: refreshed.googleEmail,
+          }));
+        } else {
+          setSocialState((s) => ({ ...s, googleId: 'linked' }));
+        }
+      }
       showToast('Google account linked successfully!', 'success');
     } catch (err: any) {
       showToast(err?.message || 'Could not link Google account.', 'error');
@@ -82,8 +181,78 @@ export function AccountSettingsCard() {
   };
 
   const handleLinkApple = async () => {
+    if (appleLinked) {
+      setPendingUnlink('APPLE');
+      return;
+    }
     showToast('Apple linking will be available soon.', 'info');
     // Implement Apple JS linking here once configured
+  };
+
+  const confirmUnlinkSocial = async () => {
+    if (!pendingUnlink) return;
+    const provider = pendingUnlink;
+    try {
+      setLoading(provider === 'GOOGLE' ? 'google' : 'apple');
+      await IdentityApi.unlinkSocial(provider);
+      setSocialState((s) =>
+        provider === 'GOOGLE'
+          ? { ...s, googleId: undefined, googleEmail: undefined }
+          : { ...s, appleId: undefined, appleEmail: undefined }
+      );
+      setPendingUnlink(null);
+      showToast(
+        `${provider === 'GOOGLE' ? 'Google' : 'Apple'} account unlinked.`,
+        'success'
+      );
+    } catch (err: any) {
+      showToast(
+        err?.message || `Could not unlink ${provider === 'GOOGLE' ? 'Google' : 'Apple'} account.`,
+        'error'
+      );
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleRequestPhoneUpdateOtp = async () => {
+    if (!phoneDraft.isValid) {
+      showToast('Enter a valid phone number.', 'error');
+      return;
+    }
+    try {
+      setLoading('phone_request');
+      await IdentityApi.requestPhoneUpdateOtp(phoneDraft.e164);
+      setPhoneStep('verify');
+      showToast('Verification code sent by SMS.', 'info');
+    } catch (err: any) {
+      showToast(err?.message || 'Could not send verification code.', 'error');
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  const handleVerifyPhoneUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    phoneOtpAbortRef.current?.abort();
+    phoneOtpAbortRef.current = null;
+    if (!phoneOtp.trim()) {
+      showToast('Please enter the 6-digit verification code.', 'error');
+      return;
+    }
+    try {
+      setLoading('phone_verify');
+      await IdentityApi.updatePhoneNumber(phoneDraft.e164, phoneOtp.trim());
+      setCurrentPhone(phoneDraft.e164);
+      setPhoneEditing(false);
+      setPhoneStep('input');
+      setPhoneOtp('');
+      showToast('Phone number updated.', 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Could not update phone number.', 'error');
+    } finally {
+      setLoading(null);
+    }
   };
 
   const handleAddPasskey = async () => {
@@ -150,7 +319,7 @@ export function AccountSettingsCard() {
   return (
     <div className="border border-border p-8 space-y-8 bg-surface-card text-text">
       <div className="flex items-center gap-3">
-        <Settings className="w-4 h-4 text-accent" />
+        <Settings className={`${ICON_SECTION.section.headingIcon} text-accent`} />
         <div>
           <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent">
             Account Connections
@@ -167,7 +336,7 @@ export function AccountSettingsCard() {
           {/* Email Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Mail className="w-4 h-4 text-text-muted" />
+              <Mail className={`${ICON_SECTION.section.rowIcon} text-text-muted`} />
               <span className="text-[9px] uppercase tracking-[0.25em] font-black opacity-60">
                 Email Address
               </span>
@@ -225,6 +394,132 @@ export function AccountSettingsCard() {
             )}
           </div>
 
+          {/* Phone Number Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Phone className={`${ICON_SECTION.section.rowIcon} text-text-muted`} />
+                <span className="text-[9px] uppercase tracking-[0.25em] font-black opacity-60">
+                  Phone Number
+                </span>
+              </div>
+              {currentPhone && !phoneEditing && (
+                /* TODO(telemetry-parity): promote settings.phone_update to include "web" in telemetry catalog */
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhoneEditing(true);
+                    setPhoneStep('input');
+                    setPhoneOtp('');
+                  }}
+                  data-track-exempt="disabled: pending telemetry web parity enablement for settings.phone_update"
+                  className="text-[10px] uppercase tracking-[0.2em] font-bold text-accent hover:opacity-80"
+                >
+                  Change
+                </button>
+              )}
+            </div>
+
+            {currentPhone && !phoneEditing ? (
+              <div className="text-sm font-medium p-3 bg-surface border border-border inline-block">
+                {currentPhone} <span className="text-green-600 text-xs ml-2">✓ Verified</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {phoneStep === 'input' ? (
+                  <>
+                    <PhoneNumberInput
+                      label={currentPhone ? 'New phone number' : 'Phone number'}
+                      initialE164={currentPhone ?? undefined}
+                      onChange={setPhoneDraft}
+                      disabled={loading === 'phone_request'}
+                    />
+                    <div className="flex gap-2">
+                      {/* TODO(telemetry-parity): promote settings.phone_update to include "web" in telemetry catalog */}
+                      <button
+                        type="button"
+                        onClick={handleRequestPhoneUpdateOtp}
+                        disabled={loading === 'phone_request' || !phoneDraft.isValid}
+                        data-track-exempt="disabled: pending telemetry web parity enablement for settings.phone_update"
+                        className="py-2 px-4 bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50"
+                      >
+                        {loading === 'phone_request' ? (
+                          <Loader className="w-3 h-3 animate-spin" />
+                        ) : (
+                          'Send code'
+                        )}
+                      </button>
+                      {phoneEditing && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPhoneEditing(false);
+                            setPhoneStep('input');
+                            setPhoneOtp('');
+                          }}
+                          data-track-exempt="duplicate: cancel dismisses phone editor"
+                          className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-surface-hover text-text"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <form ref={phoneOtpFormRef} onSubmit={handleVerifyPhoneUpdate} className="space-y-2 max-w-sm">
+                    <label
+                      htmlFor="settings-phone-otp"
+                      className="block text-[10px] uppercase tracking-[0.2em] font-bold opacity-70"
+                    >
+                      Verification code
+                    </label>
+                    <p id="settings-phone-otp-hint" className="text-xs opacity-60">
+                      Enter the 6-digit code sent to {phoneDraft.e164}.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        id="settings-phone-otp"
+                        name="otp"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        pattern="\d{6}"
+                        maxLength={6}
+                        aria-describedby="settings-phone-otp-hint"
+                        required
+                        value={phoneOtp}
+                        onChange={(e) => setPhoneOtp(e.target.value)}
+                        placeholder="000000"
+                        className="field-input flex-1 min-w-0 font-mono tracking-widest"
+                      />
+                      {/* TODO(telemetry-parity): promote settings.verify_code_submit to include "web" in telemetry catalog */}
+                      <button
+                        type="submit"
+                        disabled={loading === 'phone_verify'}
+                        data-track-exempt="disabled: pending telemetry web parity enablement for settings.verify_code_submit"
+                        className="py-2 px-4 bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 shrink-0"
+                      >
+                        {loading === 'phone_verify' ? (
+                          <Loader className="w-3 h-3 animate-spin" />
+                        ) : (
+                          'Verify'
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhoneStep('input')}
+                        data-track-exempt="duplicate: cancel returns to phone input"
+                        className="py-2 px-4 border border-border text-[10px] uppercase tracking-[0.2em] font-bold hover:bg-surface-hover text-text shrink-0"
+                      >
+                        Back
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Social Accounts */}
           <div className="space-y-4">
             <span className="text-[9px] uppercase tracking-[0.25em] font-black opacity-60 block">
@@ -234,20 +529,28 @@ export function AccountSettingsCard() {
               <button
                 onClick={handleLinkGoogle}
                 disabled={loading === 'google'}
-                {...trackProps(UiElement.SETTINGS_GOOGLE_LINK, { value: 'link' })}
+                {...trackProps(UiElement.SETTINGS_GOOGLE_LINK, {
+                  value: googleLinked ? 'unlink' : 'link',
+                })}
                 className="py-3 px-6 border border-border bg-surface hover:bg-surface-hover text-text hover:border-accent transition-colors text-[10px] uppercase tracking-[0.2em] font-black disabled:opacity-50 inline-flex items-center justify-center gap-2 flex-1"
               >
                 {loading === 'google' ? <Loader className="w-4 h-4 animate-spin" /> : <Chrome className="w-4 h-4" />}
-                Link Google
+                {googleLinked
+                  ? `Unlink Google${socialState.googleEmail ? ` (${socialState.googleEmail})` : ''}`
+                  : 'Link Google'}
               </button>
               <button
                 onClick={handleLinkApple}
                 disabled={loading === 'apple'}
-                {...trackProps(UiElement.SETTINGS_APPLE_LINK, { value: 'link' })}
+                {...trackProps(UiElement.SETTINGS_APPLE_LINK, {
+                  value: appleLinked ? 'unlink' : 'link',
+                })}
                 className="py-3 px-6 border border-border bg-black text-white dark:bg-white dark:text-black hover:opacity-90 transition-opacity text-[10px] uppercase tracking-[0.2em] font-black disabled:opacity-50 inline-flex items-center justify-center gap-2 flex-1"
               >
                 {loading === 'apple' ? <Loader className="w-4 h-4 animate-spin" /> : <Apple className="w-4 h-4" />}
-                Link Apple
+                {appleLinked
+                  ? `Unlink Apple${socialState.appleEmail ? ` (${socialState.appleEmail})` : ''}`
+                  : 'Link Apple'}
               </button>
             </div>
           </div>
@@ -258,7 +561,7 @@ export function AccountSettingsCard() {
           {/* Passkey Section */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Fingerprint className="w-4 h-4 text-text-muted" />
+              <Fingerprint className={`${ICON_SECTION.section.rowIcon} text-text-muted`} />
               <span className="text-[9px] uppercase tracking-[0.25em] font-black opacity-60">
                 Passkeys (WebAuthn)
               </span>
@@ -272,7 +575,7 @@ export function AccountSettingsCard() {
               {...trackProps(UiElement.SETTINGS_PASSKEY_ADD)}
               className="py-3 px-6 w-full sm:w-auto bg-accent text-bg text-[10px] uppercase tracking-[0.2em] font-black shadow hover:opacity-90 disabled:opacity-50 inline-flex justify-center items-center gap-2"
             >
-              {loading === 'passkey' ? <Loader className="w-4 h-4 animate-spin" /> : <Fingerprint className="w-4 h-4" />}
+              {loading === 'passkey' ? <Loader className={`${ICON_SECTION.section.rowIcon} animate-spin`} /> : <Fingerprint className={ICON_SECTION.section.rowIcon} />}
               Register Passkey
             </button>
           </div>
@@ -282,7 +585,7 @@ export function AccountSettingsCard() {
       {/* Danger Zone - Delete Profile */}
       <div className="pt-8 border-t border-destructive/20 space-y-4">
         <div className="flex items-center gap-3">
-          <AlertTriangle className="w-4 h-4 text-destructive" />
+          <AlertTriangle className={`${ICON_SECTION.section.headingIcon} text-destructive`} />
           <div>
             <div className="text-[10px] uppercase tracking-[0.3em] font-black text-destructive">
               Danger Zone
@@ -339,6 +642,45 @@ export function AccountSettingsCard() {
           </div>
         )}
       </div>
+
+      <ModalDialog
+        open={Boolean(pendingUnlink)}
+        onClose={() => setPendingUnlink(null)}
+        labelledBy="unlink-social-title"
+        className="w-full max-w-sm rounded-2xl bg-surface-card border border-border p-6 space-y-4 shadow-2xl"
+      >
+        <h3 id="unlink-social-title" className="text-sm font-semibold text-text">
+          Unlink {pendingUnlink === 'GOOGLE' ? 'Google' : 'Apple'}?
+        </h3>
+        <p className="text-xs text-text-secondary leading-relaxed">
+          You&rsquo;ll no longer be able to sign in with {pendingUnlink === 'GOOGLE' ? 'Google' : 'Apple'}
+          . Make sure you still have a phone number, email, or passkey on your account.
+        </p>
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => setPendingUnlink(null)}
+            data-track-exempt="duplicate: cancel dismisses social unlink confirmation"
+            className="px-4 py-2 border border-border rounded-lg text-xs font-medium text-text hover:bg-surface-hover"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={loading === 'google' || loading === 'apple'}
+            onClick={confirmUnlinkSocial}
+            {...trackProps(
+              pendingUnlink === 'GOOGLE'
+                ? UiElement.SETTINGS_GOOGLE_LINK
+                : UiElement.SETTINGS_APPLE_LINK,
+              { value: 'unlink' }
+            )}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+          >
+            Unlink
+          </button>
+        </div>
+      </ModalDialog>
     </div>
   );
 }

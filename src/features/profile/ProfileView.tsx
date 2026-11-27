@@ -1,4 +1,11 @@
-import React, { useEffect, useState, useRef, type ReactNode, type ChangeEvent } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  type ReactNode,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from 'react';
 import { subscriptionTierDisplayName } from 'onehook-api-client/membership';
 import { motion } from 'motion/react';
 import {
@@ -17,11 +24,20 @@ import {
   Sparkles,
   Check,
   Eye,
+  HelpCircle,
 } from 'lucide-react';
 import type { UserProfile } from '../../types';
 import { SubscriptionTier } from '../../types';
 import { ProfileApi } from '../../api/profile';
 import { ChatProfileCard } from './ChatProfileCard';
+import { ChatIntroStoriesDialog } from '../../components/chat/ChatOverlays';
+import { ICON_SECTION } from '../../lib/icon-tokens';
+import {
+  InviteFriendCard,
+  MembershipSummaryCard,
+  ProfileMrOneHookTabCard,
+  WalletTilesCard,
+} from './ProfileHubCards';
 import {
   BirthTimePlaceFields,
   birthTimePlaceUpdate,
@@ -188,6 +204,8 @@ export function ProfileView({
   onOpenSettings,
   openMatchingBuilder,
   onMatchingBuilderOpened,
+  onOpenMrOneHookChat,
+  onNavigateToDiscovery,
 }: {
   key?: string;
   user: UserProfile;
@@ -198,6 +216,10 @@ export function ProfileView({
   openMatchingBuilder?: boolean;
   /** Called once the builder was opened for {@link openMatchingBuilder}. */
   onMatchingBuilderOpened?: () => void;
+  /** Open the Mr.OneHook conversation in the Chat tab. */
+  onOpenMrOneHookChat?: () => void;
+  /** Navigate to Discover when triggered from walkthrough story controls. */
+  onNavigateToDiscovery?: () => void;
 }) {
   const { userState, setCurrentUser } = useAppStore();
   const matchingOn = isMatchingOn(userState);
@@ -206,13 +228,36 @@ export function ProfileView({
   const [building, setBuilding] = useState(Boolean(openMatchingBuilder));
   const showEditor = !erasing && (hasMatchingProfile || building);
   const matchingSectionRef = useRef<HTMLDivElement | null>(null);
+  const [hubTab, setHubTab] = useState<'general' | 'profile' | 'ai'>('profile');
+  const [chatTourOpen, setChatTourOpen] = useState(false);
+  const tabRefs = useRef<Record<'general' | 'profile' | 'ai', HTMLButtonElement | null>>({
+    general: null,
+    profile: null,
+    ai: null,
+  });
+  const handleHubTabKeyDown = (e: KeyboardEvent<HTMLButtonElement>, current: 'general' | 'profile' | 'ai') => {
+    const order: ('general' | 'profile' | 'ai')[] = ['general', 'profile', 'ai'];
+    const idx = order.indexOf(current);
+    let nextIdx: number | null = null;
+    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % order.length;
+    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + order.length) % order.length;
+    else if (e.key === 'Home') nextIdx = 0;
+    else if (e.key === 'End') nextIdx = order.length - 1;
+    if (nextIdx === null) return;
+    e.preventDefault();
+    const next = order[nextIdx];
+    setHubTab(next);
+    tabRefs.current[next]?.focus();
+  };
   // The matching profile builder: the same entry the Matching tab, the profile row and Settings use.
   const showMatchingBuilder = () => {
+    setHubTab('profile');
     setBuilding(true);
     requestAnimationFrame(() => matchingSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
   useEffect(() => {
     if (!openMatchingBuilder) return;
+    setHubTab('profile');
     showMatchingBuilder();
     onMatchingBuilderOpened?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -867,6 +912,111 @@ export function ProfileView({
         <ChatProfileCard user={user} onSaved={onSaved} />
       </div>
 
+      {/* Segmented Hub Tablist (mirrors iOS Profile General | Profile | Mr.OneHook) */}
+      <div
+        role="tablist"
+        aria-label="Profile sections"
+        className="flex items-center border-b border-border overflow-x-auto"
+      >
+        {(
+          [
+            { id: 'general', label: 'General' },
+            { id: 'profile', label: 'Profile' },
+            { id: 'ai', label: 'Mr.OneHook' },
+          ] as const
+        ).map((tab) => {
+          const selected = hubTab === tab.id;
+          return (
+            /* TODO(telemetry-parity): promote profile.tab_select to include "web" in telemetry catalog */
+            <button
+              key={tab.id}
+              ref={(el) => {
+                tabRefs.current[tab.id] = el;
+              }}
+              type="button"
+              role="tab"
+              id={`profile-hub-tab-${tab.id}`}
+              aria-selected={selected}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => setHubTab(tab.id)}
+              onKeyDown={(e) => handleHubTabKeyDown(e, tab.id)}
+              data-track-exempt="disabled: pending telemetry web parity enablement for profile.tab_select"
+              className={`flex-none px-5 py-3 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+                selected
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-text-secondary hover:text-text'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* General hub panel: Wallet tiles, Membership summary/compare, Invite, How OneHook works */}
+      <div
+        role="tabpanel"
+        id="profile-hub-panel-general"
+        aria-labelledby="profile-hub-tab-general"
+        hidden={hubTab !== 'general'}
+      >
+        <div className="space-y-6">
+          <WalletTilesCard />
+          <MembershipSummaryCard />
+          <InviteFriendCard userId={user.id} />
+          <div className="bg-surface-card border border-border rounded-2xl p-5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <HelpCircle className={`${ICON_SECTION.section.headingIcon} text-accent`} />
+              <div>
+                <div className="text-sm font-semibold text-text">How OneHook works</div>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  Revisit the walkthrough on one connection at a time, encryption, and requests.
+                </p>
+              </div>
+            </div>
+            {/* TODO(telemetry-parity): promote profile.chat_tour_open to include "web" in telemetry catalog */}
+            <button
+              type="button"
+              onClick={() => setChatTourOpen(true)}
+              data-track-exempt="disabled: pending telemetry web parity enablement for profile.chat_tour_open"
+              className="px-4 py-2 border border-border rounded-xl text-xs font-semibold text-text hover:bg-surface-hover shrink-0"
+            >
+              Open tour
+            </button>
+          </div>
+          {onOpenSettings && (
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              data-track-exempt="duplicate: opens Settings also linked from Profile matching card"
+              className="w-full py-3 border border-border rounded-2xl text-xs font-semibold text-text hover:bg-surface-hover transition-colors"
+            >
+              Open Settings &amp; Security
+            </button>
+          )}
+        </div>
+        <ChatIntroStoriesDialog
+          open={chatTourOpen}
+          onClose={() => setChatTourOpen(false)}
+          onExploreDiscover={() => {
+            setChatTourOpen(false);
+            onNavigateToDiscovery?.();
+          }}
+          onAddByUsername={() => {
+            setChatTourOpen(false);
+            onOpenMrOneHookChat?.();
+          }}
+        />
+      </div>
+
+      {/* Profile editor tab panel (default visible so SSR & existing flows work unchanged) */}
+      <div
+        role="tabpanel"
+        id="profile-hub-panel-profile"
+        aria-labelledby="profile-hub-tab-profile"
+        hidden={hubTab !== 'profile'}
+        className="space-y-12"
+      >
       <ProfileAccountRows
         userId={user.id}
         showMatching={!matchingOn}
@@ -980,17 +1130,17 @@ export function ProfileView({
           <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-text-secondary">
               {basic.work && (
                 <span className="flex items-center gap-1">
-                  <Briefcase className="w-3.5 h-3.5" /> {basic.work}
+                  <Briefcase className={ICON_SECTION.section.actionIcon} /> {basic.work}
                 </span>
               )}
               {basic.education && (
                 <span className="flex items-center gap-1">
-                  <GraduationCap className="w-3.5 h-3.5" /> {basic.education}
+                  <GraduationCap className={ICON_SECTION.section.actionIcon} /> {basic.education}
                 </span>
               )}
               {basic.hometown && (
                 <span className="flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5" /> {basic.hometown}
+                  <MapPin className={ICON_SECTION.section.actionIcon} /> {basic.hometown}
                 </span>
               )}
             </div>
@@ -1008,7 +1158,7 @@ export function ProfileView({
               {...trackProps(UiElement.PROFILE_PREVIEW_OPEN)}
               className="w-full max-w-xs mx-auto py-2 bg-surface hover:bg-surface-hover border border-border text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer text-text"
             >
-              <Eye className="w-4 h-4" /> Preview Profile
+              <Eye className={ICON_SECTION.section.rowIcon} /> Preview Profile
             </button>
           </div>
 
@@ -1016,7 +1166,7 @@ export function ProfileView({
         <div className="space-y-3 pt-4 border-t border-border">
           <div className="flex items-center justify-between px-1">
             <span className="text-sm font-semibold flex items-center gap-2">
-              <ImageIcon className="w-4 h-4" /> Photos ({photos.length}/6)
+              <ImageIcon className={ICON_SECTION.section.headingIcon} /> Photos ({photos.length}/6)
             </span>
             <button
               type="button"
@@ -1025,7 +1175,7 @@ export function ProfileView({
               {...trackProps(UiElement.PROFILE_EDIT_PHOTO_ADD)}
               className="py-1.5 px-4 bg-accent text-bg text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-40"
             >
-              {uploadingPhoto ? <LoadingSpinner /> : <Plus className="w-3.5 h-3.5" />} Add
+              {uploadingPhoto ? <LoadingSpinner /> : <Plus className={ICON_SECTION.section.actionIcon} />} Add
             </button>
           </div>
 
@@ -1061,7 +1211,7 @@ export function ProfileView({
                   className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-all shadow z-10"
                   title="Remove Photo"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className={ICON_SECTION.section.rowIcon} />
                 </button>
                 {index === 0 && (
                   <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-accent text-bg text-[9px] font-black uppercase tracking-widest shadow z-10 whitespace-nowrap">
@@ -1096,7 +1246,7 @@ export function ProfileView({
         <div className="space-y-6 pt-6 border-t border-border">
           <div className="flex items-center justify-between">
             <span className="text-[11px] uppercase tracking-[0.3em] font-black text-accent flex items-center gap-2">
-              <Sparkles className="w-4 h-4" /> Written Prompts ({promptsList.length} Prompts)
+              <Sparkles className={ICON_SECTION.section.headingIcon} /> Written Prompts ({promptsList.length} Prompts)
             </span>
             
           </div>
@@ -1128,7 +1278,7 @@ export function ProfileView({
                   className="text-text-muted hover:text-red-600 p-1"
                   title="Remove prompt"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className={ICON_SECTION.section.rowIcon} />
                 </button>
               </div>
             ))}
@@ -1173,7 +1323,7 @@ export function ProfileView({
         <div className="space-y-6 pt-6 border-t border-border">
           <div className="flex items-center justify-between">
             <span className="text-[11px] uppercase tracking-[0.3em] font-black text-accent flex items-center gap-2">
-              <Mic className="w-4 h-4" /> What they want you to know in their voice
+              <Mic className={ICON_SECTION.section.headingIcon} /> What they want you to know in their voice
             </span>
             {!audioPromptKey && !showAudioRecorder && (
               <button
@@ -1182,7 +1332,7 @@ export function ProfileView({
                 {...trackProps(UiElement.PROFILE_EDIT_VOICE_ADD)}
                 className="py-2 px-4 border border-border hover:border-accent text-[10px] font-black uppercase tracking-widest text-text hover:text-accent transition-all flex items-center gap-1.5"
               >
-                <Mic className="w-3.5 h-3.5" /> Add Voice Note
+                <Mic className={ICON_SECTION.section.actionIcon} /> Add Voice Note
               </button>
             )}
           </div>
@@ -1246,7 +1396,7 @@ export function ProfileView({
                 className="text-text-muted hover:text-red-600 p-2 shrink-0 ml-4"
                 title="Remove Voice Note"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className={ICON_SECTION.section.rowIcon} />
               </button>
               <audio
                 ref={audioRef}
@@ -1406,7 +1556,7 @@ export function ProfileView({
           <section className="space-y-6">
             <div>
               <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent flex items-center gap-2">
-                <SlidersHorizontal className="w-3.5 h-3.5" /> Lifestyle & Match Settings
+                <SlidersHorizontal className={ICON_SECTION.section.headingIcon} /> Lifestyle & Match Settings
               </div>
               <p className="mt-1 text-xs opacity-50 leading-relaxed">
                 Refine your lifestyle values and discovery parameters.
@@ -1621,7 +1771,7 @@ export function ProfileView({
             id="birth-time-place-title"
             className="text-[10px] uppercase tracking-[0.3em] font-black text-accent flex items-center gap-2"
           >
-            <MapPin className="w-3.5 h-3.5" aria-hidden="true" /> Birth time and place
+            <MapPin className={ICON_SECTION.section.headingIcon} aria-hidden="true" /> Birth time and place
           </h3>
           <BirthTimePlaceFields value={birthTimePlace} onChange={setBirthTimePlace} surface="profile" />
         </section>
@@ -1645,6 +1795,20 @@ export function ProfileView({
       />
       </>
       )}
+      </div>
+
+      {/* Mr.OneHook AI tab panel */}
+      <div
+        role="tabpanel"
+        id="profile-hub-panel-ai"
+        aria-labelledby="profile-hub-tab-ai"
+        hidden={hubTab !== 'ai'}
+      >
+        <ProfileMrOneHookTabCard
+          userId={user.id}
+          onOpenChat={() => onOpenMrOneHookChat?.()}
+        />
+      </div>
     </motion.div>
   );
 }

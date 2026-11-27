@@ -4,6 +4,7 @@ import type { UserProfile, UserStateSnapshot } from '../../types';
 import { useToast } from '../../components/common/Toast';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { MATCHING_COPY, draftNotice, gapCopy, useMatchingMode } from './matching-mode';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * Settings → Matching (docs/chat-only-profiles.md §12). Turning matching on builds the matching profile
@@ -63,7 +64,7 @@ export function MatchingSettingsCard({
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h3 className="text-base font-bold text-text flex items-center gap-2">
-            <Heart className="w-4 h-4 text-accent" aria-hidden="true" />
+            <Heart className={`${ICON_SECTION.section.headingIcon} text-accent`} aria-hidden="true" />
             {status === 'ON' ? MATCHING_COPY.onTitle : status === 'ERASING' ? MATCHING_COPY.erasingTitle : MATCHING_COPY.offTitle}
           </h3>
           <p className="text-xs text-text-secondary leading-relaxed max-w-md">

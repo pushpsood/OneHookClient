@@ -28,6 +28,7 @@ import {
 } from './categories';
 import { REPORT_STRINGS as S, SELF_HARM_RESOURCES } from './strings';
 import { trackReport, ReportEvent, type ReportSource } from './telemetry';
+import { ICON_SECTION } from '../../../lib/icon-tokens';
 import {
   submitReport,
   uploadEvidence,
@@ -299,11 +300,11 @@ export function ReportFlowDialog({
                 <button
                   type="button"
                   onClick={() => setStep(step === 'form' && category && getCategoryMeta(category).selfHarm ? 'self_harm' : step === 'preview' ? 'form' : 'category')}
-                  className="p-1 -ml-1 text-text-secondary hover:text-text cursor-pointer rounded-lg"
+                  className="w-9 h-9 -ml-1 flex items-center justify-center text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer rounded-lg"
                   aria-label={S.back}
                   data-track-exempt="duplicate: in-flow back navigation; the report flow is instrumented via the report_flow signal, not ui_interaction."
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <ChevronLeft className={ICON_SECTION.modalHeader.largeIcon} />
                 </button>
               )}
               <h2 className="text-lg font-bold text-text truncate">{S.dialogTitle}</h2>
@@ -311,11 +312,11 @@ export function ReportFlowDialog({
             <button
               type="button"
               onClick={onClose}
-              className="p-1 text-text-secondary hover:text-text cursor-pointer rounded-lg"
+              className="w-9 h-9 flex items-center justify-center text-text-secondary hover:text-text hover:bg-surface-hover cursor-pointer rounded-lg"
               aria-label={S.close}
               data-track-exempt="duplicate: closes the report dialog; the report flow is instrumented via the report_flow signal, not ui_interaction."
             >
-              <X className="w-5 h-5" />
+              <X className={ICON_SECTION.modalHeader.largeIcon} />
             </button>
           </div>
 

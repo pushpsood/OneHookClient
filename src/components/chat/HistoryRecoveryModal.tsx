@@ -11,6 +11,7 @@ import {
 import { useHistoryRecovery } from '../../hooks/use-key-recovery';
 import { QrCameraScanner } from './QrCameraScanner';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * NEW-device side of history recovery, as a modal.
@@ -70,7 +71,7 @@ export function HistoryRecoveryModal({
       <div className="bg-surface-card text-text border border-border w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl">
         <div className="flex items-start justify-between gap-4 p-8 border-b border-border">
           <div className="flex items-start gap-3">
-            <History className="w-4 h-4 mt-1 text-accent shrink-0" aria-hidden="true" />
+            <History className={`${ICON_SECTION.modalHeader.icon} mt-1 text-accent`} aria-hidden="true" />
             <div>
               <h2
                 id="history-recovery-title"
@@ -88,9 +89,9 @@ export function HistoryRecoveryModal({
             onClick={close}
             aria-label="Close"
             {...trackProps(UiElement.CHAT_HISTORY_RECOVER, { action: 'dismiss' })}
-            className="p-1 opacity-40 hover:opacity-100 transition-opacity"
+            className={ICON_SECTION.modalHeader.button}
           >
-            <X className="w-4 h-4" />
+            <X className={ICON_SECTION.modalHeader.icon} />
           </button>
         </div>
 

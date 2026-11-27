@@ -1,21 +1,23 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { subscriptionTierDisplayName } from 'onehook-api-client/membership';
 import { MOST_POPULAR_TIER } from '../../config/membership.config';
 import { MrOneHookPlan } from 'onehook-mr-onehook-client';
 import { openMrOneHookPro, useActivatingMembershipPoll, useMrOneHookPro } from '../../store/mr-onehook-pro-store';
 import { buildProScreenModel } from '../../lib/mr-onehook-pro';
 import { motion } from 'motion/react';
-import { SlidersHorizontal, UserCog, Sparkles, LogOut, Check, Heart } from 'lucide-react';
+import { SlidersHorizontal, UserCog, Sparkles, LogOut, Check, Heart, ShieldBan } from 'lucide-react';
 import type { UserProfile } from '../../types';
 import { isPaidTier, useAppStore } from '../../store/app-store';
 import { AppearanceCard } from '../../components/profile/AppearanceCard';
 import { AccountSettingsCard } from '../../components/profile/AccountSettingsCard';
 import { DeviceManagementCard } from '../../components/profile/DeviceManagementCard';
 import { SetPasswordCard } from '../../components/profile/SetPasswordCard';
+import { SafetyBlockedDialog } from '../profile/SafetyBlockedDialog';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
 import { MatchingSettingsCard } from './MatchingSettingsCard';
 import { MatchingTabToggleCard } from './MatchingTabToggleCard';
 import { isMatchingOn } from '../../lib/app-mode';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 const LivenessVerification = lazy(() =>
   import('../../components/profile/LivenessVerification').then((module) => ({
@@ -55,6 +57,7 @@ export function SettingsView({
     : '—';
   const pro = useMrOneHookPro(user.id);
   const activating = Boolean(userState?.pendingSubscriptionTier);
+  const [blockedOpen, setBlockedOpen] = useState(false);
   useActivatingMembershipPoll(activating, user.id);
   const proSummary = pro.status
     ? buildProScreenModel(pro.status, {
@@ -79,7 +82,7 @@ export function SettingsView({
 
       {/* ── General ─────────────────────────────────────────────── */}
       <SettingsSection
-        icon={<SlidersHorizontal className="w-4 h-4" />}
+        icon={<SlidersHorizontal className={ICON_SECTION.section.headingIcon} />}
         title="General"
         description="Appearance and app-wide preferences."
       >
@@ -92,7 +95,7 @@ export function SettingsView({
 
       {/* ── Matching (optional; chat works without it) ──────────── */}
       <SettingsSection
-        icon={<Heart className="w-4 h-4" />}
+        icon={<Heart className={ICON_SECTION.section.headingIcon} />}
         title="Matching"
         description="Find someone new in Discover. Optional: your chats work without it."
       >
@@ -108,7 +111,7 @@ export function SettingsView({
 
       {/* ── Account ─────────────────────────────────────────────── */}
       <SettingsSection
-        icon={<UserCog className="w-4 h-4" />}
+        icon={<UserCog className={ICON_SECTION.section.headingIcon} />}
         title="Account"
         description="Membership, sign-in methods, security, devices, and verification."
       >
@@ -153,6 +156,30 @@ export function SettingsView({
           </Suspense>
         )}
 
+        {/* Safety & Blocked Accounts */}
+        <div className="bg-surface-card border border-border p-6 rounded-2xl flex items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <ShieldBan className={`${ICON_SECTION.section.rowIcon} text-text-secondary mt-0.5`} />
+            <div>
+              <div className="text-sm font-medium text-text">Blocked accounts</div>
+              <p className="text-xs text-text-secondary mt-0.5">
+                Review people you&rsquo;ve blocked and unblock them if you change your mind.
+              </p>
+            </div>
+          </div>
+          {/* TODO(telemetry-parity): promote settings.safety_open to include "web" in telemetry catalog */}
+          <button
+            type="button"
+            onClick={() => setBlockedOpen(true)}
+            data-track-exempt="disabled: pending telemetry web parity enablement for settings.safety_open"
+            className="px-4 py-2 border border-border rounded-xl text-xs font-medium text-text hover:bg-surface-hover shrink-0"
+          >
+            Manage
+          </button>
+        </div>
+
+        {blockedOpen && <SafetyBlockedDialog open={blockedOpen} onClose={() => setBlockedOpen(false)} />}
+
         {/* Sign out */}
         {onLogout && (
           <div className="bg-surface-card border border-border p-6 rounded-2xl">
@@ -161,7 +188,7 @@ export function SettingsView({
               {...trackProps(UiElement.SETTINGS_SIGN_OUT)}
               className="w-full py-3 flex items-center justify-center gap-2 border border-border rounded-xl text-sm font-semibold text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
             >
-              <LogOut className="w-4 h-4" /> Log out
+              <LogOut className={ICON_SECTION.section.rowIcon} /> Log out
             </button>
           </div>
         )}
@@ -169,13 +196,13 @@ export function SettingsView({
 
       {/* ── OneHook AI ──────────────────────────────────────────── */}
       <SettingsSection
-        icon={<Sparkles className="w-4 h-4" />}
+        icon={<Sparkles className={ICON_SECTION.section.headingIcon} />}
         title="OneHook AI"
         description="Mr OneHook, your AI companion, and how OneHook personalizes your experience."
       >
         <div className="bg-surface-card border border-border p-6 rounded-2xl space-y-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-text">
-            <Sparkles className="w-4 h-4 text-accent" /> Mr OneHook
+            <Sparkles className={`${ICON_SECTION.section.headingIcon} text-accent`} /> Mr OneHook
           </div>
           <p className="text-xs text-text-secondary leading-relaxed max-w-md">
             Mr OneHook is your AI companion. He helps you understand your connections and get more

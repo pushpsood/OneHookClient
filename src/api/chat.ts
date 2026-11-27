@@ -69,6 +69,13 @@ export interface ScreenshotEvent {
   timestamp: number;
 }
 
+/** Private caller-scoped star record (`getStarredMessages` / `setMessageStarred`). */
+export interface StarredMessageRecord {
+  matchId: string;
+  messageId: string;
+  starredAt: number;
+}
+
 /** Optional fields for {@link ChatMessagingApi.sendMessage}. */
 export interface SendMessageOptions {
   /** Message kind; defaults to TEXT server-side. Voice/sticker/GIF/image/file ride the media path. */
@@ -324,6 +331,26 @@ const ON_MESSAGE_DELETED = /* GraphQL */ `
   }
 `;
 
+const GET_STARRED_MESSAGES = /* GraphQL */ `
+  query GetStarredMessages($matchId: ID!) {
+    getStarredMessages(matchId: $matchId) {
+      matchId
+      messageId
+      starredAt
+    }
+  }
+`;
+
+const SET_MESSAGE_STARRED = /* GraphQL */ `
+  mutation SetMessageStarred($matchId: ID!, $messageId: ID!, $starred: Boolean!) {
+    setMessageStarred(matchId: $matchId, messageId: $messageId, starred: $starred) {
+      matchId
+      messageId
+      starredAt
+    }
+  }
+`;
+
 let _client: ReturnType<typeof generateClient> | null = null;
 function client() {
   if (!_client) {
@@ -479,6 +506,28 @@ export const ChatMessagingApi = {
       timestamp,
     });
     return data.deleteMessage;
+  },
+
+  /** Reads the caller's privately starred message ids for `matchId`. */
+  getStarredMessages: async (matchId: string): Promise<StarredMessageRecord[]> => {
+    const data = await graphql<{ getStarredMessages: StarredMessageRecord[] | null }>(GET_STARRED_MESSAGES, {
+      matchId,
+    });
+    return data.getStarredMessages ?? [];
+  },
+
+  /** Stars or unstars one message for the caller only (never visible to peer). */
+  setMessageStarred: async (
+    matchId: string,
+    messageId: string,
+    starred: boolean
+  ): Promise<StarredMessageRecord | null> => {
+    const data = await graphql<{ setMessageStarred: StarredMessageRecord | null }>(SET_MESSAGE_STARRED, {
+      matchId,
+      messageId,
+      starred,
+    });
+    return data.setMessageStarred;
   },
 
   /** Subscribe to new messages for a match. Returns an unsubscribe function. */

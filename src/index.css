@@ -475,3 +475,23 @@ body {
 .oh-ping {
   animation: oh-ping 2.8s ease-out infinite;
 }
+
+/* Native <dialog> modal scroll containment (Modern Web Guidance) */
+dialog.oh-modal:modal {
+  overscroll-behavior: contain;
+}
+dialog.oh-modal::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+dialog.oh-modal[data-closing] {
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .oh-spin,
+  .oh-ping {
+    animation: none;
+  }
+}

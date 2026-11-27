@@ -1,7 +1,8 @@
-import { Home, MessageCircle, Search, Clapperboard, Settings } from 'lucide-react';
+import { Home, MessageCircle, Search, Clapperboard, Settings, User } from 'lucide-react';
 import { MediaImage } from '../components/common/MediaImage';
 import { UiElement, APP_TAB_SCREEN, trackProps } from '../lib/analytics/analytics';
 import type { AppTab } from '../lib/app-mode';
+import { ICON_SECTION } from '../lib/icon-tokens';
 
 export type { AppTab } from '../lib/app-mode';
 
@@ -51,9 +52,13 @@ export function BottomTabBar({
         }`}
       >
         <Home
-          className="w-6 h-6"
-          strokeWidth={activeTab === 'MATCHING_INTRO' ? 2.5 : 1.75}
-          fill={activeTab === 'MATCHING_INTRO' ? 'currentColor' : 'none'}
+          className={ICON_SECTION.nav.icon}
+          strokeWidth={
+            activeTab === 'MATCHING_INTRO'
+              ? ICON_SECTION.nav.activeStrokeWidth
+              : ICON_SECTION.nav.inactiveStrokeWidth
+          }
+          fill="none"
         />
       </button>
       )}
@@ -70,9 +75,13 @@ export function BottomTabBar({
         }`}
       >
         <Home
-          className="w-6 h-6"
-          strokeWidth={activeTab === 'DISCOVERY' ? 2.5 : 1.75}
-          fill={activeTab === 'DISCOVERY' ? 'currentColor' : 'none'}
+          className={ICON_SECTION.nav.icon}
+          strokeWidth={
+            activeTab === 'DISCOVERY'
+              ? ICON_SECTION.nav.activeStrokeWidth
+              : ICON_SECTION.nav.inactiveStrokeWidth
+          }
+          fill="none"
         />
       </button>
       )}
@@ -92,7 +101,7 @@ export function BottomTabBar({
         {...trackProps(UiElement.NAV_SEARCH_OPEN)}
         className="relative flex items-center justify-center p-3 flex-1 min-h-[48px] text-text-muted hover:text-text transition-colors cursor-pointer"
       >
-        <Search className="w-6 h-6" strokeWidth={1.75} />
+        <Search className={ICON_SECTION.nav.icon} strokeWidth={ICON_SECTION.nav.inactiveStrokeWidth} />
       </button>
       )}
 
@@ -105,7 +114,7 @@ export function BottomTabBar({
         {...trackProps(UiElement.NAV_TAB_SELECT, { value: APP_TAB_SCREEN.DISCOVERY })}
         className="relative flex items-center justify-center p-3 flex-1 min-h-[48px] text-text-muted hover:text-text transition-colors cursor-pointer"
       >
-        <Clapperboard className="w-6 h-6" strokeWidth={1.75} />
+        <Clapperboard className={ICON_SECTION.nav.icon} strokeWidth={ICON_SECTION.nav.inactiveStrokeWidth} />
       </button>
       )}
 
@@ -120,9 +129,13 @@ export function BottomTabBar({
         }`}
       >
         <MessageCircle
-          className="w-6 h-6"
-          strokeWidth={activeTab === 'MATCHES' ? 2.5 : 1.75}
-          fill={activeTab === 'MATCHES' ? 'currentColor' : 'none'}
+          className={ICON_SECTION.nav.icon}
+          strokeWidth={
+            activeTab === 'MATCHES'
+              ? ICON_SECTION.nav.activeStrokeWidth
+              : ICON_SECTION.nav.inactiveStrokeWidth
+          }
+          fill="none"
         />
         {unreadCount > 0 && (
           <span className="absolute top-2 right-4 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
@@ -151,8 +164,8 @@ export function BottomTabBar({
               className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full bg-surface flex items-center justify-center text-[10px]">
-              👤
+            <div className="w-full h-full bg-surface flex items-center justify-center">
+              <User className={ICON_SECTION.nav.fallbackUserIcon} aria-hidden="true" />
             </div>
           )}
         </div>
@@ -169,8 +182,12 @@ export function BottomTabBar({
         }`}
       >
         <Settings
-          className="w-6 h-6"
-          strokeWidth={activeTab === 'SETTINGS' ? 2.5 : 1.75}
+          className={ICON_SECTION.nav.icon}
+          strokeWidth={
+            activeTab === 'SETTINGS'
+              ? ICON_SECTION.nav.activeStrokeWidth
+              : ICON_SECTION.nav.inactiveStrokeWidth
+          }
         />
       </button>
     </nav>

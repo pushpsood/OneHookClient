@@ -15,6 +15,7 @@ import { isHeicFile, prepareAttachmentFiles } from '../../lib/heic-to-jpeg';
 import { askConfirmTitle, askCountPhrase, type AskShare } from '../../lib/mr-onehook-ask';
 import type { SelectedExcerpt } from '../../lib/mr-onehook-excerpts';
 import { trackProps, trackUi, UiElement } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * The paperclip of the signed-in Mr OneHook chat. Opens the file picker; every member can select
@@ -80,9 +81,9 @@ export function MrOneHookAttachButton({
         className="shrink-0 mr-2 w-8 h-8 rounded-full flex items-center justify-center text-text/60 hover:text-text hover:bg-surface-hover disabled:opacity-30 cursor-pointer"
       >
         {converting ? (
-          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          <Loader2 className={`${ICON_SECTION.composer.triggerIcon} animate-spin`} aria-hidden="true" />
         ) : (
-          <Paperclip className="w-4 h-4" />
+          <Paperclip className={ICON_SECTION.composer.triggerIcon} />
         )}
       </button>
       <input
@@ -397,7 +398,7 @@ export function AskingAboutBar({
         aria-label={excerpts.length === 1 ? 'Remove the shared message' : 'Remove the shared messages'}
         className="w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-text/50 hover:text-text cursor-pointer"
       >
-        <X className="w-3.5 h-3.5" />
+        <X className={ICON_SECTION.composer.inlineActionIcon} />
       </button>
     </div>
   );

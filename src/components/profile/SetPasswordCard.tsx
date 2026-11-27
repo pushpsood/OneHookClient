@@ -5,6 +5,7 @@ import { useToast } from '../common/Toast';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/app-store';
 import { UiElement, trackProps } from '../../lib/analytics/analytics';
+import { ICON_SECTION } from '../../lib/icon-tokens';
 
 /**
  * Lets a signed-in member know how to set an account password.
@@ -33,7 +34,7 @@ export function SetPasswordCard() {
   return (
     <div className="border border-border p-8 space-y-5 bg-surface-card text-text">
       <div className="flex items-center gap-3">
-        <KeyRound className="w-4 h-4 text-accent" />
+        <KeyRound className={`${ICON_SECTION.section.headingIcon} text-accent`} />
         <div>
           <div className="text-[10px] uppercase tracking-[0.3em] font-black text-accent">
             Account Password

@@ -39,6 +39,8 @@ interface AttachmentBubbleProps {
   onRetry: () => void;
   /** Opens the existing report/block flow; shown on revealed peer media. */
   onReportPeerMedia?: () => void;
+  /** Partner chat restriction check: false prevents saving peer's decrypted media locally. */
+  canSaveMedia?: boolean;
 }
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -137,6 +139,7 @@ export function AttachmentBubble({
   transfer,
   onRetry,
   onReportPeerMedia,
+  canSaveMedia = true,
 }: AttachmentBubbleProps) {
   const isVisual = envelope.kind === 'image' || envelope.kind === 'video';
   const blurByDefault = !mine && isVisual;
@@ -169,6 +172,7 @@ export function AttachmentBubble({
           blurred={blurByDefault && !revealed}
           onReveal={reveal}
           onRetryLoad={load}
+          canSaveMedia={mine || canSaveMedia}
         />
       )}
       {envelope.kind === 'video' && (
@@ -181,6 +185,7 @@ export function AttachmentBubble({
           blurred={blurByDefault && !revealed}
           onReveal={reveal}
           onRetryLoad={load}
+          canSaveMedia={mine || canSaveMedia}
         />
       )}
       {envelope.kind === 'audio' && (
@@ -197,6 +202,10 @@ export function AttachmentBubble({
       )}
 
       {envelope.caption && <p className="text-sm leading-relaxed">{envelope.caption}</p>}
+
+      {blurByDefault && revealed && !canSaveMedia && (
+        <span className="block text-[10px] opacity-60">Saving disabled by sender</span>
+      )}
 
       {/* Escalation path for revealed peer media — the same report/block flow the header exposes. */}
       {blurByDefault && revealed && onReportPeerMedia && (
@@ -313,6 +322,7 @@ function ImageAttachment({
   blurred,
   onReveal,
   onRetryLoad,
+  canSaveMedia,
 }: {
   envelope: AttachmentEnvelope;
   url?: string;
@@ -322,6 +332,7 @@ function ImageAttachment({
   blurred: boolean;
   onReveal: () => void;
   onRetryLoad: () => void;
+  canSaveMedia: boolean;
 }) {
   const thumb = thumbnailSrc(envelope);
   const label = mediaLabel(envelope);
@@ -337,7 +348,22 @@ function ImageAttachment({
       <DownloadProgress progress={progress} label={`Loading image ${label}`} />
     );
   }
-  return <ChatImageFullscreen url={url} label={label} />;
+  return (
+    <div className="space-y-1">
+      <ChatImageFullscreen url={url} label={label} />
+      {canSaveMedia && (
+        <a
+          href={url}
+          download={envelope.name || 'image.jpg'}
+          {...trackProps(UiElement.CHAT_FILE_OPEN)}
+          className="inline-flex items-center gap-1 text-[10px] opacity-70 hover:opacity-100"
+        >
+          <Download className="w-3 h-3" aria-hidden="true" />
+          Save
+        </a>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -371,6 +397,7 @@ function VideoAttachment({
   blurred,
   onReveal,
   onRetryLoad,
+  canSaveMedia,
 }: {
   envelope: AttachmentEnvelope;
   url?: string;
@@ -380,6 +407,7 @@ function VideoAttachment({
   blurred: boolean;
   onReveal: () => void;
   onRetryLoad: () => void;
+  canSaveMedia: boolean;
 }) {
   const label = mediaLabel(envelope);
   if (blurred) {
@@ -388,14 +416,28 @@ function VideoAttachment({
   if (status === 'error') return <LoadError message={error} onRetry={onRetryLoad} />;
   if (!url) return <DownloadProgress progress={progress} label={`Loading video ${label}`} />;
   return (
-    <video
-      src={url}
-      poster={thumbnailSrc(envelope)}
-      controls
-      preload="metadata"
-      aria-label={label}
-      className="max-w-[18rem] max-h-80 rounded"
-    />
+    <div className="space-y-1">
+      <video
+        src={url}
+        poster={thumbnailSrc(envelope)}
+        controls
+        controlsList={canSaveMedia ? undefined : 'nodownload'}
+        preload="metadata"
+        aria-label={label}
+        className="max-w-[18rem] max-h-80 rounded"
+      />
+      {canSaveMedia && (
+        <a
+          href={url}
+          download={envelope.name || 'video.mp4'}
+          {...trackProps(UiElement.CHAT_FILE_OPEN)}
+          className="inline-flex items-center gap-1 text-[10px] opacity-70 hover:opacity-100"
+        >
+          <Download className="w-3 h-3" aria-hidden="true" />
+          Save
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -423,7 +465,7 @@ function RevealCover({ envelope, onReveal }: { envelope: AttachmentEnvelope; onR
   );
 }
 
-/** Voice-note / audio player: play-pause, a scrub-free progress bar, waveform and duration. */
+/** Voice-note / audio player: play-pause, speed toggle (1x / 1.5x / 2x), scrubber and waveform. */
 function AudioAttachment({
   envelope,
   url,
@@ -438,15 +480,31 @@ function AudioAttachment({
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [durationMs, setDurationMs] = useState(envelope.durationMs ?? 0);
+  const [rate, setRate] = useState<1 | 1.5 | 2>(1);
 
-  const totalMs = envelope.durationMs ?? 0;
+  const totalMs = Math.max(durationMs, envelope.durationMs ?? 0);
   const playedFraction = totalMs > 0 ? Math.min(1, elapsedMs / totalMs) : 0;
 
   const toggle = () => {
     const el = audioRef.current;
     if (!el) return;
+    el.playbackRate = rate;
     if (el.paused) void el.play();
     else el.pause();
+  };
+
+  const cycleRate = () => {
+    const next: 1 | 1.5 | 2 = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1;
+    setRate(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
+  const handleScrub = (ms: number) => {
+    setElapsedMs(ms);
+    if (audioRef.current && Number.isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
+      audioRef.current.currentTime = Math.min(audioRef.current.duration, Math.max(0, ms / 1000));
+    }
   };
 
   const waveform = useMemo(
@@ -464,12 +522,17 @@ function AudioAttachment({
   }
 
   return (
-    <div className="flex items-center gap-3 min-w-[12rem]">
+    <div className="flex items-center gap-2.5 min-w-[14rem]">
       {url && (
         <audio
           ref={audioRef}
           src={url}
           preload="metadata"
+          onLoadedMetadata={(e) => {
+            if (Number.isFinite(e.currentTarget.duration) && e.currentTarget.duration > 0) {
+              setDurationMs(e.currentTarget.duration * 1000);
+            }
+          }}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onEnded={() => {
@@ -485,7 +548,7 @@ function AudioAttachment({
         disabled={!url}
         aria-label={playing ? 'Pause voice note' : 'Play voice note'}
         {...trackProps(UiElement.CHAT_AUDIO_PLAY, { value: playing ? 'pause' : 'play' })}
-        className="w-9 h-9 shrink-0 rounded-full border border-current flex items-center justify-center hover:opacity-70 transition-opacity disabled:opacity-40"
+        className="w-9 h-9 shrink-0 rounded-full border border-current flex items-center justify-center hover:opacity-70 transition-opacity disabled:opacity-40 cursor-pointer"
       >
         {!url ? (
           <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
@@ -495,22 +558,52 @@ function AudioAttachment({
           <Play className="w-4 h-4" aria-hidden="true" />
         )}
       </button>
-      <div className="flex items-end gap-0.5 h-8 flex-1" aria-hidden="true">
-        {waveform.map((amplitude, i) => {
-          const played = i / waveform.length <= playedFraction;
-          const heightPct = 10 + (amplitude / 31) * 90;
-          return (
-            <span
-              key={i}
-              className={`w-1 rounded-full ${played ? 'bg-current' : 'bg-current/30'}`}
-              style={{ height: `${heightPct}%` }}
-            />
-          );
-        })}
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="relative flex items-end gap-0.5 h-7" aria-hidden="true">
+          {waveform.map((amplitude, i) => {
+            const played = i / waveform.length <= playedFraction;
+            const heightPct = 10 + (amplitude / 31) * 90;
+            return (
+              <span
+                key={i}
+                className={`flex-1 max-w-1 rounded-full ${played ? 'bg-current' : 'bg-current/30'}`}
+                style={{ height: `${heightPct}%` }}
+              />
+            );
+          })}
+        </div>
+        {totalMs > 0 && (
+          <input
+            type="range"
+            min={0}
+            max={totalMs}
+            step={100}
+            value={Math.min(elapsedMs, totalMs)}
+            disabled={!url}
+            onChange={(e) => handleScrub(Number(e.target.value))}
+            aria-label="Seek voice note"
+            // TODO(telemetry-parity): switch to UiElement.CHAT_AUDIO_SCRUB once enabled on web.
+            data-track-exempt="disabled: pending telemetry web parity enablement for chat.audio_scrub"
+            className="w-full h-1 accent-current opacity-70 cursor-pointer"
+          />
+        )}
       </div>
-      <span className="text-[10px] tabular-nums opacity-70 shrink-0">
-        {formatDuration(playing || elapsedMs > 0 ? elapsedMs : totalMs)}
-      </span>
+      <div className="flex flex-col items-end gap-0.5 shrink-0">
+        <span className="text-[10px] tabular-nums opacity-70">
+          {formatDuration(playing || elapsedMs > 0 ? elapsedMs : totalMs)}
+        </span>
+        <button
+          type="button"
+          onClick={cycleRate}
+          disabled={!url}
+          aria-label={`Playback speed ${rate}x`}
+          // TODO(telemetry-parity): switch to UiElement.CHAT_AUDIO_SPEED once enabled on web.
+          data-track-exempt="disabled: pending telemetry web parity enablement for chat.audio_speed"
+          className="px-1.5 py-0.5 rounded bg-current/15 text-[10px] font-bold hover:opacity-80 cursor-pointer"
+        >
+          {rate}x
+        </button>
+      </div>
     </div>
   );
 }
