@@ -1,16 +1,16 @@
 // GENERATED FILE - DO NOT EDIT.
-// telemetry-integrity: sha256 e3191c5887ebb640a008e1ed9b7aa943f66ae9e183f0e3663b5d04898ff44ef3
+// telemetry-integrity: sha256 ead2076fa8b208408c68b077c92bd240659306ee4e5b7b7a71ce066253551174
 // Source of truth: OneHookBackend/packages/telemetry/src/catalog.ts
 // Regenerate: (OneHookBackend) npm run telemetry:generate && npm run telemetry:sync.
 // iOS / Android copies: pulled from onehook-api-client (telemetry/) by OneHookPlatform scripts/sync-api-specs.mjs.
-// Catalog version 1.32.0, hash b9c0629fc1d88691.
+// Catalog version 1.34.0, hash 0a4b74a44815f7e0.
 //
 // HARD RULE: every user interaction MUST emit ui_interaction with an id from THIS file, and
 // ids are controlled by the backend. Read TELEMETRY_CONTRACT.txt (printed by every build).
 /* eslint-disable */
 
-export const TELEMETRY_CATALOG_VERSION = "1.32.0";
-export const TELEMETRY_CATALOG_HASH = "b9c0629fc1d88691";
+export const TELEMETRY_CATALOG_VERSION = "1.34.0";
+export const TELEMETRY_CATALOG_HASH = "0a4b74a44815f7e0";
 
 /** Every signal type the ingest accepts. */
 export const SignalType = {
@@ -353,6 +353,8 @@ export const UiElement = {
   DISCOVER_PREFERENCES_OPEN: "discover.preferences_open",
   DISCOVER_LIKES_YOU_OPEN: "discover.likes_you_open",
   DISCOVER_MODE_SELECT: "discover.mode_select",
+  DISCOVER_SCAN_CODE_OPEN: "discover.scan_code_open",
+  DISCOVER_SCAN_CODE_CONFIRM: "discover.scan_code_confirm",
   DISCOVER_ADD_HOOK_OPEN: "discover.add_hook_open",
   DISCOVER_RETRY: "discover.retry",
   DISCOVER_PENDING_NOTICE_OPEN: "discover.pending_notice_open",
@@ -480,6 +482,15 @@ export const UiElement = {
   CHAT_AUDIO_PLAY: "chat.audio_play",
   CHAT_FILE_OPEN: "chat.file_open",
   CHAT_MESSAGE_DELETE: "chat.message_delete",
+  CHAT_MESSAGE_STAR: "chat.message_star",
+  CHAT_STARRED_JUMP: "chat.starred_jump",
+  CHAT_MESSAGE_PIN: "chat.message_pin",
+  CHAT_PINNED_BAR_OPEN: "chat.pinned_bar_open",
+  CHAT_MESSAGE_DELETE_FOR_ME: "chat.message_delete_for_me",
+  CHAT_MESSAGE_DELETE_FOR_EVERYONE: "chat.message_delete_for_everyone",
+  CHAT_MESSAGE_RESTORE: "chat.message_restore",
+  CHAT_MESSAGE_DELETE_NOW: "chat.message_delete_now",
+  CHAT_TOMBSTONE_REMOVE: "chat.tombstone_remove",
   CHAT_MESSAGE_MENU_OPEN: "chat.message_menu_open",
   CHAT_REPORT_REASON_SELECT: "chat.report_reason_select",
   CHAT_SENSITIVE_REVEAL_CONFIRM: "chat.sensitive_reveal_confirm",
@@ -526,6 +537,7 @@ export const UiElement = {
   CHAT_SETTINGS_EXPORT_CHAT: "chat_settings.export_chat",
   CHAT_SETTINGS_CLEAR_CACHE: "chat_settings.clear_cache",
   CHAT_SETTINGS_AUTO_SAVE_PHOTOS_TOGGLE: "chat_settings.auto_save_photos_toggle",
+  CHAT_SETTINGS_SYNC_MARKS_TOGGLE: "chat_settings.sync_marks_toggle",
   CHAT_SETTINGS_RESTRICTION_TOGGLE: "chat_settings.restriction_toggle",
   HOOK_REQUESTS_CLOSE: "hook_requests.close",
   HOOK_REQUESTS_REFRESH: "hook_requests.refresh",
@@ -544,6 +556,8 @@ export const UiElement = {
   PROFILE_PREFERENCES_OPEN: "profile.preferences_open",
   PROFILE_SETTINGS_OPEN: "profile.settings_open",
   PROFILE_CHAT_SETTINGS_OPEN: "profile.chat_settings_open",
+  PROFILE_SHARE_CARD_OPEN: "profile.share_card_open",
+  PROFILE_SHARE_CARD_SHARE: "profile.share_card_share",
   PROFILE_CHAT_TOUR_OPEN: "profile.chat_tour_open",
   PROFILE_MR_ONEHOOK_TOUR_OPEN: "profile.mr_onehook_tour_open",
   PROFILE_MR_ONEHOOK_SETTING_TOGGLE: "profile.mr_onehook_setting_toggle",
@@ -745,6 +759,8 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "discover.preferences_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "discover.likes_you_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["android"] },
   "discover.mode_select": { screen: "DISCOVER", kind: "segmented", actions: ["select", "tap"], values: ["matches", "likes"], platforms: ["ios"] },
+  "discover.scan_code_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "discover.scan_code_confirm": { screen: "DISCOVER", kind: "dialog_button", actions: ["tap", "dismiss"], values: ["camera", "scanner"], platforms: ["ios"] },
   "discover.add_hook_open": { screen: "DISCOVER", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "discover.retry": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "discover.pending_notice_open": { screen: "DISCOVER", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
@@ -872,6 +888,15 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat.audio_play": { screen: "CHAT", kind: "toggle", actions: ["toggle"], values: ["play", "pause"], platforms: ["web", "ios", "android"] },
   "chat.file_open": { screen: "CHAT", kind: "list_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.message_delete": { screen: "CHAT", kind: "dialog_button", actions: ["tap", "dismiss"], values: null, platforms: ["ios", "android"] },
+  "chat.message_star": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: ["star", "unstar"], platforms: ["ios"] },
+  "chat.starred_jump": { screen: "CHAT", kind: "list_item", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.message_pin": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: ["pin", "unpin"], platforms: ["ios"] },
+  "chat.pinned_bar_open": { screen: "CHAT", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "chat.message_delete_for_me": { screen: "CHAT", kind: "dialog_button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "chat.message_delete_for_everyone": { screen: "CHAT", kind: "dialog_button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "chat.message_restore": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.message_delete_now": { screen: "CHAT", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
+  "chat.tombstone_remove": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat.message_menu_open": { screen: "CHAT", kind: "gesture", actions: ["long_press", "dismiss"], values: null, platforms: ["ios", "android"] },
   "chat.report_reason_select": { screen: "CHAT", kind: "menu_item", actions: ["tap"], values: null, platforms: ["web", "ios", "android"] },
   "chat.sensitive_reveal_confirm": { screen: "CHAT", kind: "dialog_button", actions: ["submit", "dismiss"], values: null, platforms: ["web", "ios"] },
@@ -918,6 +943,7 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "chat_settings.export_chat": { screen: "CHAT_SETTINGS", kind: "button", actions: ["tap", "select", "dismiss"], values: null, platforms: ["ios"] },
   "chat_settings.clear_cache": { screen: "CHAT_SETTINGS", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "chat_settings.auto_save_photos_toggle": { screen: "CHAT_SETTINGS", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["ios"] },
+  "chat_settings.sync_marks_toggle": { screen: "CHAT_SETTINGS", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["ios"] },
   "chat_settings.restriction_toggle": { screen: "CHAT_SETTINGS", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["ios"] },
   "hook_requests.close": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["web", "ios", "android"] },
   "hook_requests.refresh": { screen: "HOOK_REQUESTS", kind: "button", actions: ["tap"], values: null, platforms: ["android"] },
@@ -936,6 +962,8 @@ export const UI_ELEMENTS: { readonly [K in UiElementId]: UiElementSpec } = {
   "profile.preferences_open": { screen: "PROFILE", kind: "button", actions: ["tap"], values: null, platforms: ["ios", "android"] },
   "profile.settings_open": { screen: "PROFILE", kind: "button", actions: ["tap"], values: null, platforms: ["web"] },
   "profile.chat_settings_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
+  "profile.share_card_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: ["profile_header", "preview_header", "add_someone"], platforms: ["ios"] },
+  "profile.share_card_share": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "profile.chat_tour_open": { screen: "PROFILE", kind: "button", actions: ["tap"], values: null, platforms: ["ios"] },
   "profile.mr_onehook_tour_open": { screen: "PROFILE", kind: "button", actions: ["tap", "dismiss"], values: null, platforms: ["ios"] },
   "profile.mr_onehook_setting_toggle": { screen: "PROFILE", kind: "toggle", actions: ["toggle"], values: ["on", "off"], platforms: ["ios"] },
